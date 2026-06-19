@@ -48,6 +48,17 @@ public sealed class SqliteSessionStore : IDisposable
                                count       INTEGER NOT NULL,
                                last_seen   TEXT NOT NULL
                            );
+                           CREATE TABLE IF NOT EXISTS sandbox_executions (
+                               id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                               session_id      TEXT NOT NULL,
+                               code_hash       TEXT NOT NULL,
+                               language        TEXT NOT NULL,
+                               exit_code       INTEGER,
+                               status          TEXT NOT NULL,
+                               duration_ms     INTEGER,
+                               blocked_patterns TEXT,
+                               created_at      TEXT NOT NULL
+                           );
                            """;
         using SqliteCommand cmd = _conn.CreateCommand();
         cmd.CommandText = sql;
@@ -272,4 +283,100 @@ public sealed class SqliteSessionStore : IDisposable
         cmd.CommandText = "SELECT COUNT(*) FROM interactions";
         return Convert.ToInt32(cmd.ExecuteScalar() ?? 0);
     }
+
+    // ---- Sandbox audit (Stage 4) ----
+
+    /// <summary>
+    ///     Записать факт выполнения кода в sandbox.
+    ///     code_hash — SHA-256 hex (для аудита без хранения самого кода).
+    /// </summary>
+    public void LogSandboxExecution(
+        string sessionId,
+        string codeHash,
+        string language,
+        int? exitCode,
+        string status,
+        long durationMs,
+        IReadOnlyList<string> blockedPatterns)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          INSERT INTO sandbox_executions
+                              (session_id, code_hash, language, exit_code, status, duration_ms, blocked_patterns, created_at)
+                          VALUES ($s, $h, $l, $e, $st, $d, $b, $t)
+                          """;
+        cmd.Parameters.AddWithValue("$s", sessionId);
+        cmd.Parameters.AddWithValue("$h", codeHash);
+        cmd.Parameters.AddWithValue("$l", language);
+        cmd.Parameters.AddWithValue("$e", (object?)exitCode ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$st", status);
+        cmd.Parameters.AddWithValue("$d", durationMs);
+        cmd.Parameters.AddWithValue("$b",
+            blockedPatterns.Count > 0 ? (object)string.Join("; ", blockedPatterns) : DBNull.Value);
+        cmd.Parameters.AddWithValue("$t", DateTime.UtcNow.ToString("o"));
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Последние N выполнений в sandbox (для админ-вывода).</summary>
+    public List<SandboxExecutionLog> GetRecentSandboxExecutions(int limit = 20)
+    {
+        var list = new List<SandboxExecutionLog>();
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          SELECT id, session_id, code_hash, language, exit_code, status, duration_ms, blocked_patterns, created_at
+                          FROM sandbox_executions
+                          ORDER BY id DESC
+                          LIMIT $n
+                          """;
+        cmd.Parameters.AddWithValue("$n", limit);
+        using SqliteDataReader r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            list.Add(new SandboxExecutionLog(
+                r.GetInt64(0),
+                r.GetString(1),
+                r.GetString(2),
+                r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetInt32(4),
+                r.GetString(5),
+                r.GetInt64(6),
+                r.IsDBNull(7) ? "" : r.GetString(7),
+                DateTime.Parse(r.GetString(8))));
+        }
+        return list;
+    }
+
+    /// <summary>Failure rate за последние N выполнений (для ReflectionEngine).</summary>
+    public double GetRecentSandboxFailureRate(int window = 5)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          SELECT
+                              SUM(CASE WHEN status IN ('failed', 'timeout', 'rejected', 'killed') THEN 1 ELSE 0 END) AS fails,
+                              COUNT(*) AS total
+                          FROM (SELECT status FROM sandbox_executions ORDER BY id DESC LIMIT $n)
+                          """;
+        cmd.Parameters.AddWithValue("$n", window);
+        using SqliteDataReader r = cmd.ExecuteReader();
+        if (r.Read())
+        {
+            var total = r.IsDBNull(1) ? 0 : r.GetInt32(1);
+            if (total == 0) return 0.0;
+            var fails = r.IsDBNull(0) ? 0 : r.GetInt32(0);
+            return Math.Round(fails / (double)total, 2);
+        }
+        return 0.0;
+    }
 }
+
+/// <summary>Запись о выполнении кода в sandbox (audit log).</summary>
+public sealed record SandboxExecutionLog(
+    long Id,
+    string SessionId,
+    string CodeHash,
+    string Language,
+    int? ExitCode,
+    string Status,
+    long DurationMs,
+    string BlockedPatterns,
+    DateTime CreatedAt);

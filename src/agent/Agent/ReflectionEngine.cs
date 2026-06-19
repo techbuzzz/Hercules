@@ -25,9 +25,19 @@ public sealed class ReflectionEngine(
         var (skillCount, directCount) = sessions.GetModeStats(sessionId);
         List<Skill> needImprove = skills.SkillsNeedingImprovement();
 
+        // Stage 4: sandbox traces
+        var sandboxFails = sessions.GetRecentSandboxFailureRate(5);
+        var sandboxRecent = sessions.GetRecentSandboxExecutions(5);
+
         var lowConfText = lowConf.Count == 0
             ? "Ответов с низкой уверенностью не было."
             : string.Join("\n", lowConf.Select(l => $"- Запрос: {l.Input} | Ответ: {Trunc(l.Output, 160)}"));
+
+        var sandboxText = sandboxRecent.Count == 0
+            ? "Выполнений в sandbox не было."
+            : string.Join("\n", sandboxRecent.Select(s =>
+                $"- {s.CreatedAt:HH:mm:ss} status={s.Status} exit={s.ExitCode} dur={s.DurationMs}ms " +
+                (string.IsNullOrEmpty(s.BlockedPatterns) ? "" : $"blocked=[{s.BlockedPatterns}]")));
 
         var prompt = $"""
                        Проведи самоанализ работы ассистента за сессию. Ответь на русском, кратко,
@@ -44,6 +54,12 @@ public sealed class ReflectionEngine(
                        - Ответы с низкой уверенностью:
                        {lowConfText}
                        - Навыки, требующие улучшения: {(needImprove.Count == 0 ? "нет" : string.Join(", ", needImprove.Select(s => s.Meta.Name)))}
+
+                       Sandbox (Stage 4):
+                       - Failure rate за последние 5 выполнений: {sandboxFails:P0}
+                       - Последние выполнения:
+                       {sandboxText}
+                       {(sandboxFails > 0.5 ? "\n⚠️ Высокий failure rate — предложи обновить скилл code-execution (skill.code-execution.v1.md) или ужесточить scanner." : "")}
                        """;
 
         string analysis;

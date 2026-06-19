@@ -17,6 +17,7 @@ public sealed record ChatResponseDto(
     string Confidence,
     string Provider,
     SkillDto? Skill,
+    string? ToolUsed,
     string? ProposeSkillForInput,
     string? ProposeImproveSkillId,
     string? ProposeImproveSkillName);
@@ -104,7 +105,7 @@ public sealed class WebApiAdapter(
             r.UsedSkill is null
                 ? null
                 : ToDto(r.UsedSkill),
-            r.ProposeSkillForInput, r.ProposeImproveSkillId, r.ProposeImproveSkillName);
+            r.ToolUsed, r.ProposeSkillForInput, r.ProposeImproveSkillId, r.ProposeImproveSkillName);
     }
 
     // ---- Skills ----
