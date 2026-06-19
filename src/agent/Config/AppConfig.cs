@@ -16,6 +16,21 @@ public sealed class AppConfig
     public CodeExecutionConfig CodeExecution { get; set; } = new();
 
     /// <summary>
+    ///     Параметры HTTP-инструмента (Stage 3). Allow-list доменов, rate limits, timeouts.
+    /// </summary>
+    public HttpConfig Http { get; set; } = new();
+
+    /// <summary>
+    ///     Параметры MCP-клиента (Stage 3). Список MCP-серверов для подключения.
+    /// </summary>
+    public McpConfig Mcp { get; set; } = new();
+
+    /// <summary>
+    ///     Параметры A2A-клиента (Stage 3). Endpoints других агентов.
+    /// </summary>
+    public A2AConfig A2A { get; set; } = new();
+
+    /// <summary>
     ///     Конфигурация именованных ролей LLM (multi-role routing, v2).
     ///     Ключ — имя роли ("main", "code_writer", "reflector", ...).
     ///     Значение — провайдер + модель + temperature.
@@ -57,6 +72,58 @@ public sealed class CodeExecutionConfig
 
     /// <summary>Override temp root. Пусто → использовать дефолт платформы.</summary>
     public string TempRoot { get; set; } = "";
+}
+
+/// <summary>HTTP-инструмент: безопасные исходящие запросы с allow-list.</summary>
+public sealed class HttpConfig
+{
+    /// <summary>Allow-list доменов. ["*"] = все домены. ["api.github.com"] = только этот домен.</summary>
+    public List<string> AllowedDomains { get; set; } = ["*"];
+
+    /// <summary>Глобальный rate limit (запросов в минуту). 0 = без лимита.</summary>
+    public int RateLimitPerMinute { get; set; } = 60;
+
+    /// <summary>Timeout на запрос (секунды).</summary>
+    public int TimeoutSeconds { get; set; } = 10;
+
+    /// <summary>Максимальный размер ответа (КБ). Превышение → truncated.</summary>
+    public int MaxResponseSizeKb { get; set; } = 256;
+}
+
+/// <summary>MCP-клиент: подключение к Model Context Protocol серверам.</summary>
+public sealed class McpConfig
+{
+    /// <summary>Список MCP-серверов для автоподключения при старте.</summary>
+    public List<McpServerConfig> Servers { get; set; } = new();
+}
+
+/// <summary>Конфигурация одного MCP-сервера.</summary>
+public sealed class McpServerConfig
+{
+    /// <summary>Имя сервера (для логов и namespace в tool registry).</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>"stdio" | "http".</summary>
+    public string Transport { get; set; } = "stdio";
+
+    /// <summary>Команда для stdio транспорта (например, "mcp-server-filesystem").</summary>
+    public string? Command { get; set; }
+
+    /// <summary>Аргументы команды.</summary>
+    public List<string> Args { get; set; } = new();
+
+    /// <summary>Endpoint URL для http транспорта.</summary>
+    public string? Endpoint { get; set; }
+}
+
+/// <summary>A2A-клиент: Agent-to-Agent протокол (JSON-RPC 2.0).</summary>
+public sealed class A2AConfig
+{
+    /// <summary>Список endpoints других агентов (имя → URL).</summary>
+    public Dictionary<string, string> Endpoints { get; set; } = new();
+
+    /// <summary>Таймаут на delegate-задачу (секунды).</summary>
+    public int TimeoutSeconds { get; set; } = 30;
 }
 
 /// <summary>

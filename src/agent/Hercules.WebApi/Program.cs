@@ -35,6 +35,9 @@ builder.Services.AddSingleton(appConfig.Storage);
 builder.Services.AddSingleton(appConfig.Agent);
 builder.Services.AddSingleton(appConfig.Telegram);
 builder.Services.AddSingleton(appConfig.CodeExecution);
+builder.Services.AddSingleton(appConfig.Http);
+builder.Services.AddSingleton(appConfig.Mcp);
+builder.Services.AddSingleton(appConfig.A2A);
 builder.Services.AddSingleton(webCfg);
 
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
@@ -68,6 +71,13 @@ builder.Services.AddSingleton<Hercules.CodeExecution.SandboxOptions>(sp =>
     return opts;
 });
 builder.Services.AddSingleton<Hercules.CodeExecution.ICodeExecutor, Hercules.CodeExecution.DotnetFileBasedExecutor>();
+
+// Tool ecosystem (Stage 3, v2)
+builder.Services.AddSingleton<Hercules.Tools.ITool, Hercules.Tools.HttpTool>();
+builder.Services.AddSingleton<Hercules.Tools.ITool, Hercules.Tools.A2AClient>();
+builder.Services.AddSingleton<Hercules.Tools.ITool, Hercules.Tools.CodeExecutionTool>();
+builder.Services.AddSingleton<Hercules.Tools.ToolRegistry>();
+builder.Services.AddSingleton<Hercules.Tools.McpClient>();
 
 // Хранилища
 builder.Services.AddSingleton<FileSkillRepository>();
