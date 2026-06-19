@@ -35,15 +35,15 @@ through a single OpenAI-compatible interface (`Microsoft.Extensions.AI`).
 
 ## ✨ Features
 
-| Subsystem | What it does |
-|---|---|
+| Subsystem                       | What it does                                                                                                                        |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | **Self-Improving Skill System** | Automatically proposes creating a skill on repeated queries (>2 times), versions skills, and improves them when success rate is low |
-| **Long-term Memory** | Stores user profile, preferences, entities, and session context in Markdown; carries context across restarts |
-| **Reflection Engine** | Self-analysis after a session or every N commands — what went well / poorly / what to improve |
-| **Skill Router** | Query routing: skill by triggers or direct LLM response |
-| **Hybrid Storage** | Files (Markdown + JSON) for skills and memory + SQLite for logs and metrics |
-| **Multi-provider LLM** | YandexGPT (primary), Ollama Cloud / Local, LM Studio — through a single OpenAI-compatible interface with automatic fallback |
-| **Interfaces** | CLI (REPL, primary) + Telegram bot (secondary) |
+| **Long-term Memory**            | Stores user profile, preferences, entities, and session context in Markdown; carries context across restarts                        |
+| **Reflection Engine**           | Self-analysis after a session or every N commands — what went well / poorly / what to improve                                       |
+| **Skill Router**                | Query routing: skill by triggers or direct LLM response                                                                             |
+| **Hybrid Storage**              | Files (Markdown + JSON) for skills and memory + SQLite for logs and metrics                                                         |
+| **Multi-provider LLM**          | YandexGPT (primary), Ollama Cloud / Local, LM Studio — through a single OpenAI-compatible interface with automatic fallback         |
+| **Interfaces**                  | CLI (REPL, primary) + Telegram bot (secondary)                                                                                      |
 
 ---
 
@@ -81,6 +81,7 @@ Hercules/
 ```
 
 Additional "façade" projects on top of the core:
+
 ```
 Hercules.WebApi/            # ASP.NET Core Minimal API (REST), port :5000
 ├── Program.cs                 # DI + CORS + middleware, reuses the core
@@ -96,6 +97,7 @@ hercules-web/                    # Astro + TailwindCSS frontend, port :4321
 ```
 
 All runtime data goes into the `data/` directory:
+
 ```
 data/
 ├── Skills/                    # skill.{id}.md / .prompt.md / .meta.json / .usage.json / .v{N}.md
@@ -108,9 +110,11 @@ data/
 ## 🚀 Installation and Run
 
 ### Requirements
+
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 ### Build
+
 ```bash
 cd Hercules
 dotnet restore
@@ -118,25 +122,31 @@ dotnet build
 ```
 
 ### Run CLI (primary mode)
+
 ```bash
 dotnet run
 ```
 
 ### Run Telegram bot
+
 ```bash
 dotnet run -- --telegram
 ```
+
 (set `Telegram:BotToken` in `appsettings.json` beforehand)
 
 ### Run Web API (REST server)
+
 ```bash
 # from repository root
 dotnet run --project Hercules.WebApi
 ```
+
 The server starts on `http://localhost:5000`. The agent core (`AgentCore`) is reused
 through the `WebApiAdapter` adapter — there is no separate agent logic in the Web API.
 
 ### Run CLI via the main project
+
 ```bash
 dotnet run --project Hercules -- --cli   # REPL mode
 dotnet run --project Hercules            # same thing (CLI by default)
@@ -151,22 +161,23 @@ ASP.NET Core Minimal API. All responses are JSON (UTF-8, camelCase). Protection 
 the local frontend (`http://localhost:4321`, `http://localhost:3000`). Every interaction
 is logged in SQLite (`data/sessions.db`).
 
-| Method | Route | Description |
-|-------|---------|----------|
-| `GET`  | `/api/health` | Liveness check (no key required) |
-| `POST` | `/api/chat` | Send a message to the agent → response + mode/confidence/skill |
-| `GET`  | `/api/skills` | List skills |
-| `POST` | `/api/skills` | Create a skill manually; `?ai=true` — generate via LLM |
-| `GET`  | `/api/skills/{id}` | Skill details (metadata + prompt) |
-| `PUT`  | `/api/skills/{id}` | Update a skill (triggers/prompt/description) → new version |
-| `POST` | `/api/skills/{id}/improve` | Improve a skill via LLM → new version |
-| `GET`  | `/api/memory/profile` | Long-term memory profile (Markdown) |
-| `PUT`  | `/api/memory/profile` | Overwrite the memory profile |
-| `POST` | `/api/memory/reset` | Reset long-term memory |
-| `GET`  | `/api/reflect` | Run reflection → Markdown report |
-| `GET`  | `/api/stats` | Metrics: total, skill/direct, success rate, per-day |
+| Method | Route                      | Description                                                    |
+| ------ | -------------------------- | -------------------------------------------------------------- |
+| `GET`  | `/api/health`              | Liveness check (no key required)                               |
+| `POST` | `/api/chat`                | Send a message to the agent → response + mode/confidence/skill |
+| `GET`  | `/api/skills`              | List skills                                                    |
+| `POST` | `/api/skills`              | Create a skill manually; `?ai=true` — generate via LLM         |
+| `GET`  | `/api/skills/{id}`         | Skill details (metadata + prompt)                              |
+| `PUT`  | `/api/skills/{id}`         | Update a skill (triggers/prompt/description) → new version     |
+| `POST` | `/api/skills/{id}/improve` | Improve a skill via LLM → new version                          |
+| `GET`  | `/api/memory/profile`      | Long-term memory profile (Markdown)                            |
+| `PUT`  | `/api/memory/profile`      | Overwrite the memory profile                                   |
+| `POST` | `/api/memory/reset`        | Reset long-term memory                                         |
+| `GET`  | `/api/reflect`             | Run reflection → Markdown report                               |
+| `GET`  | `/api/stats`               | Metrics: total, skill/direct, success rate, per-day            |
 
 Example:
+
 ```bash
 curl -X POST http://localhost:5000/api/chat \
   -H "X-Api-Key: dev-local-key" -H "Content-Type: application/json" \
@@ -174,6 +185,7 @@ curl -X POST http://localhost:5000/api/chat \
 ```
 
 Web API configuration (`Hercules.WebApi/appsettings.json`):
+
 ```jsonc
 "WebApi": {
   "ApiKey": "dev-local-key",                  // empty string → no-key access
@@ -188,16 +200,17 @@ Web API configuration (`Hercules.WebApi/appsettings.json`):
 Minimalist SPA on **Astro + TailwindCSS** (dark theme, monospaced code blocks).
 Located in the `hercules-web/` directory.
 
-| Page | Purpose |
-|----------|------------|
+| Page       | Purpose                                                                           |
+| ---------- | --------------------------------------------------------------------------------- |
 | `/`        | Chat with the agent (mode/confidence/provider badges, typing effect, skill hints) |
-| `/skills`  | Skill list, manual creation and AI improvement, editing |
-| `/profile` | Long-term memory profile editor + reset |
-| `/stats`   | Metrics dashboard, skill/direct ratio, daily activity, reflection |
+| `/skills`  | Skill list, manual creation and AI improvement, editing                           |
+| `/profile` | Long-term memory profile editor + reset                                           |
+| `/stats`   | Metrics dashboard, skill/direct ratio, daily activity, reflection                 |
 
 Components: `ChatBox`, `SkillCard`, `ProfileEditor`, `StatsDashboard`. API client — `src/lib/api.ts`.
 
 ### Run the frontend
+
 ```bash
 cd hercules-web
 npm install
@@ -205,12 +218,14 @@ npm run dev        # dev server on http://localhost:4321
 ```
 
 The backend address and key are configured via environment variables (`hercules-web/.env` file):
+
 ```bash
 PUBLIC_API_BASE=http://localhost:5000
 PUBLIC_API_KEY=dev-local-key
 ```
 
 ### Full local run (two terminals)
+
 ```bash
 # Terminal 1 — backend
 dotnet run --project Hercules.WebApi      # → :5000
@@ -218,6 +233,7 @@ dotnet run --project Hercules.WebApi      # → :5000
 # Terminal 2 — frontend
 cd hercules-web && npm run dev                  # → :4321
 ```
+
 Open `http://localhost:4321`.
 
 ---
@@ -262,8 +278,10 @@ Open `http://localhost:4321`.
 > for example: `HERCULES_Llm__Provider=ollama-local`.
 
 ### LLM Providers
+
 All providers work through an **OpenAI-compatible interface** and the
 `Microsoft.Extensions.AI` abstraction (`IChatClient`). Supported providers:
+
 - **YandexGPT** — primary (Russia). The model is passed as `gpt://{folderId}/{model}/latest`.
 - **Ollama Cloud** — cloud fallback (`https://ollama.com/v1`).
 - **Ollama Local / LM Studio** — local fallback (`http://localhost:11434/v1`).
@@ -275,17 +293,17 @@ to the next one in the `Fallback` list.
 
 ## 💻 CLI Commands
 
-| Command | Description |
-|---|---|
-| `> text` | Direct query to LLM with profile context |
-| `/skills` | Show all skills (table) |
-| `/skills create "name"` | Create a skill manually |
-| `/skills improve {id}` | Improve a skill (new version) |
-| `/memory show` | Show user profile |
-| `/memory reset` | Reset memory |
-| `/reflect` | Run reflection manually |
-| `/help` | Help |
-| `/exit` | Exit with context saving and final reflection |
+| Command                 | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `> text`                | Direct query to LLM with profile context      |
+| `/skills`               | Show all skills (table)                       |
+| `/skills create "name"` | Create a skill manually                       |
+| `/skills improve {id}`  | Improve a skill (new version)                 |
+| `/memory show`          | Show user profile                             |
+| `/memory reset`         | Reset memory                                  |
+| `/reflect`              | Run reflection manually                       |
+| `/help`                 | Help                                          |
+| `/exit`                 | Exit with context saving and final reflection |
 
 ## 🤖 Telegram Commands
 
@@ -309,6 +327,7 @@ to the next one in the `Fallback` list.
 8. **Reflection** → at the end of a session or every N commands
 
 ### Principles
+
 - **Never stop learning** — every session enriches memory or skills
 - **Explicit improvement loop** — the agent itself proposes fixes
 - **Transparent** — the user sees all creations/improvements
@@ -319,14 +338,14 @@ to the next one in the `Fallback` list.
 
 ## 🧪 Acceptance Criteria Check
 
-| Criterion | How to verify |
-|---|---|
+| Criterion                        | How to verify                                              |
+| -------------------------------- | ---------------------------------------------------------- |
 | A skill is created automatically | Repeat the same query 3 times → the agent proposes a skill |
-| A skill is used | After creation — the query goes through `skill: ...` |
-| A skill improves | After a series of bad responses → a proposal to update |
-| Profile is saved | Restart → `/memory show` remembers facts |
-| Context is carried over | Session 1: fact → Session 2: agent remembers |
-| Reflection runs | After `/exit` — Reflection Engine output |
+| A skill is used                  | After creation — the query goes through `skill: ...`       |
+| A skill improves                 | After a series of bad responses → a proposal to update     |
+| Profile is saved                 | Restart → `/memory show` remembers facts                   |
+| Context is carried over          | Session 1: fact → Session 2: agent remembers               |
+| Reflection runs                  | After `/exit` — Reflection Engine output                   |
 
 ---
 
@@ -346,16 +365,16 @@ to the next one in the `Fallback` list.
 
 > All documents are available in two languages. The default links point to the English version.
 
-| Document | Description |
-|----------|----------|
-| [docs/QUICKSTART-EN.md](docs/QUICKSTART-EN.md) · [RU](docs/QUICKSTART-RU.md) | Quick start in a few minutes |
-| [docs/ARCHITECTURE-EN.md](docs/ARCHITECTURE-EN.md) · [RU](docs/ARCHITECTURE-RU.md) | Core and interface architecture |
-| [docs/CONFIGURATION-EN.md](docs/CONFIGURATION-EN.md) · [RU](docs/CONFIGURATION-RU.md) | Full settings reference |
-| [docs/API-EN.md](docs/API-EN.md) · [RU](docs/API-RU.md) | REST Web API reference |
-| [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md) · [RU](CONTRIBUTING-RU.md) | How to contribute |
-| [CHANGELOG-EN.md](CHANGELOG-EN.md) · [RU](CHANGELOG-RU.md) | Change history |
-| [SECURITY.md](SECURITY.md) | Security policy |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Code of conduct |
+| Document                                                                              | Description                     |
+| ------------------------------------------------------------------------------------- | ------------------------------- |
+| [docs/QUICKSTART-EN.md](docs/QUICKSTART-EN.md) · [RU](docs/QUICKSTART-RU.md)          | Quick start in a few minutes    |
+| [docs/ARCHITECTURE-EN.md](docs/ARCHITECTURE-EN.md) · [RU](docs/ARCHITECTURE-RU.md)    | Core and interface architecture |
+| [docs/CONFIGURATION-EN.md](docs/CONFIGURATION-EN.md) · [RU](docs/CONFIGURATION-RU.md) | Full settings reference         |
+| [docs/API-EN.md](docs/API-EN.md) · [RU](docs/API-RU.md)                               | REST Web API reference          |
+| [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md) · [RU](CONTRIBUTING-RU.md)                   | How to contribute               |
+| [CHANGELOG-EN.md](CHANGELOG-EN.md) · [RU](CHANGELOG-RU.md)                            | Change history                  |
+| [SECURITY.md](SECURITY.md)                                                            | Security policy                 |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)                                              | Code of conduct                 |
 
 ---
 
@@ -368,4 +387,4 @@ and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Report vulnerabilities via [SECURI
 
 ## 📝 License
 
-[MIT](LICENSE) © 2026 Victor Buzin. Educational/demo project.
+[MIT](LICENSE) © 2026 Victor Buzin.
