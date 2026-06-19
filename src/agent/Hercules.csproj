@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Hercules</RootNamespace>
+    <AssemblyName>Hercules</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Вложенные проекты (Web API и фронтенд) исключаем из сборки ядра,
+         иначе SDK подхватит их .cs-файлы через стандартный globbing. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);Hercules.WebApi/**;hercules-web/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- AI-абстракции: единый интерфейс IChatClient для всех LLM-провайдеров -->
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.7.0" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.7.0" />
+    <!-- OpenAI-совместимый SDK (используется для YandexGPT и Ollama) -->
+    <PackageReference Include="OpenAI" Version="2.11.0" />
+
+    <!-- Хостинг, DI, конфигурация -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.9" />
+
+    <!-- SQLite для логов сессий и метрик -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
+
+    <!-- Парсинг метаданных навыков (YAML front-matter) -->
+    <PackageReference Include="YamlDotNet" Version="18.0.0" />
+
+    <!-- Улучшенный CLI-интерфейс -->
+    <PackageReference Include="Spectre.Console" Version="0.57.0" />
+
+    <!-- Telegram-бот (вторичный интерфейс) -->
+    <PackageReference Include="Telegram.Bot" Version="22.10.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Конфигурация копируется в выходную директорию -->
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

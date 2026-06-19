@@ -1,0 +1,102 @@
+---
+// Редактор профиля памяти: загрузка Markdown профиля, правка, сохранение, сброс.
+---
+
+<div class="flex flex-col gap-4">
+  <div class="flex items-center justify-between">
+    <p class="text-sm text-gray-400">
+      Долговременная память агента в формате Markdown: предпочтения, факты и сущности.
+    </p>
+    <span id="profile-status" class="text-xs text-gray-500"></span>
+  </div>
+
+  <textarea
+    id="profile-text"
+    rows="18"
+    spellcheck="false"
+    class="mono w-full resize-y rounded-xl border border-white/10 bg-[#101012] p-4 text-sm leading-relaxed text-gray-100 outline-none focus:border-emerald-500/50"
+    placeholder="Загрузка профиля…"
+  ></textarea>
+
+  <div class="flex flex-wrap gap-2">
+    <button
+      id="profile-save"
+      type="button"
+      class="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+    >
+      Сохранить
+    </button>
+    <button
+      id="profile-reload"
+      type="button"
+      class="rounded-xl border border-white/10 px-5 py-2.5 text-sm text-gray-200 transition-colors hover:bg-white/5"
+    >
+      Перезагрузить
+    </button>
+    <button
+      id="profile-reset"
+      type="button"
+      class="ml-auto rounded-xl border border-rose-500/30 bg-rose-500/10 px-5 py-2.5 text-sm text-rose-200 transition-colors hover:bg-rose-500/20"
+    >
+      Сбросить память
+    </button>
+  </div>
+</div>
+
+<script>
+  import { api } from "../lib/api";
+
+  const text = document.getElementById("profile-text") as HTMLTextAreaElement;
+  const status = document.getElementById("profile-status") as HTMLSpanElement;
+  const saveBtn = document.getElementById("profile-save") as HTMLButtonElement;
+  const reloadBtn = document.getElementById("profile-reload") as HTMLButtonElement;
+  const resetBtn = document.getElementById("profile-reset") as HTMLButtonElement;
+
+  function setStatus(msg: string, cls = "text-gray-500") {
+    status.className = `text-xs ${cls}`;
+    status.textContent = msg;
+  }
+
+  async function load() {
+    setStatus("Загрузка…");
+    try {
+      const p = await api.getProfile();
+      text.value = p.content || "";
+      setStatus("Загружено", "text-emerald-400");
+    } catch (e) {
+      setStatus("Ошибка загрузки: " + (e instanceof Error ? e.message : e), "text-rose-400");
+    }
+  }
+
+  saveBtn.addEventListener("click", async () => {
+    saveBtn.disabled = true;
+    setStatus("Сохранение…");
+    try {
+      await api.updateProfile(text.value);
+      setStatus("Сохранено ✓", "text-emerald-400");
+    } catch (e) {
+      setStatus("Ошибка: " + (e instanceof Error ? e.message : e), "text-rose-400");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  reloadBtn.addEventListener("click", load);
+
+  resetBtn.addEventListener("click", async () => {
+    if (!confirm("Сбросить долговременную память агента? Это действие необратимо.")) return;
+    resetBtn.disabled = true;
+    setStatus("Сброс…");
+    try {
+      await api.resetMemory();
+      await load();
+      setStatus("Память сброшена ✓", "text-emerald-400");
+    } catch (e) {
+      setStatus("Ошибка: " + (e instanceof Error ? e.message : e), "text-rose-400");
+    } finally {
+      resetBtn.disabled = false;
+    }
+  });
+
+  load();
+</script>

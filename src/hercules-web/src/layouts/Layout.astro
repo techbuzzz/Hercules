@@ -1,0 +1,63 @@
+---
+// Базовый макет: тёмная тема, верхняя навигация, общий контейнер.
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  active?: "chat" | "skills" | "profile" | "stats";
+}
+
+const { title = "Hercules", active = "chat" } = Astro.props;
+
+const links = [
+  { href: "/", label: "Чат", key: "chat" },
+  { href: "/skills", label: "Навыки", key: "skills" },
+  { href: "/profile", label: "Профиль", key: "profile" },
+  { href: "/stats", label: "Статистика", key: "stats" },
+];
+---
+
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Hercules — самообучающийся ИИ-агент" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>{title}</title>
+  </head>
+  <body class="min-h-screen bg-[#0a0a0b] text-gray-200">
+    <header class="sticky top-0 z-20 border-b border-white/10 bg-[#0a0a0b]/85 backdrop-blur">
+      <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+        <a href="/" class="flex items-center gap-2 group">
+          <img src="/logo-mark.svg" alt="Hercules" width="32" height="32" class="h-8 w-8 rounded-md" />
+          <span class="font-semibold tracking-tight group-hover:text-white">Hercules</span>
+        </a>
+        <nav class="flex items-center gap-1 text-sm">
+          {links.map((l) => (
+            <a
+              href={l.href}
+              class={`rounded-md px-3 py-1.5 transition-colors ${
+                active === l.key
+                  ? "bg-white/10 text-white"
+                  : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+              }`}
+            >
+              {l.label}
+            </a>
+          ))}
+        </nav>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-5xl px-4 py-6">
+      <slot />
+    </main>
+
+    <footer class="mx-auto max-w-5xl px-4 py-8 text-center text-xs text-gray-600">
+      Hercules · самообучающийся микро-агент · .NET 10 + Astro
+    </footer>
+  </body>
+</html>

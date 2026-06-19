@@ -1,0 +1,140 @@
+---
+// Дашборд статистики: ключевые метрики, соотношение навык/прямой,
+// активность по дням (CSS-столбцы) и отчёт рефлексии.
+---
+
+<div class="flex flex-col gap-6">
+  <!-- Карточки метрик -->
+  <div id="stats-cards" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+      <div class="text-2xl font-semibold text-white" id="m-total">—</div>
+      <div class="text-xs text-gray-400">Всего взаимодействий</div>
+    </div>
+    <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+      <div class="text-2xl font-semibold text-emerald-400" id="m-rate">—</div>
+      <div class="text-xs text-gray-400">Успешность</div>
+    </div>
+    <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+      <div class="text-2xl font-semibold text-violet-400" id="m-skills">—</div>
+      <div class="text-xs text-gray-400">Навыков</div>
+    </div>
+    <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+      <div class="text-2xl font-semibold text-sky-400" id="m-skillshare">—</div>
+      <div class="text-xs text-gray-400">Доля навыков</div>
+    </div>
+  </div>
+
+  <!-- Соотношение навык / прямой -->
+  <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">Навык против прямого ответа</h3>
+    <div class="flex h-5 w-full overflow-hidden rounded-full bg-white/5">
+      <div id="bar-skill" class="h-full bg-violet-500 transition-all" style="width:0%"></div>
+      <div id="bar-direct" class="h-full bg-sky-500 transition-all" style="width:0%"></div>
+    </div>
+    <div class="mt-2 flex gap-4 text-xs text-gray-400">
+      <span><span class="mr-1 inline-block h-2 w-2 rounded-full bg-violet-500"></span>навык: <span id="lbl-skill" class="text-gray-200">0</span></span>
+      <span><span class="mr-1 inline-block h-2 w-2 rounded-full bg-sky-500"></span>прямой: <span id="lbl-direct" class="text-gray-200">0</span></span>
+    </div>
+  </div>
+
+  <!-- Активность по дням -->
+  <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-4 text-sm font-medium text-gray-300">Активность по дням</h3>
+    <div id="byday" class="flex h-44 items-end gap-1.5"></div>
+    <div id="byday-empty" class="text-xs text-gray-500">Нет данных.</div>
+  </div>
+
+  <!-- Рефлексия -->
+  <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">Рефлексия агента</h3>
+      <button
+        id="reflect-btn"
+        type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5"
+      >
+        Запустить рефлексию
+      </button>
+    </div>
+    <pre id="reflect-out" class="mono max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-black/40 p-3 text-xs text-gray-300">Нажмите «Запустить рефлексию», чтобы агент проанализировал свою работу.</pre>
+  </div>
+
+  <div id="stats-error" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"></div>
+</div>
+
+<script>
+  import { api } from "../lib/api";
+
+  const $ = (id: string) => document.getElementById(id)!;
+
+  function showError(msg: string) {
+    const e = $("stats-error");
+    e.classList.remove("hidden");
+    e.textContent = "Ошибка: " + msg;
+  }
+
+  async function loadStats() {
+    try {
+      const s = await api.stats();
+      $("m-total").textContent = String(s.totalInteractions);
+      $("m-rate").textContent = Math.round((s.successRate ?? 0) * 100) + "%";
+      $("m-skills").textContent = String(s.totalSkills);
+      const total = s.skillBased + s.direct;
+      const share = total > 0 ? Math.round((s.skillBased / total) * 100) : 0;
+      $("m-skillshare").textContent = share + "%";
+
+      const skillPct = total > 0 ? (s.skillBased / total) * 100 : 0;
+      const directPct = total > 0 ? (s.direct / total) * 100 : 0;
+      ($("bar-skill") as HTMLDivElement).style.width = skillPct + "%";
+      ($("bar-direct") as HTMLDivElement).style.width = directPct + "%";
+      $("lbl-skill").textContent = String(s.skillBased);
+      $("lbl-direct").textContent = String(s.direct);
+
+      // Столбцы по дням
+      const host = $("byday");
+      const empty = $("byday-empty");
+      host.innerHTML = "";
+      const days = s.byDay || [];
+      if (days.length === 0) {
+        empty.classList.remove("hidden");
+      } else {
+        empty.classList.add("hidden");
+        const max = Math.max(1, ...days.map((d) => d.total));
+        for (const d of days) {
+          const col = document.createElement("div");
+          col.className = "group relative flex flex-1 flex-col items-center justify-end gap-1";
+          const skillH = (d.skill / max) * 100;
+          const directH = (d.direct / max) * 100;
+          col.innerHTML = `
+            <div class="flex w-full max-w-[28px] flex-col-reverse overflow-hidden rounded-t" style="height:140px">
+              <div class="w-full bg-sky-500/80" style="height:${directH}%"></div>
+              <div class="w-full bg-violet-500/80" style="height:${skillH}%"></div>
+            </div>
+            <div class="mono text-[9px] text-gray-500">${d.date.slice(5)}</div>
+            <div class="pointer-events-none absolute -top-7 hidden rounded bg-black px-2 py-1 text-[10px] text-gray-200 group-hover:block">${d.total} (н:${d.skill}/п:${d.direct})</div>
+          `;
+          host.appendChild(col);
+        }
+      }
+    } catch (e) {
+      showError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  $("reflect-btn").addEventListener("click", async () => {
+    const out = $("reflect-out");
+    const btn = $("reflect-btn") as HTMLButtonElement;
+    btn.disabled = true;
+    out.textContent = "Анализ…";
+    try {
+      const r = await api.reflect();
+      out.textContent = r.markdown || "(пустой отчёт)";
+    } catch (e) {
+      out.textContent = "Ошибка: " + (e instanceof Error ? e.message : e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  loadStats();
+</script>

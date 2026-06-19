@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Вопросы и обсуждения
+    url: https://github.com/discussions
+    about: Задайте вопрос или обсудите идею в Discussions
+  - name: 🔒 Уязвимости безопасности
+    url: https://github.com/security/advisories
+    about: Сообщайте об уязвимостях приватно (см. SECURITY.md)

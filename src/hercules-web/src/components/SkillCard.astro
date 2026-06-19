@@ -1,0 +1,62 @@
+---
+// Карточка навыка: имя, версия, триггеры, успех, число использований.
+// Кнопки «Подробнее/Редактировать» и «Улучшить» работают через data-атрибуты
+// и обрабатываются скриптом на странице /skills.
+import type { SkillDto } from "../lib/api";
+
+interface Props {
+  skill: SkillDto;
+}
+const { skill } = Astro.props;
+const rate = Math.round((skill.successRate ?? 0) * 100);
+---
+
+<div class="flex flex-col gap-3 rounded-xl border border-white/10 bg-[#101012] p-4 transition-colors hover:border-white/20">
+  <div class="flex items-start justify-between gap-2">
+    <div>
+      <h3 class="font-semibold text-white">{skill.name}</h3>
+      {skill.description && (
+        <p class="mt-0.5 text-xs text-gray-400">{skill.description}</p>
+      )}
+    </div>
+    <span class="mono shrink-0 rounded bg-violet-500/15 px-2 py-0.5 text-[11px] text-violet-300">
+      v{skill.version}
+    </span>
+  </div>
+
+  <div class="flex flex-wrap gap-1.5">
+    {skill.triggers.map((t) => (
+      <span class="mono rounded bg-white/5 px-2 py-0.5 text-[11px] text-gray-300">{t}</span>
+    ))}
+  </div>
+
+  <div class="flex items-center gap-4 text-xs text-gray-400">
+    <span>Успех: <span class={rate >= 70 ? "text-emerald-400" : rate >= 40 ? "text-amber-400" : "text-rose-400"}>{rate}%</span></span>
+    <span>Использований: <span class="text-gray-200">{skill.totalUses}</span></span>
+  </div>
+
+  <!-- Полоса успешности -->
+  <div class="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+    <div
+      class={`h-full rounded-full ${rate >= 70 ? "bg-emerald-500" : rate >= 40 ? "bg-amber-500" : "bg-rose-500"}`}
+      style={`width:${Math.max(rate, 2)}%`}
+    ></div>
+  </div>
+
+  <div class="flex gap-2 pt-1">
+    <button
+      type="button"
+      data-edit={skill.id}
+      class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5"
+    >
+      Редактировать
+    </button>
+    <button
+      type="button"
+      data-improve={skill.id}
+      class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200 transition-colors hover:bg-amber-500/20"
+    >
+      Улучшить (ИИ)
+    </button>
+  </div>
+</div>

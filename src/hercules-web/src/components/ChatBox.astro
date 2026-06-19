@@ -1,0 +1,193 @@
+---
+// Компонент чата: история сообщений, поле ввода, бейджи режима/уверенности,
+// эффект "печати" ответа и уведомления о предложениях навыков.
+---
+
+<div class="flex flex-col gap-4">
+  <!-- Окно истории -->
+  <div
+    id="chat-log"
+    class="min-h-[55vh] max-h-[65vh] overflow-y-auto rounded-xl border border-white/10 bg-[#101012] p-4 flex flex-col gap-3"
+  >
+    <div class="text-sm text-gray-500 animate-in" id="chat-empty">
+      Привет! Я Hercules — самообучающийся микро-агент. Задай вопрос, и я отвечу.
+      Со временем я создаю и улучшаю собственные навыки.
+    </div>
+  </div>
+
+  <!-- Уведомления о предложениях навыков -->
+  <div id="chat-notices" class="flex flex-col gap-2"></div>
+
+  <!-- Поле ввода -->
+  <form id="chat-form" class="flex items-end gap-2">
+    <textarea
+      id="chat-input"
+      rows="1"
+      placeholder="Напишите сообщение…  (Enter — отправить, Shift+Enter — перенос строки)"
+      class="flex-1 resize-none rounded-xl border border-white/10 bg-[#101012] px-4 py-3 text-sm outline-none focus:border-emerald-500/50 placeholder:text-gray-600"
+    ></textarea>
+    <button
+      id="chat-send"
+      type="submit"
+      class="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      Отправить
+    </button>
+  </form>
+</div>
+
+<script>
+  import { api } from "../lib/api";
+  import type { ChatResponseDto } from "../lib/api";
+
+  const log = document.getElementById("chat-log") as HTMLDivElement;
+  const empty = document.getElementById("chat-empty");
+  const notices = document.getElementById("chat-notices") as HTMLDivElement;
+  const form = document.getElementById("chat-form") as HTMLFormElement;
+  const input = document.getElementById("chat-input") as HTMLTextAreaElement;
+  const sendBtn = document.getElementById("chat-send") as HTMLButtonElement;
+
+  // Автоувеличение высоты поля ввода
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 160) + "px";
+  });
+
+  // Enter — отправить, Shift+Enter — перенос
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  function scrollDown() {
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  // Простое форматирование: блоки кода ```...``` и `inline`
+  function format(text: string): string {
+    let html = escapeHtml(text);
+    html = html.replace(/```([\s\S]*?)```/g, (_m, code) =>
+      `<pre class="mono my-2 overflow-x-auto rounded-lg bg-black/50 p-3 text-xs text-emerald-200">${code.trim()}</pre>`
+    );
+    html = html.replace(/`([^`]+)`/g, '<code class="mono rounded bg-black/40 px-1 py-0.5 text-emerald-200">$1</code>');
+    html = html.replace(/\n/g, "<br>");
+    return html;
+  }
+
+  function addUser(text: string) {
+    empty?.remove();
+    const el = document.createElement("div");
+    el.className = "animate-in self-end max-w-[85%] rounded-2xl rounded-br-sm bg-emerald-600/90 px-4 py-2.5 text-sm text-white whitespace-pre-wrap break-words";
+    el.textContent = text;
+    log.appendChild(el);
+    scrollDown();
+  }
+
+  function badge(label: string, cls: string): string {
+    return `<span class="mono rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${cls}">${label}</span>`;
+  }
+
+  function confidenceColor(c: string): string {
+    if (c === "high" || c === "высокая") return "bg-emerald-500/20 text-emerald-300";
+    if (c === "medium" || c === "средняя") return "bg-amber-500/20 text-amber-300";
+    return "bg-rose-500/20 text-rose-300";
+  }
+
+  // Добавляет пузырь ассистента с эффектом печати, возвращает его узлы
+  function addAssistant(resp: ChatResponseDto) {
+    const wrap = document.createElement("div");
+    wrap.className = "animate-in self-start max-w-[85%] flex flex-col gap-1.5";
+
+    const meta = document.createElement("div");
+    meta.className = "flex flex-wrap items-center gap-1.5";
+    const modeCls = resp.mode === "skill"
+      ? "bg-violet-500/20 text-violet-300"
+      : "bg-sky-500/20 text-sky-300";
+    meta.innerHTML =
+      badge(resp.mode === "skill" ? "навык" : "прямой", modeCls) +
+      badge(resp.confidence || "—", confidenceColor(resp.confidence)) +
+      badge(resp.provider || "llm", "bg-white/10 text-gray-300") +
+      (resp.skill ? badge(`★ ${resp.skill.name}`, "bg-violet-500/10 text-violet-200") : "");
+
+    const bubble = document.createElement("div");
+    bubble.className = "rounded-2xl rounded-bl-sm bg-[#1a1a1e] border border-white/10 px-4 py-2.5 text-sm text-gray-100 break-words";
+
+    wrap.appendChild(meta);
+    wrap.appendChild(bubble);
+    log.appendChild(wrap);
+    scrollDown();
+
+    // Эффект печати
+    const full = resp.answer || "";
+    let i = 0;
+    const step = Math.max(1, Math.floor(full.length / 120));
+    const timer = setInterval(() => {
+      i += step;
+      if (i >= full.length) {
+        bubble.innerHTML = format(full);
+        clearInterval(timer);
+      } else {
+        bubble.innerHTML = format(full.slice(0, i)) + '<span class="animate-pulse">▋</span>';
+      }
+      scrollDown();
+    }, 16);
+  }
+
+  function showNotices(resp: ChatResponseDto) {
+    notices.innerHTML = "";
+    if (resp.proposeSkillForInput) {
+      const n = document.createElement("div");
+      n.className = "rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200";
+      n.innerHTML = `💡 Похоже, такой запрос повторяется. Можно создать навык на основе: <span class="mono">«${escapeHtml(resp.proposeSkillForInput)}»</span> — откройте раздел <a href="/skills" class="underline">Навыки</a>.`;
+      notices.appendChild(n);
+    }
+    if (resp.proposeImproveSkillId) {
+      const n = document.createElement("div");
+      n.className = "rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200";
+      n.innerHTML = `🛠 Навык <span class="mono">${escapeHtml(resp.proposeImproveSkillName || resp.proposeImproveSkillId)}</span> можно улучшить — откройте раздел <a href="/skills" class="underline">Навыки</a>.`;
+      notices.appendChild(n);
+    }
+  }
+
+  function setBusy(b: boolean) {
+    sendBtn.disabled = b;
+    sendBtn.textContent = b ? "…" : "Отправить";
+  }
+
+  function addError(msg: string) {
+    const el = document.createElement("div");
+    el.className = "animate-in self-start max-w-[85%] rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-200";
+    el.textContent = "Ошибка: " + msg;
+    log.appendChild(el);
+    scrollDown();
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    addUser(text);
+    input.value = "";
+    input.style.height = "auto";
+    setBusy(true);
+    try {
+      const resp = await api.chat(text);
+      addAssistant(resp);
+      showNotices(resp);
+    } catch (err) {
+      addError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+      input.focus();
+    }
+  });
+</script>

@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* Тёмная минималистичная тема Hercules */
+:root {
+  color-scheme: dark;
+}
+
+html {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background-color: #0a0a0b;
+  color: #e5e7eb;
+}
+
+code, pre, .mono {
+  font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+/* Тонкий скроллбар */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #111113; }
+::-webkit-scrollbar-thumb { background: #2a2a2e; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a40; }
+
+/* Плавное появление сообщений */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in { animation: fadeInUp 0.25s ease-out; }
