@@ -421,9 +421,13 @@ FodyWeavers.xsd
 # Built Visual Studio Code Extensions
 *.vsix
 
+# Astro / web build output
+src/hercules-web/dist/
+
 # Windows Installer files from build outputs
 *.cab
 *.msi
 *.msix
 *.msm
 *.msp
+*.db
