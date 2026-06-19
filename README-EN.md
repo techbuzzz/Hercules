@@ -33,10 +33,13 @@ through a single OpenAI-compatible interface (`Microsoft.Extensions.AI`).
 | **Self-Improving Skill System** | Automatically proposes creating a skill on repeated queries (>2 times), versions skills, and improves them when success rate is low |
 | **Long-term Memory**            | Stores user profile, preferences, entities, and session context in Markdown; carries context across restarts                        |
 | **Reflection Engine**           | Self-analysis after a session or every N commands — what went well / poorly / what to improve                                       |
-| **Skill Router**                | Query routing: skill by triggers or direct LLM response                                                                             |
-| **Hybrid Storage**              | Files (Markdown + JSON) for skills and memory + SQLite for logs and metrics                                                         |
+| **Skill Router**                | Query routing: skill by phrase-receivers or direct LLM response                                                                     |
+| **Hybrid Storage**              | Files (Markdown + JSON) for skills and memory + SQLite for logs, metrics, and sandbox execution audit                               |
 | **Multi-provider LLM**          | YandexGPT (primary), Ollama Cloud / Local, LM Studio — through a single OpenAI-compatible interface with automatic fallback         |
-| **Interfaces**                  | CLI (REPL, primary) + Telegram bot (secondary)                                                                                      |
+| **Interfaces**                  | CLI (REPL, primary) + Telegram bot (secondary) + Web API                                                                            |
+| **v2 Multi-Role Routing**       | `AppConfig.Roles` dictionary routes `main` / `code_writer` / `reflector` to different (provider, model, temperature) tuples         |
+| **v2 Sandboxed Code Execution** | C# file-based apps in a 3-layer sandbox (regex pre-scan → isolated temp dir → POSIX `ulimit` wrapper); default-deny network          |
+| **v2 Tool Ecosystem**           | LLM-callable tools: `http` (allow-list domains), `execute_code`, `a2a` (JSON-RPC 2.0), `mcp` (stub — client SDK ETA 2026)            |
 
 ---
 
@@ -47,30 +50,50 @@ Hercules/
 ├── Program.cs                 # Entry point, DI and configuration setup
 ├── appsettings.json           # Provider and agent thresholds configuration
 ├── Config/
-│   └── AppConfig.cs           # Configuration models
+│   └── AppConfig.cs           # Configuration models (Llm/Storage/Agent/CodeExecution/Http/Mcp/A2A/Roles)
 ├── Agent/                     # Agent core
-│   ├── AgentCore.cs           # Main request-processing loop
-│   ├── SkillRouter.cs         # Skill-based routing (triggers)
+│   ├── AgentCore.cs           # Main request-processing loop (tool-aware, Stage 4)
+│   ├── SkillRouter.cs         # Skill-based routing (PhraseReceivers)
 │   ├── SkillManager.cs        # Skill CRUD + versioning (via LLM)
-│   ├── ReflectionEngine.cs    # Self-analysis, reflection reports
-│   └── MemoryManager.cs       # Long-term memory, user model
+│   ├── ReflectionEngine.cs    # Self-analysis (sandbox traces), reflection reports
+│   ├── MemoryManager.cs       # Long-term memory, user model
+│   └── WebApiAdapter.cs       # Core adapter for Web API + DTO
 ├── LLM/                       # LLM layer (Microsoft.Extensions.AI)
-│   ├── ILLMClient.cs          # Unified provider interface
+│   ├── ILLMClient.cs          # Unified provider interface (multi-role)
 │   ├── ChatClientLLMClient.cs # Base over IChatClient
 │   ├── YandexGPTClient.cs     # YandexGPT (OpenAI-compatible endpoint)
 │   ├── LocalLLMClient.cs      # Ollama Cloud/Local, LM Studio
 │   ├── LlmClientFactory.cs    # Client factory by provider name
-│   └── ResilientLLMClient.cs  # Resilience + fallback chain
+│   ├── ResilientLLMClient.cs  # Resilience + role routing
+│   └── RoleRouter.cs          # v2: role → ILLMClient resolver
+├── CodeExecution/             # v2: sandboxed C# code execution
+│   ├── ICodeExecutor.cs       # Contract
+│   ├── SandboxOptions.cs      # ulimit + timeouts + allow-list
+│   ├── DangerousCodeScanner.cs# Pre-execution regex scan
+│   ├── DotnetFileBasedExecutor.cs # `dotnet run --file` impl
+│   └── skill.code-execution.v1.md  # Preset skill
+├── Tools/                     # v2: tool ecosystem (HTTP / MCP / A2A)
+│   ├── ITool.cs               # Tool contract
+│   ├── ToolRegistry.cs        # LLM prompt injection
+│   ├── HttpTool.cs            # GET/POST/PUT/DELETE + allow-list
+│   ├── A2AClient.cs           # JSON-RPC 2.0 agent-to-agent
+│   ├── McpClient.cs           # MCP stub (SDK server-side only)
+│   ├── CodeExecutionTool.cs   # Adapter: ICodeExecutor → ITool
+│   └── skill.*.v1.md          # Preset skills
 ├── Storage/                   # Storage
 │   ├── FileSkillRepository.cs # Skills/ — skill files
 │   ├── MemoryStore.cs         # Memory/ — Markdown memory
-│   ├── SqliteSessionStore.cs  # SQLite: sessions, logs, metrics, counters
-│   └── Models.cs              # Domain models (Skill, SkillMeta, ...)
+│   ├── SqliteSessionStore.cs  # SQLite: sessions, logs, metrics, counters, sandbox_executions
+│   └── Models.cs              # Domain models (Skill, SkillMeta with PhraseReceivers, ...)
 ├── CLI/
 │   └── ConsoleUI.cs           # REPL loop (Spectre.Console)
 ├── Telegram/
 │   └── TelegramBot.cs         # Telegram bot (long polling)
-└── Agent/WebApiAdapter.cs     # Core adapter for Web API + DTO
+└── Hercules.WebApi/
+    ├── Program.cs             # DI + CORS + middleware, reuses the core
+    ├── Auth/ApiKeyMiddleware.cs
+    ├── Config/WebApiConfig.cs
+    └── Controllers/           # Chat / Skills / Memory / Stats
 ```
 
 Additional "façade" projects on top of the core:
