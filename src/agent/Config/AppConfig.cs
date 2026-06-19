@@ -11,6 +11,11 @@ public sealed class AppConfig
     public TelegramConfig Telegram { get; set; } = new();
 
     /// <summary>
+    ///     Параметры sandbox для исполнения LLM-сгенерированного кода (Stage 2, v2).
+    /// </summary>
+    public CodeExecutionConfig CodeExecution { get; set; } = new();
+
+    /// <summary>
     ///     Конфигурация именованных ролей LLM (multi-role routing, v2).
     ///     Ключ — имя роли ("main", "code_writer", "reflector", ...).
     ///     Значение — провайдер + модель + temperature.
@@ -33,6 +38,25 @@ public sealed class RoleConfig
     public float Temperature { get; set; } = 0.6f;
 
     public int MaxTokens { get; set; } = 2000;
+}
+
+/// <summary>
+///     Параметры sandbox для исполнения LLM-кода (Stage 2).
+///     Маппится из appsettings.json:CodeExecution.
+/// </summary>
+public sealed class CodeExecutionConfig
+{
+    public int CpuTimeoutSeconds { get; set; } = 30;
+    public int MaxFileSizeMb { get; set; } = 10;
+    public int MaxProcesses { get; set; } = 0;
+    public int MaxOpenFiles { get; set; } = 1024;
+    public long MaxVirtualMemoryMb { get; set; } = 0;
+    public bool AllowNetwork { get; set; } = false;
+    public int MaxCodeSizeKb { get; set; } = 100;
+    public int SessionTtlSeconds { get; set; } = 3600;
+
+    /// <summary>Override temp root. Пусто → использовать дефолт платформы.</summary>
+    public string TempRoot { get; set; } = "";
 }
 
 /// <summary>
