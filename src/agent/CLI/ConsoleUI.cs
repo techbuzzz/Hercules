@@ -224,7 +224,7 @@ public sealed class ConsoleUI(
         Table table = new Table().Border(TableBorder.Rounded);
         table.AddColumn("id");
         table.AddColumn("Название");
-        table.AddColumn("Триггеры");
+        table.AddColumn("Фразы-приёмники");
         table.AddColumn("v");
         table.AddColumn("success");
         table.AddColumn("uses");
@@ -233,7 +233,7 @@ public sealed class ConsoleUI(
             table.AddRow(
                 s.Meta.Id,
                 Markup.Escape(s.Meta.Name),
-                Markup.Escape(string.Join(", ", s.Meta.Triggers)),
+                Markup.Escape(string.Join(", ", s.Meta.PhraseReceivers)),
                 s.Meta.Version.ToString(),
                 s.Meta.SuccessRate.ToString("0.00"),
                 s.Meta.TotalUses.ToString());

@@ -29,9 +29,9 @@ public sealed class SkillRouter(SkillManager skills)
 
         foreach (Skill skill in skills.All())
         {
-            var score = skill.Meta.Triggers.Count(trigger =>
-                !string.IsNullOrWhiteSpace(trigger) &&
-                normalized.Contains(Normalize(trigger), StringComparison.Ordinal));
+            var score = skill.Meta.PhraseReceivers.Count(receiver =>
+                !string.IsNullOrWhiteSpace(receiver) &&
+                normalized.Contains(Normalize(receiver), StringComparison.Ordinal));
 
             if (score <= bestScore &&
                 (score != bestScore ||

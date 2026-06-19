@@ -49,7 +49,9 @@ public sealed class ReflectionEngine(
         string analysis;
         try
         {
-            LlmResponse resp = await llm.CompleteAsync([
+            // Рефлексия идёт через роль "reflector" (если сконфигурирована),
+            // иначе fallback на main (Roles.Main) — back-compat.
+            LlmResponse resp = await llm.CompleteAsync(Roles.Reflector, [
                 new ChatTurn(ChatRole.System, "Ты — модуль рефлексии самообучающегося агента."),
                 new ChatTurn(ChatRole.User, prompt)
             ], ct);

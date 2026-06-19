@@ -18,10 +18,22 @@ public class ChatClientLLMClient(
     public string ProviderName { get; } = providerName;
     public string ModelName { get; } = modelName;
 
+    public Task<LlmResponse> CompleteAsync(string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+    {
+        // Role не используется на уровне одного клиента — выбор делает ResilientLLMClient/RoleRouter.
+        // Этот метод нужен для прямого использования клиента (например, в тестах) — role игнорируется.
+        return CompleteAsync(messages, ct);
+    }
+
     public async Task<LlmResponse> CompleteAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
     {
         ChatResponse response = await chatClient.GetResponseAsync(Map(messages), BuildOptions(), ct);
         return new LlmResponse(response.Text ?? string.Empty, ProviderName, ModelName);
+    }
+
+    public IAsyncEnumerable<string> StreamAsync(string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+    {
+        return StreamAsync(messages, ct);
     }
 
     public async IAsyncEnumerable<string> StreamAsync(

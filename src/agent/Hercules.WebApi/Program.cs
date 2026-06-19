@@ -36,10 +36,14 @@ builder.Services.AddSingleton(appConfig.Agent);
 builder.Services.AddSingleton(appConfig.Telegram);
 builder.Services.AddSingleton(webCfg);
 
-// LLM-слой
+// LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
 builder.Services.AddSingleton<LlmClientFactory>();
+builder.Services.AddSingleton<RoleRouter>();
 builder.Services.AddSingleton<ILLMClient>(sp =>
-    new ResilientLLMClient(sp.GetRequiredService<LlmConfig>(), sp.GetRequiredService<LlmClientFactory>()));
+    new ResilientLLMClient(
+        sp.GetRequiredService<LlmConfig>(),
+        sp.GetRequiredService<LlmClientFactory>(),
+        sp.GetRequiredService<RoleRouter>()));
 
 // Хранилища
 builder.Services.AddSingleton<FileSkillRepository>();

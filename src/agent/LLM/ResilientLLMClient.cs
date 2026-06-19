@@ -4,22 +4,27 @@ using Hercules.Config;
 namespace Hercules.LLM;
 
 /// <summary>
-///     Отказоустойчивый LLM-клиент: пробует основной провайдер,
-///     при ошибке последовательно переключается на fallback-провайдеры.
+///     Отказоустойчивый LLM-клиент с поддержкой multi-role routing (v2).
+///     Поддерживает fallback-цепочку для main-роли (как раньше)
+///     и per-role маршрутизацию через RoleRouter.
 /// </summary>
 public sealed class ResilientLLMClient : ILLMClient
 {
-    private readonly List<(string Name, Lazy<ILLMClient> Client)> _chain;
+    private readonly List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
+    private readonly RoleRouter _roleRouter;
+    private readonly LlmConfig _cfg;
 
-    public ResilientLLMClient(LlmConfig cfg, LlmClientFactory factory)
+    public ResilientLLMClient(LlmConfig cfg, LlmClientFactory factory, RoleRouter roleRouter)
     {
+        _cfg = cfg;
+        _roleRouter = roleRouter;
         var order = new List<string> { cfg.Provider };
         foreach (var fb in cfg.Fallback.Where(fb => !order.Contains(fb, StringComparer.OrdinalIgnoreCase)))
         {
             order.Add(fb);
         }
 
-        _chain = order
+        _mainChain = order
             .Select(name => (name, new Lazy<ILLMClient>(() => factory.Create(name))))
             .ToList();
 
@@ -32,17 +37,33 @@ public sealed class ResilientLLMClient : ILLMClient
 
     public string ModelName { get; private set; }
 
-    public async Task<LlmResponse> CompleteAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+    public Task<LlmResponse> CompleteAsync(string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+    {
+        // main → fallback chain (как раньше)
+        if (string.IsNullOrEmpty(role) || role == Roles.Main)
+        {
+            return CompleteMainAsync(messages, ct);
+        }
+
+        // Другая роль → RoleRouter → конкретный клиент (single-shot, без fallback).
+        // Если роль не сконфигурирована — fallback на main.
+        ILLMClient client = _roleRouter.Resolve(role);
+        return InvokeRoleAsync(client, role, messages, ct);
+    }
+
+    public Task<LlmResponse> CompleteAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+        => CompleteAsync(Roles.Main, messages, ct);
+
+    private async Task<LlmResponse> CompleteMainAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct)
     {
         Exception? last = null;
-        foreach ((var name, Lazy<ILLMClient> lazy) in _chain)
+        foreach ((var name, Lazy<ILLMClient> lazy) in _mainChain)
         {
             try
             {
-                ILLMClient client = lazy.Value;
-                LlmResponse resp = await client.CompleteAsync(messages, ct);
-                ProviderName = client.ProviderName;
-                ModelName = client.ModelName;
+                LlmResponse resp = await lazy.Value.CompleteAsync(messages, ct);
+                ProviderName = lazy.Value.ProviderName;
+                ModelName = lazy.Value.ModelName;
                 return resp;
             }
             catch (OperationCanceledException)
@@ -59,12 +80,48 @@ public sealed class ResilientLLMClient : ILLMClient
         throw new InvalidOperationException("Все LLM-провайдеры недоступны.", last);
     }
 
-    public async IAsyncEnumerable<string> StreamAsync(
+    private async Task<LlmResponse> InvokeRoleAsync(
+        ILLMClient client, string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct)
+    {
+        try
+        {
+            LlmResponse resp = await client.CompleteAsync(messages, ct);
+            ProviderName = client.ProviderName;
+            ModelName = client.ModelName;
+            return resp;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Fallback: если роль-клиент упал — пробуем main-цепочку
+            await Console.Error.WriteLineAsync(
+                $"[LLM] Роль '{role}' ({client.ProviderName}) недоступна: {ex.Message}. Fallback на main.");
+            return await CompleteMainAsync(messages, ct);
+        }
+    }
+
+    public IAsyncEnumerable<string> StreamAsync(string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(role) || role == Roles.Main)
+        {
+            return StreamMainAsync(messages, ct);
+        }
+
+        ILLMClient client = _roleRouter.Resolve(role);
+        return StreamSingleAsync(client, role, messages, ct);
+    }
+
+    public IAsyncEnumerable<string> StreamAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+        => StreamAsync(Roles.Main, messages, ct);
+
+    private async IAsyncEnumerable<string> StreamMainAsync(
         IReadOnlyList<ChatTurn> messages,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        // Выбираем первый рабочий провайдер для стрима (с проверкой через быстрый старт).
-        foreach ((var name, Lazy<ILLMClient> lazy) in _chain)
+        foreach ((var name, Lazy<ILLMClient> lazy) in _mainChain)
         {
             IAsyncEnumerator<string>? enumerator = null;
             var started = false;
@@ -90,7 +147,6 @@ public sealed class ResilientLLMClient : ILLMClient
                 continue;
             }
 
-            // Успешно стартовали — отдаём поток до конца.
             try
             {
                 if (started)
@@ -114,5 +170,25 @@ public sealed class ResilientLLMClient : ILLMClient
         }
 
         throw new InvalidOperationException("Все LLM-провайдеры недоступны (stream).");
+    }
+
+    private async IAsyncEnumerable<string> StreamSingleAsync(
+        ILLMClient client,
+        string role,
+        IReadOnlyList<ChatTurn> messages,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await using var enumerator = client.StreamAsync(messages, ct).GetAsyncEnumerator(ct);
+        var started = await enumerator.MoveNextAsync();
+        ProviderName = client.ProviderName;
+        ModelName = client.ModelName;
+        if (started)
+        {
+            yield return enumerator.Current;
+            while (await enumerator.MoveNextAsync())
+            {
+                yield return enumerator.Current;
+            }
+        }
     }
 }

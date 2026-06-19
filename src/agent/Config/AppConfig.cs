@@ -9,6 +9,30 @@ public sealed class AppConfig
     public StorageConfig Storage { get; set; } = new();
     public AgentConfig Agent { get; set; } = new();
     public TelegramConfig Telegram { get; set; } = new();
+
+    /// <summary>
+    ///     Конфигурация именованных ролей LLM (multi-role routing, v2).
+    ///     Ключ — имя роли ("main", "code_writer", "reflector", ...).
+    ///     Значение — провайдер + модель + temperature.
+    ///     Если секция пуста — все роли используют Llm.Provider (обратная совместимость).
+    /// </summary>
+    public Dictionary<string, RoleConfig> Roles { get; set; } = new();
+}
+
+/// <summary>
+///     Параметры одной LLM-роли. Если Provider пуст — наследуется из Llm.Provider.
+/// </summary>
+public sealed class RoleConfig
+{
+    /// <summary>Имя провайдера: yandexgpt | ollama-cloud | ollama-local. Пусто → наследовать.</summary>
+    public string Provider { get; set; } = "";
+
+    /// <summary>Имя модели (если пусто — дефолт провайдера).</summary>
+    public string Model { get; set; } = "";
+
+    public float Temperature { get; set; } = 0.6f;
+
+    public int MaxTokens { get; set; } = 2000;
 }
 
 /// <summary>
