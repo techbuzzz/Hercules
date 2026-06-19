@@ -15,11 +15,6 @@
   <img alt="Status" src="https://img.shields.io/badge/status-active-success.svg" />
 </p>
 
-<p align="center">
-  <a href="README-EN.md"><b>English</b></a>
-  · <a href="README-RU.md">Русский</a>
-</p>
-
 ---
 
 **Hercules** is a compact self-improving micro-agent that reproduces the key *self-improving* characteristics
@@ -28,8 +23,6 @@ of "hermes-style" agents (Nous Research) in a runnable form factor.
 The agent **creates skills from experience**, **improves them during use**, **retains knowledge across sessions**,
 and builds a deepening model of the user. It supports **YandexGPT**, **Ollama Cloud**, and **Ollama Local**
 through a single OpenAI-compatible interface (`Microsoft.Extensions.AI`).
-
-> This is the default landing page (English). For the Russian version, see [README-RU.md](README-RU.md).
 
 ---
 
@@ -344,16 +337,15 @@ to the next one in the `Fallback` list.
 
 ## 📚 Documentation
 
-> All documents are available in two languages. The default links point to the English version.
-
 | Document | Description |
 |----------|----------|
-| [docs/QUICKSTART-EN.md](docs/QUICKSTART-EN.md) · [RU](docs/QUICKSTART-RU.md) | Quick start in a few minutes |
-| [docs/ARCHITECTURE-EN.md](docs/ARCHITECTURE-EN.md) · [RU](docs/ARCHITECTURE-RU.md) | Core and interface architecture |
-| [docs/CONFIGURATION-EN.md](docs/CONFIGURATION-EN.md) · [RU](docs/CONFIGURATION-RU.md) | Full settings reference |
-| [docs/API-EN.md](docs/API-EN.md) · [RU](docs/API-RU.md) | REST Web API reference |
-| [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md) · [RU](CONTRIBUTING-RU.md) | How to contribute |
-| [CHANGELOG-EN.md](CHANGELOG-EN.md) · [RU](CHANGELOG-RU.md) | Change history |
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Quick start in a few minutes |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Core and interface architecture |
+| [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Full settings reference |
+| [docs/API.md](docs/API.md) | REST Web API reference |
+| [docs/BRANDING.md](docs/BRANDING.md) | Logo, palette, brand rules |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
+| [CHANGELOG.md](CHANGELOG.md) | Change history |
 | [SECURITY.md](SECURITY.md) | Security policy |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Code of conduct |
 
@@ -361,7 +353,7 @@ to the next one in the `Fallback` list.
 
 ## 🤝 Contributing
 
-PRs and Issues are welcome! Before starting, please read [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md)
+PRs and Issues are welcome! Before starting, please read [CONTRIBUTING.md](CONTRIBUTING.md)
 and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Report vulnerabilities via [SECURITY.md](SECURITY.md).
 
 ---
