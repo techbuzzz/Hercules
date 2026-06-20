@@ -1,7 +1,7 @@
-namespace HerculesBus;
+namespace HerculesBus.Core;
 
 /// <summary>
-///     Сообщение в HerculesBus. Маршрутизируется по Channel + SenderAgentId.
+///     Сообщение в HerculesBus. Маршрутизируется по BusChannel + SenderAgentId.
 ///     HerculesBus = "мессенджер для ИИ агентов" — агенты общаются между собой
 ///     через каналы (#main, #wasm-sandbox, #contract-audit и т.п.).
 ///     НЕ для людей — если нужен человек в loop, кидается ApprovalRequest.
@@ -45,21 +45,10 @@ public sealed record MessageAttachment(
 /// </summary>
 public static class MessageKinds
 {
-    /// <summary>Обычное текстовое сообщение.</summary>
     public const string Text = "text";
-
-    /// <summary>Запрос на tool call (с JSON-схемой параметров в Body).</summary>
     public const string ToolCall = "tool-call";
-
-    /// <summary>Результат tool call.</summary>
     public const string ToolResult = "tool-result";
-
-    /// <summary>Системное событие (agent online/offline, ошибка).</summary>
     public const string System = "system";
-
-    /// <summary>Алерт — высокий приоритет, всегда показывается.</summary>
     public const string Alert = "alert";
-
-    /// <summary>Approval request — запрос одобрения от человека (human-in-the-loop bridge).</summary>
     public const string ApprovalRequest = "approval-request";
 }

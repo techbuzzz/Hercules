@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using HerculesBus.Core;
 
 namespace HerculesBus.InMemory;
 
@@ -9,17 +10,17 @@ namespace HerculesBus.InMemory;
 /// </summary>
 public sealed class InMemoryChannelStore : IChannelStore
 {
-    private readonly ConcurrentDictionary<string, Channel> _channels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, BusChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, AgentMessage> _messages = new(StringComparer.Ordinal);
     private readonly object _appendLock = new();
     // Канал → упорядоченный список ID сообщений
     private readonly ConcurrentDictionary<string, List<string>> _channelMessages = new(StringComparer.OrdinalIgnoreCase);
 
-    public Task<Channel> EnsureChannelAsync(string name, string description, bool isPrivate, string createdBy, CancellationToken ct = default)
+    public Task<BusChannel> EnsureChannelAsync(string name, string description, bool isPrivate, string createdBy, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        var existing = _channels.GetOrAdd(name, _ => new Channel(
+        var existing = _channels.GetOrAdd(name, _ => new BusChannel(
             Name: name,
             Description: description,
             IsPrivate: isPrivate,
@@ -29,15 +30,15 @@ public sealed class InMemoryChannelStore : IChannelStore
         return Task.FromResult(existing);
     }
 
-    public Task<Channel?> GetChannelAsync(string name, CancellationToken ct = default)
+    public Task<BusChannel?> GetChannelAsync(string name, CancellationToken ct = default)
     {
         _channels.TryGetValue(name, out var ch);
         return Task.FromResult(ch);
     }
 
-    public Task<IReadOnlyList<Channel>> ListChannelsAsync(CancellationToken ct = default)
+    public Task<IReadOnlyList<BusChannel>> ListChannelsAsync(CancellationToken ct = default)
     {
-        return Task.FromResult<IReadOnlyList<Channel>>(_channels.Values.OrderBy(c => c.Name).ToList());
+        return Task.FromResult<IReadOnlyList<BusChannel>>(_channels.Values.OrderBy(c => c.Name).ToList());
     }
 
     public Task<AgentMessage> AppendMessageAsync(AgentMessage message, CancellationToken ct = default)

@@ -1,4 +1,4 @@
-namespace HerculesBus;
+namespace HerculesBus.Core;
 
 /// <summary>
 ///     Identity агента в HerculesBus. Генерируется при первом подключении,
@@ -24,10 +24,10 @@ public sealed record AgentIdentity(
 /// </summary>
 public enum AgentStatus
 {
-    Online,    // активен, принимает сообщения
-    Busy,      // обрабатывает задачу, broadcast → DM
-    Idle,      // онлайн, но не активен
-    Offline    // нет heartbeat в последние 60 сек
+    Online,
+    Busy,
+    Idle,
+    Offline
 }
 
 public sealed record AgentInfo(
@@ -48,8 +48,7 @@ public sealed record AgentRegistrationResult(
     AgentInfo Info);
 
 /// <summary>
-///     Реестр агентов на сервере. Агенты регистрируются при первом подключении,
-///     heartbeats обновляют LastSeen, оффлайн-агенты остаются в реестре для истории.
+///     Реестр агентов на сервере.
 /// </summary>
 public interface IAgentRegistry
 {

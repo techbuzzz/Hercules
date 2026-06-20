@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using HerculesBus.Core;
 using SysChannel = System.Threading.Channels.Channel;
 using SysChannelReader = System.Threading.Channels;
 

@@ -1,3 +1,5 @@
+using HerculesBus.Core;
+
 namespace HerculesBus;
 
 /// <summary>
@@ -6,19 +8,22 @@ namespace HerculesBus;
 ///     <code>
 ///     var bus = new HerculesBus(new InMemoryChannelStore(), new InMemoryAgentRegistry(), new InMemoryEventBus());
 ///     await bus.RegisterAsync(identity);
-///     await bus.EnsureChannelAsync("main", "General chat", isPrivate: false, "hercules");
+///     await bus.EnsureChannelAsync("main", "General chat", isPrivate: false, createdBy: "hercules");
 ///     await bus.SendAsync(new AgentMessage(...));
 ///     await foreach (var msg in bus.SubscribeAsync("main")) { ... }
 ///     </code>
+///     Контракты (AgentMessage, BusChannel, IChannelStore, IEventBus, IAgentRegistry, AgentIdentity, AgentInfo,
+///     AgentStatus, MessageKinds, Ulid) лежат в namespace <see cref="HerculesBus.Core"/>.
+///     Impls в подпапках InMemory/, Http/, и (в V3.2) Sqlite/.
 /// </summary>
-public sealed class HerculesBus : IAsyncDisposable
+public sealed class Bus : IAsyncDisposable
 {
     private readonly IChannelStore _store;
     private readonly IAgentRegistry _registry;
     private readonly IEventBus _events;
     private readonly Dictionary<string, AgentIdentity> _localAgents = new(StringComparer.OrdinalIgnoreCase);
 
-    public HerculesBus(IChannelStore store, IAgentRegistry registry, IEventBus events)
+    public Bus(IChannelStore store, IAgentRegistry registry, IEventBus events)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
@@ -46,11 +51,11 @@ public sealed class HerculesBus : IAsyncDisposable
         => _registry.ListAsync(includeOffline, ct);
 
     /// <summary>Создать канал (если уже есть — возвращает существующий).</summary>
-    public Task<Channel> EnsureChannelAsync(string name, string description = "", bool isPrivate = false, string createdBy = "system", CancellationToken ct = default)
+    public Task<BusChannel> EnsureChannelAsync(string name, string description = "", bool isPrivate = false, string createdBy = "system", CancellationToken ct = default)
         => _store.EnsureChannelAsync(name, description, isPrivate, createdBy, ct);
 
     /// <summary>Список каналов.</summary>
-    public Task<IReadOnlyList<Channel>> ListChannelsAsync(CancellationToken ct = default)
+    public Task<IReadOnlyList<BusChannel>> ListChannelsAsync(CancellationToken ct = default)
         => _store.ListChannelsAsync(ct);
 
     /// <summary>Отправить сообщение в канал (сохраняется + публикуется подписчикам).</summary>
@@ -97,25 +102,33 @@ public sealed class HerculesBus : IAsyncDisposable
         => _events.SubscribeAll(handler, ct);
 
     /// <summary>
-    ///     Удобный helper: подписаться на канал и получать сообщения через IAsyncEnumerable.
-    ///     Под капотом — ChannelReader из in-process event bus.
+    ///     Подписаться на канал через IAsyncEnumerable.
+    ///     Под капотом — System.Threading.Channels.Channel (signal-based,
+    ///     НЕ polling — см. Pitfall #4 в README).
     /// </summary>
     public async IAsyncEnumerable<AgentMessage> SubscribeAsync(
         string channel,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
+        // Signal-based очередь: ReadAllAsync ждёт без busy-loop.
         var queue = System.Threading.Channels.Channel.CreateUnbounded<AgentMessage>(
-            new System.Threading.Channels.UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+            new System.Threading.Channels.UnboundedChannelOptions
+            {
+                SingleReader = true,
+                SingleWriter = true
+            });
 
         await using var sub = _events.Subscribe(channel, async (msg, _) =>
         {
-            await queue.Writer.WriteAsync(msg);
+            // SingleWriter=true → WriteAsync без race
+            await queue.Writer.WriteAsync(msg, ct);
         }, ct);
 
-        while (await queue.Reader.WaitToReadAsync(ct))
+        // ReadAllAsync yields messages и awaiting'ит, когда очередь пуста.
+        // CancellationToken ct → корректное завершение без утечки горутин.
+        await foreach (var msg in queue.Reader.ReadAllAsync(ct))
         {
-            while (queue.Reader.TryRead(out var msg))
-                yield return msg;
+            yield return msg;
         }
     }
 

@@ -1,7 +1,8 @@
 using HerculesBus;
+using HerculesBus.Core;
 using Xunit;
 
-namespace Hercules.Agent.Tests.Bus;
+namespace Hercules.Agent.Tests.BusTests;
 
 public class UlidTests
 {

@@ -1,12 +1,13 @@
 using HerculesBus;
+using HerculesBus.Core;
 using HerculesBus.InMemory;
 using Xunit;
 
-namespace Hercules.Agent.Tests.Bus;
+namespace Hercules.Agent.Tests.BusTests;
 
 public class HerculesBusTests
 {
-    private static global::HerculesBus.HerculesBus CreateBus() => new(
+    private static Bus CreateBus() => new(
         new InMemoryChannelStore(),
         new InMemoryAgentRegistry(),
         new InMemoryEventBus());
@@ -117,6 +118,9 @@ public class HerculesBusTests
 
         await using var s1 = bus.Subscribe("test", async (m, _) => { lock (received1) received1.Add(m); await ValueTask.CompletedTask; });
         await using var s2 = bus.Subscribe("test", async (m, _) => { lock (received2) received2.Add(m); await ValueTask.CompletedTask; });
+
+        // Дать подписчикам зарегистрироваться в fire-and-forget Task'ах (см. README Pitfall #4)
+        await Task.Delay(50);
 
         await bus.SendAsync(new AgentMessage("", "test", "alice", "Alice", MessageKinds.Text, "hi"));
         await Task.Delay(50);

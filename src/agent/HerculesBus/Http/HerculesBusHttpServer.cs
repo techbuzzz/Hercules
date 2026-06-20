@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using HerculesBus.Core;
 
 namespace HerculesBus.Http;
 
@@ -21,7 +22,7 @@ namespace HerculesBus.Http;
 /// </summary>
 public sealed class HerculesBusHttpServer : IAsyncDisposable
 {
-    private readonly HerculesBus _bus;
+    private readonly Bus _bus;
     private readonly HttpListener _listener;
     private readonly CancellationTokenSource _cts = new();
     private readonly HashSet<string> _validTokens = new(StringComparer.Ordinal);
@@ -33,7 +34,7 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
     public string BaseUrl => $"http://{_prefix}/";
     private readonly string _prefix;
 
-    public HerculesBusHttpServer(HerculesBus bus, string prefix = "http://localhost:9876/")
+    public HerculesBusHttpServer(Bus bus, string prefix = "http://localhost:9876/")
     {
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
         if (!prefix.EndsWith("/")) prefix += "/";

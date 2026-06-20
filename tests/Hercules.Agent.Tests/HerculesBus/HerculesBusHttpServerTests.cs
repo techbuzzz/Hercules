@@ -2,11 +2,12 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using HerculesBus;
+using HerculesBus.Core;
 using HerculesBus.Http;
 using HerculesBus.InMemory;
 using Xunit;
 
-namespace Hercules.Agent.Tests.Bus;
+namespace Hercules.Agent.Tests.BusTests;
 
 /// <summary>
 ///     Интеграционные тесты HTTP-сервера HerculesBus.
@@ -24,7 +25,7 @@ public class HerculesBusHttpServerTests : IAsyncLifetime
         var port = GetFreePort();
         _baseUrl = $"http://localhost:{port}/";
 
-        var bus = new global::HerculesBus.HerculesBus(new InMemoryChannelStore(), new InMemoryAgentRegistry(), new InMemoryEventBus());
+        var bus = new Bus(new InMemoryChannelStore(), new InMemoryAgentRegistry(), new InMemoryEventBus());
         _server = new HerculesBusHttpServer(bus, _baseUrl);
         _server.AddToken(_token);
 
