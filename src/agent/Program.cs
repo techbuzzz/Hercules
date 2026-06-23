@@ -35,11 +35,49 @@ services.AddSingleton(appConfig.Llm);
 services.AddSingleton(appConfig.Storage);
 services.AddSingleton(appConfig.Agent);
 services.AddSingleton(appConfig.Telegram);
+services.AddSingleton(appConfig.CodeExecution);
+services.AddSingleton(appConfig.Http);
+services.AddSingleton(appConfig.Mcp);
+services.AddSingleton(appConfig.A2A);
 
-// LLM-слой (отказоустойчивый клиент с fallback)
+// LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
 services.AddSingleton<LlmClientFactory>();
+services.AddSingleton<RoleRouter>();
 services.AddSingleton<ILLMClient>(sp =>
-    new ResilientLLMClient(sp.GetRequiredService<LlmConfig>(), sp.GetRequiredService<LlmClientFactory>()));
+    new ResilientLLMClient(
+        sp.GetRequiredService<LlmConfig>(),
+        sp.GetRequiredService<LlmClientFactory>(),
+        sp.GetRequiredService<RoleRouter>()));
+
+// Code execution (Stage 2, v2)
+services.AddSingleton<Hercules.CodeExecution.SandboxOptions>(sp =>
+{
+    var cfg = sp.GetRequiredService<CodeExecutionConfig>();
+    var opts = new Hercules.CodeExecution.SandboxOptions
+    {
+        CpuTimeoutSeconds = cfg.CpuTimeoutSeconds,
+        MaxFileSizeMb = cfg.MaxFileSizeMb,
+        MaxProcesses = cfg.MaxProcesses,
+        MaxOpenFiles = cfg.MaxOpenFiles,
+        MaxVirtualMemoryMb = cfg.MaxVirtualMemoryMb,
+        AllowNetwork = cfg.AllowNetwork,
+        MaxCodeSizeKb = cfg.MaxCodeSizeKb,
+        SessionTtlSeconds = cfg.SessionTtlSeconds,
+    };
+    if (!string.IsNullOrWhiteSpace(cfg.TempRoot))
+    {
+        opts.TempRoot = cfg.TempRoot;
+    }
+    return opts;
+});
+services.AddSingleton<Hercules.CodeExecution.ICodeExecutor, Hercules.CodeExecution.DotnetFileBasedExecutor>();
+
+// Tool ecosystem (Stage 3, v2)
+services.AddSingleton<Hercules.Tools.ITool, Hercules.Tools.HttpTool>();
+services.AddSingleton<Hercules.Tools.ITool, Hercules.Tools.A2AClient>();
+services.AddSingleton<Hercules.Tools.ITool, Hercules.Tools.CodeExecutionTool>();
+services.AddSingleton<Hercules.Tools.ToolRegistry>();
+services.AddSingleton<Hercules.Tools.McpClient>();
 
 // Хранилища
 services.AddSingleton<FileSkillRepository>();

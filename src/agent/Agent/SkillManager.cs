@@ -22,7 +22,7 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
     }
 
     /// <summary>
-    ///     Создать новый навык: LLM генерирует имя, описание, триггеры и system prompt
+    ///     Создать новый навык: LLM генерирует имя, описание, фразы-приёмники и system prompt
     ///     на основе примера запроса пользователя.
     /// </summary>
     public async Task<Skill> CreateAsync(string topicOrExample, CancellationToken ct = default)
@@ -33,9 +33,13 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
                        {
                          "name": "краткое название навыка",
                          "description": "что делает навык и когда вызывать (1-2 предложения)",
-                         "triggers": ["ключевое-слово1", "ключевое-слово2", "ключевое-слово3"],
+                         "phrase_receivers": ["фраза-приёмник1", "фраза-приёмник2", "фраза-приёмник3"],
                          "prompt": "system prompt, который задаёт ассистенту роль и инструкции для этой задачи"
                        }
+
+                       Пояснение: phrase_receivers — это ключевые слова/фразы, по которым агент-роутер
+                       определяет, что пользователь обращается именно к этому навыку (например,
+                       "напиши пост", "составь резюме", "объясни код").
 
                        Запрос/тема пользователя: "{{topicOrExample}}"
                        """;
@@ -45,7 +49,7 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
             new ChatTurn(ChatRole.User, prompt)
         ], ct);
 
-        (var name, var desc, List<string> triggers, var sysPrompt) = ParseSkillJson(resp.Text, topicOrExample);
+        (var name, var desc, List<string> receivers, var sysPrompt) = ParseSkillJson(resp.Text, topicOrExample);
 
         var skill = new Skill
         {
@@ -53,9 +57,9 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
             {
                 Name = name,
                 Description = desc,
-                Triggers = triggers
+                PhraseReceivers = receivers
             },
-            Description = $"# {name}\n\n{desc}\n\n## Когда вызывать\nТриггеры: {string.Join(", ", triggers)}\n",
+            Description = $"# {name}\n\n{desc}\n\n## Когда вызывать\nФразы-приёмники: {string.Join(", ", receivers)}\n",
             Prompt = sysPrompt
         };
         repo.Save(skill);
@@ -109,25 +113,29 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
 
     /// <summary>
     ///     Создать навык вручную из явных данных (без обращения к LLM).
-    ///     Используется Web API: POST /api/skills (trigger + prompt).
+    ///     Используется Web API: POST /api/skills (phraseReceivers + prompt).
+    ///     Принимает новые PhraseReceivers и legacy Triggers (для обратной совместимости).
     /// </summary>
-    public Skill CreateManual(string name, IEnumerable<string> triggers, string prompt, string? description = null)
+    public Skill CreateManual(
+        string name,
+        IEnumerable<string>? phraseReceivers,
+        string prompt,
+        string? description = null,
+        IEnumerable<string>? triggers = null)
     {
-        var triggerList = triggers
-            .Select(t => t.Trim().ToLowerInvariant())
-            .Where(t => t.Length > 0)
-            .Distinct()
-            .ToList();
-        if (triggerList.Count == 0)
+        var receiverList = NormalizeReceivers(phraseReceivers, triggers);
+        if (receiverList.Count == 0)
         {
-            throw new ArgumentException("Нужен хотя бы один триггер.", nameof(triggers));
+            throw new ArgumentException(
+                "Нужна хотя бы одна фраза-приёмник (phrase_receivers) или триггер (triggers).",
+                nameof(phraseReceivers));
         }
 
         var safeName = string.IsNullOrWhiteSpace(name)
-            ? triggerList[0]
+            ? receiverList[0]
             : name.Trim();
         var desc = string.IsNullOrWhiteSpace(description)
-            ? $"Навык по триггерам: {string.Join(", ", triggerList)}"
+            ? $"Навык по фразам-приёмникам: {string.Join(", ", receiverList)}"
             : description.Trim();
 
         var skill = new Skill
@@ -136,9 +144,9 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
             {
                 Name = safeName,
                 Description = desc,
-                Triggers = triggerList
+                PhraseReceivers = receiverList
             },
-            Description = $"# {safeName}\n\n{desc}\n\n## Когда вызывать\nТриггеры: {string.Join(", ", triggerList)}\n",
+            Description = $"# {safeName}\n\n{desc}\n\n## Когда вызывать\nФразы-приёмники: {string.Join(", ", receiverList)}\n",
             Prompt = string.IsNullOrWhiteSpace(prompt)
                 ? $"Ты — ассистент, специализирующийся на задаче: {safeName}."
                 : prompt.Trim()
@@ -150,8 +158,14 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
     /// <summary>
     ///     Обновить навык вручную, создавая новую версию (старые версии сохраняются).
     ///     Используется Web API: PUT /api/skills/{id}. Любой параметр опционален.
+    ///     Принимает новые PhraseReceivers и legacy Triggers (для обратной совместимости).
     /// </summary>
-    public Skill? UpdateManual(string id, IEnumerable<string>? triggers, string? prompt, string? description)
+    public Skill? UpdateManual(
+        string id,
+        IEnumerable<string>? phraseReceivers,
+        string? prompt,
+        string? description,
+        IEnumerable<string>? triggers = null)
     {
         Skill? skill = repo.Load(id);
         if (skill is null)
@@ -159,13 +173,12 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
             return null;
         }
 
-        if (triggers is not null)
+        if (phraseReceivers is not null || triggers is not null)
         {
-            var list = triggers.Select(t => t.Trim().ToLowerInvariant())
-                .Where(t => t.Length > 0).Distinct().ToList();
+            var list = NormalizeReceivers(phraseReceivers, triggers);
             if (list.Count > 0)
             {
-                skill.Meta.Triggers = list;
+                skill.Meta.PhraseReceivers = list;
             }
         }
 
@@ -178,6 +191,32 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
 
         repo.SaveNewVersion(skill, newDesc, newPrompt);
         return skill;
+    }
+
+    /// <summary>
+    ///     Нормализовать список фраз-приёмников: lowercase, trim, distinct.
+    ///     Приоритет у phraseReceivers; legacy triggers используются, если phraseReceivers пуст.
+    /// </summary>
+    private static List<string> NormalizeReceivers(
+        IEnumerable<string>? phraseReceivers,
+        IEnumerable<string>? triggers)
+    {
+        var primary = phraseReceivers?
+            .Select(t => t.Trim().ToLowerInvariant())
+            .Where(t => t.Length > 0)
+            .Distinct()
+            .ToList();
+
+        if (primary is { Count: > 0 })
+        {
+            return primary;
+        }
+
+        return triggers?
+            .Select(t => t.Trim().ToLowerInvariant())
+            .Where(t => t.Length > 0)
+            .Distinct()
+            .ToList() ?? [];
     }
 
     /// <summary>Навыки, которые стоит улучшить (success_rate ниже порога при достаточном числе использований).</summary>
@@ -211,15 +250,20 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
             var desc = root.TryGetProperty("description", out JsonElement d)
                 ? d.GetString() ?? ""
                 : "";
-            List<string> triggers = root.TryGetProperty("triggers", out JsonElement t) && t.ValueKind == JsonValueKind.Array
-                ? t.EnumerateArray().Select(e => e.GetString() ?? "").Where(s => s.Length > 0).ToList()
-                : [];
+
+            // Приоритет: phrase_receivers (новое имя). Fallback: triggers (legacy).
+            List<string> receivers = ReadReceivers(root, out var legacyTriggers);
+            if (receivers.Count == 0 && legacyTriggers.Count > 0)
+            {
+                receivers = legacyTriggers;
+            }
+
             var prompt = root.TryGetProperty("prompt", out JsonElement p)
                 ? p.GetString() ?? ""
                 : "";
-            if (triggers.Count == 0)
+            if (receivers.Count == 0)
             {
-                triggers.Add(fallbackTopic.ToLowerInvariant());
+                receivers.Add(fallbackTopic.ToLowerInvariant());
             }
 
             if (string.IsNullOrWhiteSpace(prompt))
@@ -227,7 +271,7 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
                 prompt = $"Ты — ассистент, специализирующийся на задаче: {fallbackTopic}. Отвечай чётко и по делу.";
             }
 
-            return (name, desc, triggers, prompt);
+            return (name, desc, receivers, prompt);
         }
         catch
         {
@@ -235,6 +279,37 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
                 [fallbackTopic.ToLowerInvariant()],
                 $"Ты — ассистент по задаче: {fallbackTopic}.");
         }
+    }
+
+    /// <summary>
+    ///     Прочитать фразы-приёмники из JSON-рутов LLM-ответа.
+    ///     Сначала пробует "phrase_receivers" (новое имя), затем "triggers" (legacy).
+    /// </summary>
+    private static List<string> ReadReceivers(JsonElement root, out List<string> legacyTriggers)
+    {
+        legacyTriggers = [];
+
+        if (root.TryGetProperty("phrase_receivers", out JsonElement pr) && pr.ValueKind == JsonValueKind.Array)
+        {
+            var list = pr.EnumerateArray()
+                .Select(e => e.GetString() ?? "")
+                .Where(s => s.Length > 0)
+                .ToList();
+            if (list.Count > 0)
+            {
+                return list;
+            }
+        }
+
+        if (root.TryGetProperty("triggers", out JsonElement tr) && tr.ValueKind == JsonValueKind.Array)
+        {
+            legacyTriggers = tr.EnumerateArray()
+                .Select(e => e.GetString() ?? "")
+                .Where(s => s.Length > 0)
+                .ToList();
+        }
+
+        return [];
     }
 
     private static (string, string) ParseImproveJson(string text, Skill current)

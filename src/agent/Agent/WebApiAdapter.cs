@@ -17,6 +17,7 @@ public sealed record ChatResponseDto(
     string Confidence,
     string Provider,
     SkillDto? Skill,
+    string? ToolUsed,
     string? ProposeSkillForInput,
     string? ProposeImproveSkillId,
     string? ProposeImproveSkillName);
@@ -26,7 +27,7 @@ public sealed record SkillDto(
     string Id,
     string Name,
     string Description,
-    IReadOnlyList<string> Triggers,
+    IReadOnlyList<string> PhraseReceivers,
     int Version,
     double SuccessRate,
     int TotalUses,
@@ -38,11 +39,21 @@ public sealed record SkillDetailDto(
     string DescriptionMarkdown,
     string Prompt);
 
-/// <summary>Запрос на создание навыка (trigger + prompt).</summary>
-public sealed record CreateSkillRequest(string? Name, List<string>? Triggers, string? Trigger, string Prompt, string? Description);
+/// <summary>Запрос на создание навыка (phrase_receivers + prompt). Поле Trigger/Triggers — legacy, для обратной совместимости.</summary>
+public sealed record CreateSkillRequest(
+    string? Name,
+    List<string>? PhraseReceivers,
+    string? Trigger,
+    string Prompt,
+    string? Description,
+    List<string>? Triggers = null);
 
-/// <summary>Запрос на обновление навыка.</summary>
-public sealed record UpdateSkillRequest(List<string>? Triggers, string? Prompt, string? Description);
+/// <summary>Запрос на обновление навыка. Поле Triggers — legacy, для обратной совместимости.</summary>
+public sealed record UpdateSkillRequest(
+    List<string>? PhraseReceivers,
+    string? Prompt,
+    string? Description,
+    List<string>? Triggers = null);
 
 /// <summary>Запрос на обновление профиля.</summary>
 public sealed record UpdateProfileRequest(string Content);
@@ -94,7 +105,7 @@ public sealed class WebApiAdapter(
             r.UsedSkill is null
                 ? null
                 : ToDto(r.UsedSkill),
-            r.ProposeSkillForInput, r.ProposeImproveSkillId, r.ProposeImproveSkillName);
+            r.ToolUsed, r.ProposeSkillForInput, r.ProposeImproveSkillId, r.ProposeImproveSkillName);
     }
 
     // ---- Skills ----
@@ -114,13 +125,19 @@ public sealed class WebApiAdapter(
 
     public SkillDto CreateSkill(CreateSkillRequest req)
     {
-        List<string> triggers = req.Triggers ?? new List<string>();
+        // Приоритет: phrase_receivers (новое). Fallback: triggers (legacy) + trigger (single, legacy).
+        var receivers = req.PhraseReceivers ?? new List<string>();
         if (!string.IsNullOrWhiteSpace(req.Trigger))
         {
-            triggers.Add(req.Trigger);
+            receivers.Add(req.Trigger);
         }
 
-        Skill skill = skills.CreateManual(req.Name ?? "", triggers, req.Prompt, req.Description);
+        Skill skill = skills.CreateManual(
+            req.Name ?? "",
+            phraseReceivers: receivers.Count > 0 ? receivers : null,
+            prompt: req.Prompt,
+            description: req.Description,
+            triggers: req.Triggers);
         return ToDto(skill);
     }
 
@@ -132,7 +149,12 @@ public sealed class WebApiAdapter(
 
     public SkillDto? UpdateSkill(string id, UpdateSkillRequest req)
     {
-        Skill? skill = skills.UpdateManual(id, req.Triggers, req.Prompt, req.Description);
+        Skill? skill = skills.UpdateManual(
+            id,
+            phraseReceivers: req.PhraseReceivers,
+            prompt: req.Prompt,
+            description: req.Description,
+            triggers: req.Triggers);
         return skill is null
             ? null
             : ToDto(skill);
@@ -191,7 +213,7 @@ public sealed class WebApiAdapter(
     private static SkillDto ToDto(Skill s)
     {
         return new SkillDto(
-            s.Meta.Id, s.Meta.Name, s.Meta.Description, s.Meta.Triggers,
+            s.Meta.Id, s.Meta.Name, s.Meta.Description, s.Meta.PhraseReceivers,
             s.Meta.Version, s.Meta.SuccessRate, s.Meta.TotalUses, s.Meta.CreatedAt);
     }
 }

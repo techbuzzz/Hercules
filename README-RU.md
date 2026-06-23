@@ -33,10 +33,13 @@
 | **Self-Improving Skill System** | Автоматически предлагает создать навык при повторении запроса (>2 раз), версионирует навыки, улучшает их при низком success rate |
 | **Long-term Memory**            | Хранит профиль пользователя, предпочтения, сущности и контекст сессий в Markdown; переносит контекст между запусками             |
 | **Reflection Engine**           | Самоанализ после сессии или каждые N команд — что хорошо/плохо/что улучшить                                                      |
-| **Skill Router**                | Маршрутизация запроса: навык по триггерам или прямой ответ LLM                                                                   |
-| **Гибридное хранилище**         | Файлы (Markdown + JSON) для навыков и памяти + SQLite для логов и метрик                                                         |
+| **Skill Router**                | Маршрутизация запроса: навык по фразам-приёмникам (phrase_receivers) или прямой ответ LLM                                       |
+| **Гибридное хранилище**         | Файлы (Markdown + JSON) для навыков и памяти + SQLite для логов, метрик и аудита sandbox-выполнений                             |
 | **Мульти-провайдер LLM**        | YandexGPT (основной), Ollama Cloud / Local, LM Studio — через единый OpenAI-совместимый интерфейс с автоматическим fallback      |
-| **Интерфейсы**                  | CLI (REPL, основной) + Telegram-бот (вторичный)                                                                                  |
+| **Интерфейсы**                  | CLI (REPL, основной) + Telegram-бот (вторичный) + Web API                                                                        |
+| **v2 Multi-Role Routing**       | `AppConfig.Roles` маршрутизирует `main` / `code_writer` / `reflector` в разные (provider, model, temperature) кортежи            |
+| **v2 Sandboxed Code Execution** | C# file-based apps в 3-уровневом sandbox (regex pre-scan → изолированная temp-папка → POSIX `ulimit` wrapper); сеть запрещена    |
+| **v2 Tool Ecosystem**           | LLM-вызываемые tools: `http` (allow-list доменов), `execute_code`, `a2a` (JSON-RPC 2.0), `mcp` (stub — client SDK ETA 2026)      |
 
 ---
 
@@ -44,33 +47,53 @@
 
 ```
 Hercules/
-├── Program.cs                 # Точка входа, настройка DI и конфигурации
+├── Program.cs                 # Точка входа, DI и настройка конфигурации
 ├── appsettings.json           # Конфигурация провайдеров и порогов агента
 ├── Config/
-│   └── AppConfig.cs           # Модели конфигурации
+│   └── AppConfig.cs           # Модели конфигурации (Llm/Storage/Agent/CodeExecution/Http/Mcp/A2A/Roles)
 ├── Agent/                     # Ядро агента
-│   ├── AgentCore.cs           # Главный цикл обработки запроса
-│   ├── SkillRouter.cs         # Маршрутизация по навыкам (триггеры)
-│   ├── SkillManager.cs        # CRUD навыков + версионирование (через LLM)
-│   ├── ReflectionEngine.cs    # Самоанализ, отчёты рефлексии
-│   └── MemoryManager.cs       # Долговременная память, модель пользователя
-├── LLM/                       # Слой LLM (Microsoft.Extensions.AI)
-│   ├── ILLMClient.cs          # Единый интерфейс провайдера
-│   ├── ChatClientLLMClient.cs # База поверх IChatClient
+│   ├── AgentCore.cs           # Главный цикл обработки запросов (tool-aware, Stage 4)
+│   ├── SkillRouter.cs         # Маршрутизация навыков (PhraseReceivers)
+│   ├── SkillManager.cs        # CRUD + версионирование навыков (через LLM)
+│   ├── ReflectionEngine.cs    # Самоанализ (sandbox traces), отчёты рефлексии
+│   ├── MemoryManager.cs       # Долгосрочная память, профиль пользователя
+│   └── WebApiAdapter.cs       # Адаптер ядра для Web API + DTO
+├── LLM/                       # LLM-слой (Microsoft.Extensions.AI)
+│   ├── ILLMClient.cs          # Унифицированный интерфейс провайдера (multi-role)
+│   ├── ChatClientLLMClient.cs # База над IChatClient
 │   ├── YandexGPTClient.cs     # YandexGPT (OpenAI-совместимый endpoint)
 │   ├── LocalLLMClient.cs      # Ollama Cloud/Local, LM Studio
 │   ├── LlmClientFactory.cs    # Фабрика клиентов по имени провайдера
-│   └── ResilientLLMClient.cs  # Отказоустойчивость + fallback-цепочка
-├── Storage/                   # Хранилище
+│   ├── ResilientLLMClient.cs  # Отказоустойчивость + role routing
+│   └── RoleRouter.cs          # v2: role → ILLMClient резолвер
+├── CodeExecution/             # v2: безопасное исполнение C# кода
+│   ├── ICodeExecutor.cs       # Контракт
+│   ├── SandboxOptions.cs      # ulimit + таймауты + allow-list
+│   ├── DangerousCodeScanner.cs# Pre-execution regex scan
+│   ├── DotnetFileBasedExecutor.cs # `dotnet run --file` реализация
+│   └── skill.code-execution.v1.md  # Preset skill
+├── Tools/                     # v2: экосистема tool'ов (HTTP / MCP / A2A)
+│   ├── ITool.cs               # Контракт tool'а
+│   ├── ToolRegistry.cs        # LLM prompt injection
+│   ├── HttpTool.cs            # GET/POST/PUT/DELETE + allow-list
+│   ├── A2AClient.cs           # JSON-RPC 2.0 agent-to-agent
+│   ├── McpClient.cs           # MCP stub (SDK только server-side)
+│   ├── CodeExecutionTool.cs   # Адаптер: ICodeExecutor → ITool
+│   └── skill.*.v1.md          # Preset скиллы
+├── Storage/                   # Хранилища
 │   ├── FileSkillRepository.cs # Skills/ — файлы навыков
 │   ├── MemoryStore.cs         # Memory/ — Markdown-память
-│   ├── SqliteSessionStore.cs  # SQLite: сессии, логи, метрики, счётчики
-│   └── Models.cs              # Доменные модели (Skill, SkillMeta, ...)
+│   ├── SqliteSessionStore.cs  # SQLite: sessions, logs, metrics, counters, sandbox_executions
+│   └── Models.cs              # Доменные модели (Skill, SkillMeta с PhraseReceivers, ...)
 ├── CLI/
 │   └── ConsoleUI.cs           # REPL-цикл (Spectre.Console)
 ├── Telegram/
 │   └── TelegramBot.cs         # Telegram-бот (long polling)
-└── Agent/WebApiAdapter.cs     # Адаптер ядра для Web API + DTO
+└── Hercules.WebApi/
+    ├── Program.cs             # DI + CORS + middleware, переиспользует ядро
+    ├── Auth/ApiKeyMiddleware.cs
+    ├── Config/WebApiConfig.cs
+    └── Controllers/           # Chat / Skills / Memory / Stats
 ```
 
 Дополнительно (отдельные проекты-«фасады» поверх ядра):
