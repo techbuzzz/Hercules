@@ -3,7 +3,7 @@
 // со значениями по умолчанию для локального запуска.
 
 export const API_BASE =
-  (import.meta.env.PUBLIC_API_BASE as string) || "http://localhost:5000";
+  (import.meta.env.PUBLIC_API_BASE as string) || "https://localhost:57286";
 export const API_KEY =
   (import.meta.env.PUBLIC_API_KEY as string) || "dev-local-key";
 
