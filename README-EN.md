@@ -360,9 +360,11 @@ to the next one in the `Fallback` list.
 | ---------------------------------------------- | ------------------------------- |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md)       | Quick start in a few minutes    |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)   | Core and interface architecture |
+| [docs/AGENT-MESH.md](docs/AGENT-MESH.md)       | Micro-agent mesh concept        |
+| [docs/IOT-SCENARIOS.md](docs/IOT-SCENARIOS.md) | B2C/B2B IoT deployment scenarios|
+| [docs/ROADMAP.md](docs/ROADMAP.md)             | Planned features and milestones |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Full settings reference         |
 | [docs/API.md](docs/API.md)                     | REST Web API reference          |
-| [docs/BRANDING.md](docs/BRANDING.md)           | Logo, palette, brand rules      |
 | [CONTRIBUTING.md](CONTRIBUTING.md)             | How to contribute               |
 | [CHANGELOG.md](CHANGELOG.md)                   | Change history                  |
 | [SECURITY.md](SECURITY.md)                     | Security policy                 |

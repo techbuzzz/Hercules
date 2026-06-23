@@ -369,6 +369,9 @@ to the next one in the `Fallback` list.
 | ------------------------------------------------------------------------------------- | ------------------------------- |
 | [docs/QUICKSTART-EN.md](docs/QUICKSTART-EN.md) · [RU](docs/QUICKSTART-RU.md)          | Quick start in a few minutes    |
 | [docs/ARCHITECTURE-EN.md](docs/ARCHITECTURE-EN.md) · [RU](docs/ARCHITECTURE-RU.md)    | Core and interface architecture |
+| [docs/AGENT-MESH-EN.md](docs/AGENT-MESH-EN.md) · [RU](docs/AGENT-MESH-RU.md)          | Micro-agent mesh concept        |
+| [docs/IOT-SCENARIOS-EN.md](docs/IOT-SCENARIOS-EN.md) · [RU](docs/IOT-SCENARIOS-RU.md)| B2C/B2B IoT deployment scenarios|
+| [docs/ROADMAP-EN.md](docs/ROADMAP-EN.md) · [RU](docs/ROADMAP-RU.md)                   | Planned features and milestones |
 | [docs/CONFIGURATION-EN.md](docs/CONFIGURATION-EN.md) · [RU](docs/CONFIGURATION-RU.md) | Full settings reference         |
 | [docs/API-EN.md](docs/API-EN.md) · [RU](docs/API-RU.md)                               | REST Web API reference          |
 | [CONTRIBUTING-EN.md](CONTRIBUTING-EN.md) · [RU](CONTRIBUTING-RU.md)                   | How to contribute               |

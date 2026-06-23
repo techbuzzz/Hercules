@@ -360,9 +360,11 @@ cd hercules-web && npm run dev                  # → :4321
 | ---------------------------------------------- | -------------------------------- |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md)       | Быстрый старт за несколько минут |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)   | Архитектура ядра и интерфейсов   |
+| [docs/AGENT-MESH.md](docs/AGENT-MESH.md)       | Концепция mesh микро-агентов     |
+| [docs/IOT-SCENARIOS.md](docs/IOT-SCENARIOS.md) | B2C/B2B сценарии IoT-развёртываний |
+| [docs/ROADMAP.md](docs/ROADMAP.md)             | План развития и milestone'ы      |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Полный справочник настроек       |
 | [docs/API.md](docs/API.md)                     | Справочник REST Web API          |
-| [docs/BRANDING.md](docs/BRANDING.md)           | Логотип, палитра, правила бренда |
 | [CONTRIBUTING.md](CONTRIBUTING.md)             | Как внести вклад                 |
 | [CHANGELOG.md](CHANGELOG.md)                   | История изменений                |
 | [SECURITY.md](SECURITY.md)                     | Политика безопасности            |
