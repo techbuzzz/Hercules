@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Hercules.Skills;
 
 namespace Hercules.Storage;
 
@@ -44,6 +45,14 @@ public sealed class SkillMeta
             }
         }
     }
+
+    /// <summary>
+    ///     Phase 2: Декларации инструментов, используемых навыком.
+    ///     Если null или пусто — навык не требует инструментов.
+    ///     Реестр инструментов (ToolRegistry) проверяет, что все Required-инструменты зарегистрированы.
+    /// </summary>
+    [JsonPropertyName("tools")]
+    public List<ToolDeclaration>? Tools { get; set; }
 
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd");
     public int Version { get; set; } = 1;

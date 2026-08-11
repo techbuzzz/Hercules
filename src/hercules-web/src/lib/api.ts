@@ -64,6 +64,11 @@ export interface StatsDto {
 }
 
 // ---- Методы ----
+export interface ConfigDto {
+  config: Record<string, unknown>;
+  source: string;
+}
+
 export const api = {
   async chat(message: string): Promise<ChatResponseDto> {
     const res = await fetch(`${API_BASE}/api/chat`, {
@@ -123,5 +128,27 @@ export const api = {
 
   async reflect(): Promise<{ markdown: string; file: string }> {
     return handle<{ markdown: string; file: string }>(await fetch(`${API_BASE}/api/reflect`, { headers: headers(false) }));
+  },
+
+  async getConfig(): Promise<ConfigDto> {
+    return handle<ConfigDto>(await fetch(`${API_BASE}/api/config`, { headers: headers(false) }));
+  },
+
+  async updateConfig(body: unknown): Promise<ConfigDto> {
+    const res = await fetch(`${API_BASE}/api/config`, {
+      method: "PUT",
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+    return handle<ConfigDto>(res);
+  },
+
+  async patchConfig(patch: Record<string, unknown>): Promise<ConfigDto> {
+    const res = await fetch(`${API_BASE}/api/config`, {
+      method: "PATCH",
+      headers: headers(),
+      body: JSON.stringify(patch),
+    });
+    return handle<ConfigDto>(res);
   },
 };

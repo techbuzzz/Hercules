@@ -19,7 +19,9 @@ dotnet build Hercules.slnx
 ```
 
 ## 3. Настройка провайдера
-Откройте `appsettings.json` и укажите активный провайдер и ключи. Пример для локального Ollama:
+Самый быстрый способ — через веб-интерфейс после запуска Web API (см. шаг 5).
+Если вы запускаете только CLI, откройте `appsettings.json` и укажите активный провайдер и ключи.
+Пример для локального Ollama:
 ```jsonc
 {
   "Llm": {
@@ -41,7 +43,7 @@ dotnet run --project Hercules
 ```
 Введите запрос в REPL. Повторите один и тот же запрос 3 раза — агент предложит создать навык.
 
-## 5. Запуск Web API + фронтенда (опционально)
+## 5. Запуск Web API + фронтенда (plug-and-play конфигурация)
 ```bash
 # Терминал 1 — бэкенд (порт :5000)
 dotnet run --project Hercules.WebApi
@@ -52,7 +54,9 @@ npm install
 cp .env.example .env   # при необходимости поправьте PUBLIC_API_BASE / PUBLIC_API_KEY
 npm run dev
 ```
-Откройте `http://localhost:4321`.
+Откройте `http://localhost:4321` и перейдите в раздел **Настройки**.
+Там можно изменить LLM-провайдера, ключи, системный промпт и другие параметры —
+изменения применяются сразу, без перезагрузки сервера, и сохраняются в `data/runtime-config.json`.
 
 ## 6. Запуск Telegram-бота (опционально)
 ```bash
@@ -60,6 +64,41 @@ export HERCULES_Telegram__Enabled=true
 export HERCULES_Telegram__BotToken=<токен от @BotFather>
 dotnet run --project Hercules -- --telegram
 ```
+
+## 7. Упаковка и установка для конечного пользователя
+Hercules распространяется как папка с приложением (`publish`) + `data/` для runtime-данных.
+
+### Публикация
+```bash
+# Публикация бэкенда (self-contained или framework-dependent)
+dotnet publish src/agent/Hercules.WebApi -c Release -o ./dist/webapi
+
+# Публикация фронтенда
+cd src/hercules-web
+npm install
+npm run build
+# статика окажется в src/hercules-web/dist
+```
+
+### Запуск из папки
+```bash
+# Бэкенд
+./dist/webapi/Hercules.WebApi
+
+# Фронтенд — можно раздать любым статическим сервером
+npx serve src/hercules-web/dist -p 4321
+```
+
+### Рекомендуемая структура для пользователя
+```
+Hercules/
+├── webapi/                 # публикация .NET
+├── web/                    # статика Astro
+├── data/                   # навыки, память, БД и runtime-config.json
+└── start.bat / start.sh    # удобные скрипты запуска
+```
+
+> Важно: папка `data/` не должна попадать в git. В репозитории она уже в `.gitignore`.
 
 ## Что дальше
 - [Архитектура](ARCHITECTURE.md) — как устроен агент

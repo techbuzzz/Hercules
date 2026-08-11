@@ -31,6 +31,9 @@ public sealed class FileSkillRepository
         Directory.CreateDirectory(_dir);
     }
 
+    /// <summary>Путь к папке навыков (для SkillPackager и marketplace).</summary>
+    public string SkillsDirectory => _dir;
+
     private string MetaPath(string id)
     {
         return Path.Combine(_dir, $"skill.{id}.meta.json");

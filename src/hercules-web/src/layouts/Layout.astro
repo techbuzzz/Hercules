@@ -4,7 +4,7 @@ import "../styles/global.css";
 
 interface Props {
   title?: string;
-  active?: "chat" | "skills" | "profile" | "stats";
+  active?: "chat" | "skills" | "profile" | "stats" | "config";
 }
 
 const { title = "Hercules", active = "chat" } = Astro.props;
@@ -13,6 +13,7 @@ const links = [
   { href: "/", label: "Чат", key: "chat" },
   { href: "/skills", label: "Навыки", key: "skills" },
   { href: "/profile", label: "Профиль", key: "profile" },
+  { href: "/config", label: "Настройки", key: "config" },
   { href: "/stats", label: "Статистика", key: "stats" },
 ];
 ---

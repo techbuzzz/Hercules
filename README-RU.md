@@ -102,14 +102,17 @@ Hercules/
 Hercules.WebApi/            # ASP.NET Core Minimal API (REST), порт :5000
 ├── Program.cs                 # DI + CORS + middleware, переиспользует ядро
 ├── Auth/ApiKeyMiddleware.cs   # Проверка заголовка X-Api-Key
-├── Config/WebApiConfig.cs     # Ключ API + разрешённые CORS-источники
-└── Controllers/               # Chat / Skills / Memory / Stats (Minimal API)
+├── Config/
+│   ├── WebApiConfig.cs        # Ключ API + разрешённые CORS-источники
+│   ├── RuntimeConfigHostedService.cs # перезагрузка конфигурации без рестарта
+│   └── RuntimeConfigReactor.cs       # применение новой конфигурации к LLM/ролям/tools
+└── Controllers/               # Chat / Skills / Memory / Stats / Config (Minimal API)
 
 hercules-web/                    # Фронтенд на Astro + TailwindCSS, порт :4321
 ├── src/lib/api.ts             # Клиент Web API
 ├── src/layouts/Layout.astro   # Базовый макет (тёмная тема, навигация)
-├── src/components/            # ChatBox, SkillCard, ProfileEditor, StatsDashboard
-└── src/pages/                 # index / skills / profile / stats
+├── src/components/            # ChatBox, SkillCard, ProfileEditor, ConfigEditor, StatsDashboard
+└── src/pages/                 # index / skills / profile / config / stats
 ```
 
 Все runtime-данные складываются в папку `data/`:
@@ -136,6 +139,23 @@ cd Hercules
 dotnet restore
 dotnet build
 ```
+
+### Публикация (для развёртывания конечному пользователю)
+
+```bash
+# Бэкенд
+dotnet publish src/agent/Hercules.WebApi -c Release -o ./dist/webapi
+
+# Фронтенд
+cd src/hercules-web
+npm install
+npm run build   # статика попадает в src/hercules-web/dist
+```
+
+После публикации достаточно запустить `dist/webapi/Hercules.WebApi` и раздать статику
+фронтенда любым статическим сервером, например `npx serve src/hercules-web/dist -p 4321`.
+Все пользовательские данные (навыки, память, БД и runtime-конфигурация) живут в папке `data/`,
+которую легко держать вне репозитория.
 
 ### Запуск CLI (основной режим)
 
@@ -191,6 +211,9 @@ ASP.NET Core Minimal API. Все ответы — JSON (UTF-8, camelCase). За�
 | `POST` | `/api/memory/reset`        | Сбросить долговременную память                               |
 | `GET`  | `/api/reflect`             | Запустить рефлексию → Markdown-отчёт                         |
 | `GET`  | `/api/stats`               | Метрики: всего, навык/прямой, успешность, по дням            |
+| `GET`  | `/api/config`              | Текущая runtime-конфигурация                                 |
+| `PUT`  | `/api/config`              | Полная замена конфигурации                                   |
+| `PATCH` | `/api/config`              | Частичное обновление конфигурации (merge patch)              |
 
 Пример:
 
@@ -221,9 +244,10 @@ curl -X POST http://localhost:5000/api/chat \
 | `/`        | Чат с агентом (бейджи режима/уверенности/провайдера, эффект печати, подсказки о навыках) |
 | `/skills`  | Список навыков, создание вручную и улучшение через ИИ, редактирование                    |
 | `/profile` | Редактор профиля долговременной памяти + сброс                                           |
+| `/config`  | **Редактор конфигурации агента** — LLM-провайдеры, системный промпт, пороги, инструменты |
 | `/stats`   | Дашборд метрик, соотношение навык/прямой, активность по дням, рефлексия                  |
 
-Компоненты: `ChatBox`, `SkillCard`, `ProfileEditor`, `StatsDashboard`. Клиент API — `src/lib/api.ts`.
+Компоненты: `ChatBox`, `SkillCard`, `ProfileEditor`, `ConfigEditor`, `StatsDashboard`. Клиент API — `src/lib/api.ts`.
 
 ### Запуск фронтенда
 
@@ -251,6 +275,10 @@ cd hercules-web && npm run dev                  # → :4321
 ```
 
 Откройте `http://localhost:4321`.
+
+> **Plug-and-play конфигурация:** теперь не обязательно править `appsettings.json` до запуска.
+> Откройте страницу `/config`, вставьте ключи LLM-провайдера и сохраните — настройки
+> применятся сразу, без перезагрузки сервера, и сохранятся в `data/runtime-config.json`.
 
 ---
 
@@ -292,6 +320,10 @@ cd hercules-web && npm run dev                  # → :4321
 
 > Любой параметр можно переопределить переменными окружения с префиксом `HERCULES_`,
 > например: `HERCULES_Llm__Provider=ollama-local`.
+>
+> В Web-режиме конфигурацию также можно менять через UI (`/config`) или API
+> (`PUT`/`PATCH /api/config`) — изменения сохраняются в `data/runtime-config.json`
+> и применяются без перезагрузки сервера.
 
 ### Провайдеры LLM
 

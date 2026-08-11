@@ -9,8 +9,9 @@ namespace Hercules.Agent;
 ///     CRUD навыков и их версионирование. Генерирует описание + system prompt навыка
 ///     с помощью LLM, фиксирует использование и инициирует улучшение версий.
 /// </summary>
-public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, AgentConfig cfg)
+public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, AgentConfig cfg) : IConfigReload
 {
+    private AgentConfig _cfg = cfg;
     public List<Skill> All()
     {
         return repo.LoadAll();
@@ -76,7 +77,7 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
         }
 
         List<SkillUsage> usages = repo.LoadUsages(id);
-        var fails = usages.TakeLast(cfg.SkillEvaluationWindow).Count(u => !u.Success);
+        var fails = usages.TakeLast(_cfg.SkillEvaluationWindow).Count(u => !u.Success);
 
         var prompt = $$"""
                        Улучши навык ассистента. Текущая версия работает недостаточно хорошо
@@ -108,7 +109,7 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
     /// <summary>Зафиксировать использование навыка и пересчитать метрики.</summary>
     public void RecordUsage(string id, bool success, string confidence)
     {
-        repo.AppendUsage(id, new SkillUsage { Success = success, Confidence = confidence }, cfg.SkillEvaluationWindow);
+        repo.AppendUsage(id, new SkillUsage { Success = success, Confidence = confidence }, _cfg.SkillEvaluationWindow);
     }
 
     /// <summary>
@@ -223,8 +224,17 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
     public List<Skill> SkillsNeedingImprovement()
     {
         return repo.LoadAll()
-            .Where(s => s.Meta.TotalUses >= cfg.SkillEvaluationWindow && s.Meta.SuccessRate < cfg.SkillImprovementThreshold)
+            .Where(s => s.Meta.TotalUses >= _cfg.SkillEvaluationWindow && s.Meta.SuccessRate < _cfg.SkillImprovementThreshold)
             .ToList();
+    }
+
+    /// <summary>
+    ///     Применить новую конфигурацию агента без перезагрузки.
+    ///     Пороги оценки и улучшения навыков обновляются сразу.
+    /// </summary>
+    public void Reload(AppConfig config)
+    {
+        _cfg = config.Agent;
     }
 
     // ---- Парсинг JSON-ответов LLM (с защитой от лишнего текста) ----

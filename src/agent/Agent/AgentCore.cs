@@ -32,7 +32,7 @@ public sealed record AgentResponse
 ///     загрузка памяти → маршрутизация навыка → вызов LLM → tool-execution (если LLM запросил) →
 ///     финальный ответ → логирование → проверка порогов создания/улучшения навыков.
 /// </summary>
-public sealed class AgentCore
+public sealed class AgentCore : IConfigReload
 {
     private static readonly Regex ConfidenceRx =
         new(@"\[confidence:\s*(high|medium|low)\s*\]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -55,11 +55,12 @@ public sealed class AgentCore
     private readonly SkillManager _skills;
     private readonly MemoryManager _memory;
     private readonly SqliteSessionStore _sessions;
-    private readonly AgentConfig _cfg;
+    private AgentConfig _cfg;
     private readonly ToolRegistry? _tools;
 
     private readonly List<ChatTurn> _transcript = new();
     private string _contextBlock = "";
+    private string _lastInput = "";
 
     public AgentCore(
         ILLMClient llm,
@@ -99,6 +100,7 @@ public sealed class AgentCore
 
         // 1-2. Маршрутизация навыка
         RouteResult route = _router.Route(input);
+        _lastInput = input;
         var systemPrompt = BuildSystemPrompt(route.MatchedSkill);
 
         // 3. Вызов LLM (с возможной tool-итерацией)
@@ -232,7 +234,30 @@ public sealed class AgentCore
         string answer, string confidence, string provider, Skill? usedSkill,
         string toolUsed, string mode)
     {
-        // (skill creation / improvement threshold logic — same as before)
+        // 5. Порог создания навыка: если однотипный запрос повторился >= SkillCreationThreshold раз,
+        //    и для него ещё нет навыка (direct-режим) — предложить создать навык.
+        string? proposeSkill = null;
+        if (usedSkill is null && _cfg.SkillCreationThreshold > 0)
+        {
+            var repeatCount = _sessions.IncrementRequestCount(SkillRouter.Normalize(_lastInput));
+            if (repeatCount >= _cfg.SkillCreationThreshold)
+            {
+                proposeSkill = _lastInput;
+            }
+        }
+
+        // 6. Порог улучшения навыка: если использован навык и его success_rate
+        //    упал ниже SkillImprovementThreshold — предложить улучшение.
+        string? proposeImproveId = null;
+        string? proposeImproveName = null;
+        if (usedSkill is not null &&
+            usedSkill.Meta.TotalUses >= _cfg.SkillEvaluationWindow &&
+            usedSkill.Meta.SuccessRate < _cfg.SkillImprovementThreshold)
+        {
+            proposeImproveId = usedSkill.Meta.Id;
+            proposeImproveName = usedSkill.Meta.Name;
+        }
+
         return new AgentResponse
         {
             Answer = answer,
@@ -241,6 +266,9 @@ public sealed class AgentCore
             Provider = provider,
             UsedSkill = usedSkill,
             ToolUsed = string.IsNullOrEmpty(toolUsed) ? null : toolUsed,
+            ProposeSkillForInput = proposeSkill,
+            ProposeImproveSkillId = proposeImproveId,
+            ProposeImproveSkillName = proposeImproveName,
         };
     }
 
@@ -269,6 +297,16 @@ public sealed class AgentCore
     public void EndSession()
     {
         _sessions.EndSession(SessionId);
+    }
+
+    /// <summary>
+    ///     Применить новую конфигурацию агента без перезагрузки.
+    ///     Пороги (SkillCreationThreshold, SkillImprovementThreshold, SkillEvaluationWindow,
+    ///     ReflectionEveryNCommands) и SystemPrompt обновляются сразу.
+    /// </summary>
+    public void Reload(AppConfig config)
+    {
+        _cfg = config.Agent;
     }
 
     // ---- Вспомогательные методы ----

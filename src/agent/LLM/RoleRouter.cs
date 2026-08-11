@@ -10,8 +10,8 @@ namespace Hercules.LLM;
 public sealed class RoleRouter
 {
     private readonly LlmClientFactory _factory;
-    private readonly Dictionary<string, RoleConfig> _roles;
-    private readonly string _defaultProvider;
+    private Dictionary<string, RoleConfig> _roles;
+    private string _defaultProvider;
     private readonly Dictionary<string, ILLMClient> _cache = new(StringComparer.OrdinalIgnoreCase);
     private ILLMClient? _mainFallback;
 
@@ -20,6 +20,18 @@ public sealed class RoleRouter
         _factory = factory;
         _roles = appConfig.Roles ?? new Dictionary<string, RoleConfig>(StringComparer.OrdinalIgnoreCase);
         _defaultProvider = appConfig.Llm.Provider;
+    }
+
+    /// <summary>
+    ///     Перезагрузить карту ролей и провайдер по умолчанию. Очищает кэш клиентов,
+    ///     чтобы следующие вызовы создали новые экземпляры с обновлёнными настройками.
+    /// </summary>
+    public void Reload(Dictionary<string, RoleConfig>? roles, string defaultProvider)
+    {
+        _roles = roles ?? new Dictionary<string, RoleConfig>(StringComparer.OrdinalIgnoreCase);
+        _defaultProvider = defaultProvider;
+        _cache.Clear();
+        _mainFallback = null;
     }
 
     /// <summary>

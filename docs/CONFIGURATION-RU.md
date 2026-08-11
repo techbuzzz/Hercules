@@ -3,6 +3,9 @@
 Все настройки задаются в `appsettings.json` (ядро) и `Hercules.WebApi/appsettings.json` (Web API),
 а также переопределяются переменными окружения с префиксом `HERCULES_`.
 
+**Новое:** в веб-интерфейсе (`/config`) конфигурацию можно редактировать напрямую через JSON.
+Изменения применяются без перезагрузки Web API и сохраняются в `data/runtime-config.json`.
+
 ## Переопределение через окружение
 Вложенные ключи разделяются двойным подчёркиванием `__`:
 ```bash
@@ -11,6 +14,27 @@ HERCULES_Llm__YandexGpt__ApiKey=***
 HERCULES_Agent__SkillCreationThreshold=5
 HERCULES_Telegram__Enabled=true
 ```
+
+## Web-конфигурация (plug-and-play)
+После запуска `Hercules.WebApi` откройте фронтенд и перейдите на страницу **Настройки** (`/config`).
+
+| Метод | Эндпоинт | Описание |
+|-------|----------|----------|
+| `GET` | `/api/config` | Текущая "живая" конфигурация |
+| `PUT` | `/api/config` | Полная замена конфигурации |
+| `PATCH` | `/api/config` | Частичное обновление (merge patch) |
+
+Пример PATCH через `curl`:
+```bash
+curl -X PATCH http://localhost:5000/api/config \
+  -H "X-Api-Key: dev-local-key" \
+  -H "Content-Type: application/json" \
+  -d '{"llm":{"provider":"ollama-local"}}'
+```
+
+Изменения через PATCH не требуют передачи всего JSON: достаточно указать только изменённые секции.
+После сохранения `RuntimeConfigStore` уведомляет `RuntimeConfigReactor`, который перезагружает
+LLM-клиентов, роли и инструменты.
 
 ## Секция `Llm`
 | Ключ | Описание | По умолчанию |
@@ -81,4 +105,4 @@ HERCULES_Telegram__Enabled=true
 | `PUBLIC_API_BASE` | Базовый URL Web API (напр. `http://localhost:5000`) |
 | `PUBLIC_API_KEY` | Значение `X-Api-Key` для запросов |
 
-> ⚠️ Не коммитьте реальные ключи. Используйте переменные окружения и держите `data/` вне репозитория.
+> ⚠️ Не коммитьте реальные ключи. Используйте переменные окружения, web-конфигурацию или `data/runtime-config.json` и держите `data/` вне репозитория.

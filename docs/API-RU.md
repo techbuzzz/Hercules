@@ -25,6 +25,9 @@ X-Api-Key: <значение WebApi:ApiKey>
 | `POST` | `/api/memory/reset` | Сбросить долговременную память |
 | `GET`  | `/api/reflect` | Запустить рефлексию → Markdown-отчёт |
 | `GET`  | `/api/stats` | Метрики: всего, навык/прямой, успешность, по дням |
+| `GET`  | `/api/config` | Текущая runtime-конфигурация |
+| `PUT`  | `/api/config` | Полная замена конфигурации |
+| `PATCH` | `/api/config` | Частичное обновление конфигурации (merge patch) |
 
 ## Примеры
 
@@ -66,6 +69,31 @@ curl -X POST http://localhost:5000/api/skills/translate/improve \
 ```bash
 curl http://localhost:5000/api/stats -H "X-Api-Key: dev-local-key"
 ```
+
+### Конфигурация (runtime)
+Получить текущую конфигурацию:
+```bash
+curl http://localhost:5000/api/config -H "X-Api-Key: dev-local-key"
+```
+
+Частично обновить провайдера (без перезагрузки сервера):
+```bash
+curl -X PATCH http://localhost:5000/api/config \
+  -H "X-Api-Key: dev-local-key" \
+  -H "Content-Type: application/json" \
+  -d '{"llm":{"provider":"ollama-local","ollamaLocal":{"model":"llama3.1"}}}'
+```
+
+Полная замена конфигурации:
+```bash
+curl -X PUT http://localhost:5000/api/config \
+  -H "X-Api-Key: dev-local-key" \
+  -H "Content-Type: application/json" \
+  -d @my-config.json
+```
+
+> Изменения через `PUT`/`PATCH` применяются сразу. LLM-клиенты, роли и инструменты
+> перезагружаются автоматически через `RuntimeConfigReactor`.
 
 ## Коды ответов
 | Код | Значение |

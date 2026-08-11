@@ -8,8 +8,32 @@ namespace Hercules.Tools;
 public sealed class ToolRegistry
 {
     private readonly Dictionary<string, ITool> _tools = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Func<IEnumerable<ITool>> _toolsFactory;
 
     public ToolRegistry(IEnumerable<ITool> tools)
+    {
+        _toolsFactory = () => tools;
+        Register(tools);
+    }
+
+    /// <summary>
+    ///     Перезагрузить список инструментов при runtime-изменении конфигурации.
+    ///     Некоторые инструменты (MCP, HTTP) зависят от конфигурации и должны быть
+    ///     пересозданы с новыми настройками.
+    /// </summary>
+    public void Reload(Hercules.Config.AppConfig cfg)
+    {
+        _tools.Clear();
+        var fresh = _toolsFactory().Select(t => t switch
+        {
+            Hercules.Tools.HttpTool => new Hercules.Tools.HttpTool(cfg.Http),
+            Hercules.Tools.A2AClient => new Hercules.Tools.A2AClient(cfg.A2A),
+            _ => t,
+        });
+        Register(fresh);
+    }
+
+    private void Register(IEnumerable<ITool> tools)
     {
         foreach (var t in tools)
         {

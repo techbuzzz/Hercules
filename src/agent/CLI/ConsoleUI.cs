@@ -1,5 +1,6 @@
 using System.Text;
 using Hercules.Agent;
+using Hercules.Skills;
 using Hercules.Storage;
 using Spectre.Console;
 
@@ -8,13 +9,17 @@ namespace Hercules.CLI;
 /// <summary>
 ///     REPL-интерфейс командной строки (primary). Реализует команды из ТЗ:
 ///     прямой ввод, /skills, /skills create, /skills improve, /memory show,
-///     /memory reset, /reflect, /exit.
+///     /memory reset, /reflect, /exit, /skills export, /skills import,
+///     /marketplace, /templates.
 /// </summary>
 public sealed class ConsoleUI(
     AgentCore agent,
     SkillManager skills,
     MemoryManager memory,
-    ReflectionEngine reflection)
+    ReflectionEngine reflection,
+    SkillPackager packager,
+    Hercules.Skills.SkillMarketplace marketplace,
+    Hercules.Skills.AgentTemplateManager templates)
 {
     public async Task RunAsync(CancellationToken ct = default)
     {
@@ -144,6 +149,14 @@ public sealed class ConsoleUI(
                         ? $"[green]✓ Навык обновлён до версии v{improved.Meta.Version}.[/]"
                         : "[red]Навык с таким id не найден.[/]");
                 }
+                else if (parts.Length >= 3 && parts[1] == "export")
+                {
+                    ExportSkill(parts[2]);
+                }
+                else if (parts.Length >= 3 && parts[1] == "import")
+                {
+                    await ImportSkillAsync(parts[2], ct);
+                }
                 else
                 {
                     PrintSkills();
@@ -173,6 +186,14 @@ public sealed class ConsoleUI(
                 await RunReflection(ct);
                 break;
 
+            case "/marketplace":
+                HandleMarketplaceCommand(parts);
+                break;
+
+            case "/templates":
+                HandleTemplatesCommand(parts);
+                break;
+
             default:
                 AnsiConsole.MarkupLineInterpolated($"[red]Неизвестная команда:[/] {cmd}. Наберите /help.");
                 break;
@@ -193,6 +214,47 @@ public sealed class ConsoleUI(
         Skill? skill = null;
         await AnsiConsole.Status().StartAsync("Улучшаю навык...", async _ => { skill = await skills.ImproveAsync(id, ct); });
         return skill;
+    }
+
+    private void ExportSkill(string skillId)
+    {
+        try
+        {
+            var path = packager.Export(skillId);
+            AnsiConsole.MarkupLineInterpolated($"[green]✓ Пакет экспортирован:[/] [grey]{Markup.Escape(path)}[/]");
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]Ошибка экспорта:[/] {ex.Message}");
+        }
+    }
+
+    private async Task ImportSkillAsync(string packagePath, CancellationToken ct)
+    {
+        try
+        {
+            // Сначала валидируем
+            var errors = packager.Validate(packagePath);
+            if (errors.Count > 0)
+            {
+                foreach (var err in errors)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Ошибка валидации:[/] {err}");
+                }
+                return;
+            }
+
+            Skill? skill = null;
+            await AnsiConsole.Status().StartAsync("Импортирую навык...", async _ =>
+            {
+                skill = await Task.Run(() => packager.Import(packagePath), ct);
+            });
+            AnsiConsole.MarkupLineInterpolated($"[green]✓ Навык импортирован:[/] {skill!.Meta.Name} (id: {skill.Meta.Id}, v{skill.Meta.Version})");
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]Ошибка импорта:[/] {ex.Message}");
+        }
     }
 
     private async Task RunReflection(CancellationToken ct)
@@ -242,6 +304,132 @@ public sealed class ConsoleUI(
         AnsiConsole.Write(table);
     }
 
+    private void HandleMarketplaceCommand(string[] parts)
+    {
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "list";
+
+        switch (sub)
+        {
+            case "list":
+                var entries = marketplace.List();
+                if (entries.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[grey]Маркетплейс пуст. Опубликуйте пакет: /skills export {id}, затем /marketplace publish {path}.[/]");
+                    return;
+                }
+                var table = new Table().Border(TableBorder.Rounded).Title("Маркетплейс");
+                table.AddColumn("Файл");
+                table.AddColumn("Навык");
+                table.AddColumn("Описание");
+                table.AddColumn("v");
+                foreach (var e in entries)
+                {
+                    table.AddRow(Markup.Escape(e.FileName), Markup.Escape(e.Name), Markup.Escape(e.Description), e.Version.ToString());
+                }
+                AnsiConsole.Write(table);
+                break;
+
+            case "search" when parts.Length >= 3:
+                var results = marketplace.Search(parts[2]);
+                if (results.Count == 0)
+                {
+                    AnsiConsole.MarkupLine($"[grey]Ничего не найдено по запросу '{parts[2]}'.[/]");
+                    return;
+                }
+                var searchTable = new Table().Border(TableBorder.Rounded);
+                searchTable.AddColumn("Навык");
+                searchTable.AddColumn("Описание");
+                foreach (var e in results)
+                {
+                    searchTable.AddRow(Markup.Escape(e.Name), Markup.Escape(e.Description));
+                }
+                AnsiConsole.Write(searchTable);
+                break;
+
+            case "install" when parts.Length >= 3:
+                try
+                {
+                    var skill = marketplace.Install(parts[2]);
+                    AnsiConsole.MarkupLineInterpolated($"[green]✓ Установлен из маркетплейса:[/] {skill.Meta.Name} (id: {skill.Meta.Id})");
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Ошибка установки:[/] {ex.Message}");
+                }
+                break;
+
+            case "publish" when parts.Length >= 3:
+                try
+                {
+                    var destPath = marketplace.Publish(parts[2]);
+                    AnsiConsole.MarkupLineInterpolated($"[green]✓ Опубликован в маркетплейс:[/] [grey]{Markup.Escape(destPath)}[/]");
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Ошибка публикации:[/] {ex.Message}");
+                }
+                break;
+
+            default:
+                AnsiConsole.MarkupLine("[grey]Команды:[/] /marketplace list | search {query} | install {file} | publish {path}");
+                break;
+        }
+    }
+
+    private void HandleTemplatesCommand(string[] parts)
+    {
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "list";
+
+        switch (sub)
+        {
+            case "list":
+                var templates1 = templates.List();
+                if (templates1.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[grey]Шаблонов нет. Шаблоны — это bundles навыков + памяти + инструментов для вертикальных сценариев.[/]");
+                    return;
+                }
+                var table = new Table().Border(TableBorder.Rounded).Title("Шаблоны агентов");
+                table.AddColumn("Файл");
+                table.AddColumn("Название");
+                table.AddColumn("Описание");
+                table.AddColumn("Навыков");
+                foreach (var t in templates1)
+                {
+                    table.AddRow(Markup.Escape(t.FileName), Markup.Escape(t.Name), Markup.Escape(t.Description), t.SkillCount.ToString());
+                }
+                AnsiConsole.Write(table);
+                break;
+
+            case "apply" when parts.Length >= 3:
+                try
+                {
+                    var result = templates.Apply(parts[2]);
+                    AnsiConsole.MarkupLineInterpolated($"[green]✓ Шаблон применён:[/] {result.TemplateName}");
+                    if (result.InstalledSkills.Count > 0)
+                        AnsiConsole.MarkupLineInterpolated($"  Навыков установлено: {result.InstalledSkills.Count} ({string.Join(", ", result.InstalledSkills)})");
+                    if (result.InstalledMemoryFiles.Count > 0)
+                        AnsiConsole.MarkupLineInterpolated($"  Файлов памяти: {result.InstalledMemoryFiles.Count}");
+                    if (result.InstalledToolFiles.Count > 0)
+                        AnsiConsole.MarkupLineInterpolated($"  Инструментов: {result.InstalledToolFiles.Count}");
+                    if (result.HasErrors)
+                    {
+                        foreach (var err in result.Errors)
+                            AnsiConsole.MarkupLineInterpolated($"[red]  Ошибка:[/] {err}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Ошибка применения шаблона:[/] {ex.Message}");
+                }
+                break;
+
+            default:
+                AnsiConsole.MarkupLine("[grey]Команды:[/] /templates list | apply {file}");
+                break;
+        }
+    }
+
     private static void PrintBanner()
     {
         AnsiConsole.Write(new FigletText("Hercules").Color(Color.Aqua));
@@ -258,6 +446,14 @@ public sealed class ConsoleUI(
         table.AddRow("/skills", "Показать все навыки");
         table.AddRow("/skills create \"...\"", "Создать навык вручную");
         table.AddRow("/skills improve {id}", "Улучшить навык (новая версия)");
+        table.AddRow("/skills export {id}", "Экспортировать навык в .skillpkg");
+        table.AddRow("/skills import {path}", "Импортировать навык из .skillpkg");
+        table.AddRow("/marketplace list", "Показать пакеты навыков в маркетплейсе");
+        table.AddRow("/marketplace search {q}", "Поиск в маркетплейсе");
+        table.AddRow("/marketplace install {f}", "Установить пакет из маркетплейса");
+        table.AddRow("/marketplace publish {p}", "Опубликовать .skillpkg в маркетплейс");
+        table.AddRow("/templates list", "Показать шаблоны агентов");
+        table.AddRow("/templates apply {f}", "Применить шаблон (bundle навыков+памяти)");
         table.AddRow("/memory show", "Показать профиль пользователя");
         table.AddRow("/memory reset", "Сбросить память");
         table.AddRow("/reflect", "Запустить рефлексию вручную");

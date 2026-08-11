@@ -37,6 +37,43 @@ public sealed class AppConfig
     ///     Если секция пуста — все роли используют Llm.Provider (обратная совместимость).
     /// </summary>
     public Dictionary<string, RoleConfig> Roles { get; set; } = new();
+
+    /// <summary>
+    ///     Конфигурация Phase 2: семантическая маршрутизация и компонуемые навыки.
+    /// </summary>
+    public Phase2Config Phase2 { get; set; } = new();
+
+    /// <summary>
+    ///     Конфигурация Phase 3: inter-agent протокол, capability registry, discovery.
+    /// </summary>
+    public MeshConfig Mesh { get; set; } = new();
+}
+
+/// <summary>
+///     Настройки Phase 2: семантическая маршрутизация, маркетплейс навыков, реестр инструментов.
+/// </summary>
+public sealed class Phase2Config
+{
+    /// <summary>Включить семантическую маршрутизацию (embedding-based). Если false — используется только keyword-matching.</summary>
+    public bool SemanticRoutingEnabled { get; set; } = false;
+
+    /// <summary>Embedding-провайдер: "stub-hash" | "yandexgpt" | "ollama". По умолчанию — stub (offline).</summary>
+    public string EmbeddingProvider { get; set; } = "stub-hash";
+
+    /// <summary>Минимальный порог cosine-similarity для семантического матча (0..1).</summary>
+    public double SimilarityThreshold { get; set; } = 0.35;
+
+    /// <summary>Использовать keyword-matching как fallback, если embedding < порога.</summary>
+    public bool KeywordFallback { get; set; } = true;
+
+    /// <summary>Папка для импортированных пакетов навыков (маркетплейс). По умолчанию — data/Skills/marketplace/.</summary>
+    public string MarketplaceDir { get; set; } = "marketplace";
+
+    /// <summary>Папка для деклараций инструментов (data/Tools/). По умолчанию — Tools.</summary>
+    public string ToolsDir { get; set; } = "Tools";
+
+    /// <summary>Папка для шаблонов агентов (data/Templates/). По умолчанию — Templates.</summary>
+    public string TemplatesDir { get; set; } = "Templates";
 }
 
 /// <summary>
@@ -184,6 +221,9 @@ public sealed class StorageConfig
     public string SkillsDir { get; set; } = "Skills";
     public string MemoryDir { get; set; } = "Memory";
     public string SqliteFile { get; set; } = "sessions.db";
+
+    /// <summary>Phase 2 настройки (маркетплейс, инструменты, шаблоны). Если null — используются дефолты.</summary>
+    public Phase2Config? Phase2 { get; set; }
 }
 
 /// <summary>Пороговые значения поведения агента.</summary>
@@ -211,4 +251,65 @@ public sealed class TelegramConfig
 {
     public bool Enabled { get; set; } = false;
     public string BotToken { get; set; } = "";
+}
+
+/// <summary>
+///     Конфигурация Phase 3: inter-agent mesh.
+///     Discovery, capability registry, intent routing, transport.
+/// </summary>
+public sealed class MeshConfig
+{
+    /// <summary>Включить mesh-функциональность (manifest, registry, intent routing).</summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>AgentId этого агента в mesh (e.g. "hercules-main").</summary>
+    public string AgentId { get; set; } = "hercules-main";
+
+    /// <summary>Human-readable имя для UI и registry.</summary>
+    public string DisplayName { get; set; } = "Hercules";
+
+    /// <summary>Описание агента для манифеста.</summary>
+    public string Description { get; set; } = "Self-improving micro-agent";
+
+    /// <summary>Endpoint этого агента для inter-agent вызовов (e.g. "http://localhost:5000").</summary>
+    public string Endpoint { get; set; } = "http://localhost:5000";
+
+    /// <summary>Путь к SQLite-файлу capability registry (относительно DataRoot или абсолютный).</summary>
+    public string RegistryDb { get; set; } = "mesh_registry.db";
+
+    /// <summary>Таймаут inter-agent вызовов (мс).</summary>
+    public int IntentTimeoutMs { get; set; } = 30_000;
+
+    /// <summary>
+    ///     Минимальная уверенность локального навыка, при которой intent обрабатывается локально.
+    ///     Если ниже — intent пересылается peer'у (если есть).
+    /// </summary>
+    public double LocalConfidenceThreshold { get; set; } = 0.5;
+
+    /// <summary>
+    ///     Статический список известных peer-агентов для discovery.
+    ///     Формат: [{ "agentId": "...", "endpoint": "http://..." }, ...].
+    ///     При запуске агенты из этого списка автоматически регистрируются в CapabilityRegistry.
+    /// </summary>
+    public List<MeshPeerConfig> Peers { get; set; } = new();
+}
+
+/// <summary>Конфигурация одного peer-агента для статического discovery.</summary>
+public sealed class MeshPeerConfig
+{
+    public string AgentId { get; set; } = "";
+    public string Endpoint { get; set; } = "";
+
+    /// <summary>Опционально: сразу задать capabilities (если peer-агент не публикует манифест).</summary>
+    public List<ManifestCapabilityConfig>? Capabilities { get; set; }
+}
+
+/// <summary>Capability в конфигурации peer-агента (упрощённая форма).</summary>
+public sealed class ManifestCapabilityConfig
+{
+    public string Name { get; set; } = "";
+    public string Description { get; set; } = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("phrase_receivers")]
+    public List<string> PhraseReceivers { get; set; } = new();
 }

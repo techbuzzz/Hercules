@@ -1,0 +1,12 @@
+---
+import Layout from "../layouts/Layout.astro";
+import ConfigEditor from "../components/ConfigEditor.astro";
+---
+
+<Layout title="Hercules · Настройки" active="config">
+  <div class="mb-4">
+    <h1 class="text-xl font-semibold text-white">Конфигурация агента</h1>
+    <p class="text-sm text-gray-400">Редактирование настроек LLM, хранилища, порогов и инструментов.</p>
+  </div>
+  <ConfigEditor />
+</Layout>

@@ -5,6 +5,11 @@ using Hercules.Config;
 using Hercules.LLM;
 using Hercules.Storage;
 using Hercules.Telegram;
+using Hercules.Tools;
+using Hercules.WasmSandbox;
+using Hercules.WasmSandbox.Compilation;
+using HerculesBus;
+using HerculesBus.InMemory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -39,15 +44,17 @@ services.AddSingleton(appConfig.CodeExecution);
 services.AddSingleton(appConfig.Http);
 services.AddSingleton(appConfig.Mcp);
 services.AddSingleton(appConfig.A2A);
+services.AddSingleton(appConfig.Mesh);
 
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
 services.AddSingleton<LlmClientFactory>();
 services.AddSingleton<RoleRouter>();
-services.AddSingleton<ILLMClient>(sp =>
+services.AddSingleton<ResilientLLMClient>(sp =>
     new ResilientLLMClient(
         sp.GetRequiredService<LlmConfig>(),
         sp.GetRequiredService<LlmClientFactory>(),
         sp.GetRequiredService<RoleRouter>()));
+services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
 
 // Code execution (Stage 2, v2)
 services.AddSingleton<Hercules.CodeExecution.SandboxOptions>(sp =>
@@ -79,10 +86,45 @@ services.AddSingleton<Hercules.Tools.ITool, Hercules.Tools.CodeExecutionTool>();
 services.AddSingleton<Hercules.Tools.ToolRegistry>();
 services.AddSingleton<Hercules.Tools.McpClient>();
 
+// WASM sandbox (v3) — Wasmtime-based code execution с capability-based isolation.
+// Регистрируем IWasmSandbox, CompilerRegistry (с PassthroughCompiler для готовых .wasm),
+// WasmTool (высокоуровневый API компиляция+исполнение) и адаптер к ITool для AgentCore.
+services.AddSingleton<IWasmSandbox, WasmtimeSandbox>();
+services.AddSingleton<CompilerRegistry>(sp =>
+{
+    var registry = new CompilerRegistry();
+    registry.Register(new PassthroughCompiler());
+    return registry;
+});
+services.AddSingleton<WasmTool>();
+services.AddSingleton<Hercules.Tools.ITool, WasmToolAdapter>();
+
+// HerculesBus (v3.1) — мессенджер для ИИ агентов. In-process pub/sub + registry + channel store.
+// В v3.1 используется in-memory реализация; v3.2 добавит SQLite и HTTP transport.
+services.AddSingleton<InMemoryChannelStore>();
+services.AddSingleton<InMemoryAgentRegistry>();
+services.AddSingleton<InMemoryEventBus>();
+services.AddSingleton<Bus>();
+
+// Phase 3: Inter-agent mesh (manifest, capability registry, intent routing, transport)
+services.AddMeshServices(appConfig.Mesh, appConfig.Storage.DataRoot);
+
 // Хранилища
 services.AddSingleton<FileSkillRepository>();
 services.AddSingleton<MemoryStore>();
 services.AddSingleton<SqliteSessionStore>();
+
+// Phase 2: Skill packager (export/import .skillpkg)
+services.AddSingleton<Hercules.Skills.SkillPackager>();
+
+// Phase 2: Semantic routing (embedding-based). Stub provider — offline, без внешних зависимостей.
+// В проде заменяется на YandexEmbeddingProvider или OllamaEmbeddingProvider.
+services.AddSingleton<Hercules.Skills.IEmbeddingProvider, Hercules.Skills.StubEmbeddingProvider>();
+services.AddSingleton<Hercules.Skills.EmbeddingSkillRouter>();
+
+// Phase 2: Skill marketplace + agent templates
+services.AddSingleton<Hercules.Skills.SkillMarketplace>();
+services.AddSingleton<Hercules.Skills.AgentTemplateManager>();
 
 // Агент
 services.AddSingleton<SkillManager>();

@@ -1,0 +1,114 @@
+---
+// Редактор конфигурации агента: просмотр и изменение JSON-конфигурации через Web API.
+// Поддерживает PATCH (merge) и PUT (полная замена). Изменения применяются без перезагрузки.
+---
+
+<div class="flex flex-col gap-4">
+  <div class="flex items-center justify-between">
+    <p class="text-sm text-gray-400">
+      Редактируйте конфигурацию агента в JSON. Сохранённые изменения применяются сразу, без перезагрузки сервера.
+    </p>
+    <span id="config-status" class="text-xs text-gray-500"></span>
+  </div>
+
+  <textarea
+    id="config-text"
+    rows="24"
+    spellcheck="false"
+    class="mono w-full resize-y rounded-xl border border-white/10 bg-[#101012] p-4 text-sm leading-relaxed text-gray-100 outline-none focus:border-emerald-500/50"
+    placeholder="Загрузка конфигурации…"
+  ></textarea>
+
+  <div class="flex flex-wrap gap-2">
+    <button
+      id="config-patch"
+      type="button"
+      class="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+    >
+      Сохранить (PATCH)
+    </button>
+    <button
+      id="config-reload"
+      type="button"
+      class="rounded-xl border border-white/10 px-5 py-2.5 text-sm text-gray-200 transition-colors hover:bg-white/5"
+    >
+      Перезагрузить
+    </button>
+    <button
+      id="config-full"
+      type="button"
+      class="ml-auto rounded-xl border border-rose-500/30 bg-rose-500/10 px-5 py-2.5 text-sm text-rose-200 transition-colors hover:bg-rose-500/20"
+    >
+      Полная замена (PUT)
+    </button>
+  </div>
+
+  <div class="rounded-xl border border-white/10 bg-[#101012] p-4 text-xs text-gray-400">
+    <p class="mb-2 font-medium text-gray-300">Подсказки:</p>
+    <ul class="list-disc space-y-1 pl-4">
+      <li><strong>PATCH</strong> — обновляет только переданные полца, остальное остаётся без изменений.</li>
+      <li><strong>PUT</strong> — полностью заменяет конфигурацию. Удалите лишние секции осторожно.</li>
+      <li>После сохранения настройки LLM-провайдеров применяются сразу для следующего запроса.</li>
+      <li>Конфиг сохраняется в <code class="text-gray-300">data/runtime-config.json</code> рядом с данными агента.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  import { api } from "../lib/api";
+
+  const text = document.getElementById("config-text") as HTMLTextAreaElement;
+  const status = document.getElementById("config-status") as HTMLSpanElement;
+  const patchBtn = document.getElementById("config-patch") as HTMLButtonElement;
+  const reloadBtn = document.getElementById("config-reload") as HTMLButtonElement;
+  const fullBtn = document.getElementById("config-full") as HTMLButtonElement;
+
+  function setStatus(msg: string, cls = "text-gray-500") {
+    status.className = `text-xs ${cls}`;
+    status.textContent = msg;
+  }
+
+  async function load() {
+    setStatus("Загрузка…");
+    try {
+      const cfg = await api.getConfig();
+      text.value = JSON.stringify(cfg.config, null, 2);
+      setStatus("Загружено", "text-emerald-400");
+    } catch (e) {
+      setStatus("Ошибка загрузки: " + (e instanceof Error ? e.message : e), "text-rose-400");
+    }
+  }
+
+  async function save(method: "patch" | "put") {
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(text.value) as Record<string, unknown>;
+    } catch (e) {
+      setStatus("Невалидный JSON: " + (e instanceof Error ? e.message : e), "text-rose-400");
+      return;
+    }
+
+    patchBtn.disabled = true;
+    fullBtn.disabled = true;
+    setStatus("Сохранение…");
+    try {
+      const cfg = method === "patch" ? await api.patchConfig(body) : await api.updateConfig(body);
+      text.value = JSON.stringify(cfg.config, null, 2);
+      setStatus(method === "patch" ? "Сохранено (PATCH) ✓" : "Заменено (PUT) ✓", "text-emerald-400");
+    } catch (e) {
+      setStatus("Ошибка: " + (e instanceof Error ? e.message : e), "text-rose-400");
+    } finally {
+      patchBtn.disabled = false;
+      fullBtn.disabled = false;
+    }
+  }
+
+  patchBtn.addEventListener("click", () => save("patch"));
+  fullBtn.addEventListener("click", async () => {
+    if (!confirm("Полная замена конфигурации. Убедитесь, что JSON содержит все нужные секции. Продолжить?")) return;
+    await save("put");
+  });
+  reloadBtn.addEventListener("click", load);
+
+  load();
+</script>

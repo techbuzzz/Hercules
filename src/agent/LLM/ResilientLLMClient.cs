@@ -10,14 +10,35 @@ namespace Hercules.LLM;
 /// </summary>
 public sealed class ResilientLLMClient : ILLMClient
 {
-    private readonly List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
+    private List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
     private readonly RoleRouter _roleRouter;
-    private readonly LlmConfig _cfg;
+    private LlmConfig _cfg;
 
     public ResilientLLMClient(LlmConfig cfg, LlmClientFactory factory, RoleRouter roleRouter)
     {
         _cfg = cfg;
         _roleRouter = roleRouter;
+        _factory = factory;
+        _mainChain = [];
+        ProviderName = "";
+        ModelName = "";
+        RebuildChain(cfg);
+    }
+
+    private readonly LlmClientFactory _factory;
+
+    /// <summary>
+    ///     Перезагрузить fallback-цепочку и активного провайдера по новой конфигурации.
+    ///     Используется при runtime-изменении конфигурации через Web UI.
+    /// </summary>
+    public void Reload(LlmConfig cfg)
+    {
+        _cfg = cfg;
+        RebuildChain(cfg);
+    }
+
+    private void RebuildChain(LlmConfig cfg)
+    {
         var order = new List<string> { cfg.Provider };
         foreach (var fb in cfg.Fallback.Where(fb => !order.Contains(fb, StringComparer.OrdinalIgnoreCase)))
         {
@@ -25,7 +46,7 @@ public sealed class ResilientLLMClient : ILLMClient
         }
 
         _mainChain = order
-            .Select(name => (name, new Lazy<ILLMClient>(() => factory.Create(name))))
+            .Select(name => (name, new Lazy<ILLMClient>(() => _factory.Create(name))))
             .ToList();
 
         ProviderName = cfg.Provider;
