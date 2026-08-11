@@ -1,5 +1,6 @@
 using System.Text;
 using Hercules.Agent;
+using Hercules.Mesh;
 using Hercules.Skills;
 using Hercules.Storage;
 using Spectre.Console;
@@ -10,7 +11,7 @@ namespace Hercules.CLI;
 ///     REPL-интерфейс командной строки (primary). Реализует команды из ТЗ:
 ///     прямой ввод, /skills, /skills create, /skills improve, /memory show,
 ///     /memory reset, /reflect, /exit, /skills export, /skills import,
-///     /marketplace, /templates, /mesh.
+///     /marketplace, /templates, /mesh (Phase 3 + 4).
 /// </summary>
 public sealed class ConsoleUI(
     AgentCore agent,
@@ -22,7 +23,11 @@ public sealed class ConsoleUI(
     Hercules.Skills.AgentTemplateManager templates,
     Hercules.Mesh.AgentManifestService manifestService,
     Hercules.Mesh.CapabilityRegistry capabilityRegistry,
-    Hercules.Mesh.IntentRouter intentRouter)
+    Hercules.Mesh.IntentRouter intentRouter,
+    Hercules.Mesh.MeshRouter meshRouter,
+    Hercules.Mesh.CircuitBreaker circuitBreaker,
+    Hercules.Mesh.DistributedReflection distributedReflection,
+    Hercules.Mesh.SharedMemorySync sharedMemorySync)
 {
     public async Task RunAsync(CancellationToken ct = default)
     {
@@ -524,8 +529,145 @@ public sealed class ConsoleUI(
                 }
                 break;
 
+            // === Phase 4: Fan-out + Circuit Breaker + Reflection + Shared Memory ===
+
+            case "fanout" when parts.Length >= 3:
+                // /mesh fanout {message...} — fan-out нескольким peer'ам + выбор лучшего
+                var fanOutMessage = string.Join(" ", parts.Skip(2));
+                var fanOutEnvelope = new Hercules.Mesh.IntentEnvelope(
+                    RequestId: Hercules.Mesh.IntentIds.NewRequestId(),
+                    Sender: manifestService.Current.AgentId,
+                    Intent: fanOutMessage,
+                    Payload: fanOutMessage,
+                    TraceId: Guid.NewGuid().ToString("N")[..8]);
+                try
+                {
+                    var result = await meshRouter.RouteWithFanOutAsync(fanOutEnvelope, ct);
+                    if (result.HasWinner)
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"[green]✓ Лучший ответ от {result.Winner!.Agent}:[/] method={result.SelectionMethod} conf={result.Winner.Confidence} peers={result.AllResponses.Count} time={result.Duration.TotalMilliseconds:F0}ms");
+                        if (!string.IsNullOrEmpty(result.JudgeRationale))
+                        {
+                            AnsiConsole.MarkupLineInterpolated($"[grey]Judge:[/] {result.JudgeRationale}");
+                        }
+                        AnsiConsole.WriteLine(result.Winner.Result ?? "");
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"[red]Нет успешных ответов.[/] peers={result.AllResponses.Count} method={result.SelectionMethod}");
+                        foreach (var r in result.AllResponses)
+                        {
+                            AnsiConsole.MarkupLineInterpolated($"  [grey]- {r.Agent}: {r.Status} {r.Error}[/]");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Fan-out error:[/] {ex.Message}");
+                }
+                break;
+
+            case "circuits":
+                // /mesh circuits — состояние circuit breakers
+                var states = circuitBreaker.GetAllStates();
+                if (states.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[grey]Circuit breakers: нет отслеживаемых peer'ов.[/]");
+                    break;
+                }
+                var cbTable = new Table().Border(TableBorder.Rounded).Title("Circuit Breakers");
+                cbTable.AddColumn("Agent ID");
+                cbTable.AddColumn("State");
+                foreach (var kvp in states)
+                {
+                    var color = kvp.Value switch
+                    {
+                        Hercules.Mesh.CircuitState.Closed => "green",
+                        Hercules.Mesh.CircuitState.Open => "red",
+                        Hercules.Mesh.CircuitState.HalfOpen => "yellow",
+                        _ => "grey"
+                    };
+                    cbTable.AddRow(Markup.Escape(kvp.Key), $"[{color}]{kvp.Value}[/]");
+                }
+                AnsiConsole.Write(cbTable);
+                break;
+
+            case "reflect-mesh":
+                // /mesh reflect-mesh — distributed reflection
+                try
+                {
+                    DistributedReflectionResult? reflResult = null;
+                    await AnsiConsole.Status().StartAsync("Distributed reflection...", async _ =>
+                    {
+                        reflResult = await distributedReflection.ReflectAsync(ct);
+                    });
+                    AnsiConsole.Write(new Panel(Markup.Escape(reflResult!.Markdown))
+                        .Header("Distributed Reflection").Expand());
+                    AnsiConsole.MarkupLineInterpolated($"[grey]Peers: {reflResult.PeerCount} | Open circuits: {reflResult.OpenCircuitCount} | Total capabilities: {reflResult.TotalCapabilities}[/]");
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Reflection error:[/] {ex.Message}");
+                }
+                break;
+
+            case "recommendations":
+                // /mesh recommendations — рекомендации по новым локальным навыкам
+                var recs = distributedReflection.GetLocalSkillRecommendations();
+                if (recs.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[grey]Рекомендаций нет — все peer'ы доступны.[/]");
+                }
+                else
+                {
+                    foreach (var rec in recs)
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"[yellow]⚠ {rec}[/]");
+                    }
+                }
+                break;
+
+            case "memory-sync":
+                // /mesh memory-sync — синхронизация shared-фактов с peer'ами
+                try
+                {
+                    var received = 0;
+                    await AnsiConsole.Status().StartAsync("Syncing shared memory...", async _ =>
+                    {
+                        received = await sharedMemorySync.SyncFromPeersAsync(ct);
+                    });
+                    AnsiConsole.MarkupLineInterpolated($"[green]✓ Синхронизировано фактов:[/] {received}");
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Sync error:[/] {ex.Message}");
+                }
+                break;
+
+            case "shared":
+                // /mesh shared — список shared-фактов памяти
+                var facts = sharedMemorySync.GetLocalFacts();
+                if (facts.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[grey]Shared-фактов нет. Опубликуйте через Web API: POST /api/mesh/shared-memory.[/]");
+                    break;
+                }
+                var fTable = new Table().Border(TableBorder.Rounded).Title("Shared Memory Facts");
+                fTable.AddColumn("ID");
+                fTable.AddColumn("Category");
+                fTable.AddColumn("Source");
+                fTable.AddColumn("Updated");
+                foreach (var f in facts)
+                {
+                    fTable.AddRow(f.Id, f.Category, f.SourceAgent, f.UpdatedAt);
+                }
+                AnsiConsole.Write(fTable);
+                break;
+
             default:
-                AnsiConsole.MarkupLine("[grey]Команды:[/] /mesh status | manifest | agents | publish-self | find {cap} | send {agentId} {msg}");
+                AnsiConsole.MarkupLine("[grey]Команды:[/] /mesh status | manifest | agents | publish-self | " +
+                    "find {cap} | send {id} {msg} | fanout {msg} | circuits | reflect-mesh | recommendations | " +
+                    "memory-sync | shared");
                 break;
         }
     }
@@ -560,6 +702,12 @@ public sealed class ConsoleUI(
         table.AddRow("/mesh publish-self", "Опубликовать себя в capability registry");
         table.AddRow("/mesh find {cap}", "Найти агентов по имени capability");
         table.AddRow("/mesh send {id} {msg}", "Отправить intent агенту в mesh");
+        table.AddRow("/mesh fanout {msg}", "Fan-out нескольким peer'ам + выбор лучшего");
+        table.AddRow("/mesh circuits", "Состояние circuit breakers peer'ов");
+        table.AddRow("/mesh reflect-mesh", "Distributed reflection по mesh");
+        table.AddRow("/mesh recommendations", "Рекомендации по новым локальным навыкам");
+        table.AddRow("/mesh memory-sync", "Синхронизировать shared-факты с peer'ами");
+        table.AddRow("/mesh shared", "Список shared-фактов памяти");
         table.AddRow("/memory show", "Показать профиль пользователя");
         table.AddRow("/memory reset", "Сбросить память");
         table.AddRow("/reflect", "Запустить рефлексию вручную");

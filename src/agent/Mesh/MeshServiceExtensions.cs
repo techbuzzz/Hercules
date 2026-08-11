@@ -35,13 +35,15 @@ public sealed class ManifestCapabilitiesProvider
 }
 
 /// <summary>
-///     Extension-методы для регистрации Phase 3 mesh-сервисов в DI.
+///     Extension-методы для регистрации Phase 3 + Phase 4 mesh-сервисов в DI.
 /// </summary>
 public static class MeshServiceCollectionExtensions
 {
     /// <summary>
-    ///     Зарегистрировать все Phase 3 mesh-сервисы: AgentManifestService, CapabilityRegistry,
-    ///     IntentTransport, IntentRouter, ManifestCapabilitiesProvider.
+    ///     Зарегистрировать все Phase 3 + Phase 4 mesh-сервисы:
+    ///     AgentManifestService, CapabilityRegistry, IntentTransport, IntentRouter,
+    ///     ManifestCapabilitiesProvider, CircuitBreaker, RetryPolicy, MeshRouter,
+    ///     DistributedReflection, SharedMemorySync.
     /// </summary>
     public static IServiceCollection AddMeshServices(this IServiceCollection services, MeshConfig meshCfg, string dataRoot)
     {
@@ -77,8 +79,21 @@ public static class MeshServiceCollectionExtensions
         // IntentTransport — HTTP-клиент для inter-agent вызовов
         services.AddSingleton<IntentTransport>();
 
-        // IntentRouter — маршрутизация intent'ов (локально или peer'у)
+        // IntentRouter — маршрутизация intent'ов (локально или peer'у) — Phase 3
         services.AddSingleton<IntentRouter>();
+
+        // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов
+        services.AddSingleton<CircuitBreaker>();
+        services.AddSingleton<RetryPolicy>();
+
+        // Phase 4: MeshRouter — fan-out/fan-in оркестрация с LLM-judge
+        services.AddSingleton<MeshRouter>();
+
+        // Phase 4: DistributedReflection — отчёты по mesh + рекомендации
+        services.AddSingleton<DistributedReflection>();
+
+        // Phase 4: SharedMemorySync — синхронизация избранных фактов памяти
+        services.AddSingleton<SharedMemorySync>();
 
         return services;
     }
