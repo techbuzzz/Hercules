@@ -7,14 +7,18 @@ namespace HerculesBus.InMemory;
 ///     In-memory реализация IChannelStore (для тестов и одноразовых запусков).
 ///     Данные теряются при перезапуске процесса. Для персистентности — SqliteChannelStore.
 ///     Thread-safe через ConcurrentDictionary + lock для упорядоченных операций.
+///     Поддерживает eviction: при превышении MaxMessagesPerChannel автоматически
+///     удаляет самые старые сообщения.
 /// </summary>
 public sealed class InMemoryChannelStore : IChannelStore
 {
     private readonly ConcurrentDictionary<string, BusChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, AgentMessage> _messages = new(StringComparer.Ordinal);
     private readonly object _appendLock = new();
-    // Канал → упорядоченный список ID сообщений
     private readonly ConcurrentDictionary<string, List<string>> _channelMessages = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Максимальное количество сообщений в канале. При превышении удаляются самые старые.</summary>
+    public int MaxMessagesPerChannel { get; set; } = 10_000;
 
     public Task<BusChannel> EnsureChannelAsync(string name, string description, bool isPrivate, string createdBy, CancellationToken ct = default)
     {
@@ -57,6 +61,16 @@ public sealed class InMemoryChannelStore : IChannelStore
             _messages[withMeta.Id] = withMeta;
             var list = _channelMessages.GetOrAdd(withMeta.Channel, _ => new List<string>());
             list.Add(withMeta.Id);
+
+            if (list.Count > MaxMessagesPerChannel)
+            {
+                var evictCount = list.Count - MaxMessagesPerChannel;
+                for (int i = 0; i < evictCount; i++)
+                {
+                    _messages.TryRemove(list[i], out _);
+                }
+                list.RemoveRange(0, evictCount);
+            }
         }
 
         return Task.FromResult(withMeta);

@@ -98,7 +98,7 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
                     return;
 
                 case ("POST", "/agents/register"):
-                    var identity = await ReadJson<AgentIdentityDto>(ctx);
+                    var identity = await ReadJsonAsync<AgentIdentityDto>(ctx);
                     var result = await _bus.RegisterAsync(identity.ToIdentity(), ct);
                     await WriteJson(ctx, 200, result);
                     return;
@@ -109,13 +109,13 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
                     return;
 
                 case ("POST", "/channels"):
-                    var createDto = await ReadJson<CreateChannelDto>(ctx);
+                    var createDto = await ReadJsonAsync<CreateChannelDto>(ctx);
                     var ch = await _bus.EnsureChannelAsync(createDto.Name, createDto.Description ?? "", createDto.IsPrivate, createDto.CreatedBy ?? "system", ct);
                     await WriteJson(ctx, 200, ch);
                     return;
 
                 case ("POST", "/messages"):
-                    var msgDto = await ReadJson<AgentMessageDto>(ctx);
+                    var msgDto = await ReadJsonAsync<AgentMessageDto>(ctx);
                     var msg = msgDto.ToMessage();
                     var saved = await _bus.SendAsync(msg, ct);
                     await WriteJson(ctx, 200, saved);
@@ -158,7 +158,7 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
                         if (slashIdx > 0 && rest[(slashIdx + 1)..].Equals("heartbeat", StringComparison.OrdinalIgnoreCase))
                         {
                             var agentId = WebUtility.UrlDecode(rest[..slashIdx]);
-                            var hb = await ReadJson<HeartbeatDto>(ctx);
+                            var hb = await ReadJsonAsync<HeartbeatDto>(ctx);
                             await _bus.HeartbeatAsync(agentId, hb.Status, ct);
                             await WriteJson(ctx, 200, new { ok = true });
                             return;
@@ -233,6 +233,9 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
         }
     }
 
+    /// <summary>Максимальный размер тела запроса в байтах. 0 = без лимита.</summary>
+    public int MaxRequestBodyBytes { get; set; } = 1_048_576; // 1 MB
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -250,8 +253,12 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
         ctx.Response.Close();
     }
 
-    private static async Task<T> ReadJson<T>(HttpListenerContext ctx)
+    private async Task<T> ReadJsonAsync<T>(HttpListenerContext ctx)
     {
+        if (MaxRequestBodyBytes > 0 && ctx.Request.ContentLength64 > MaxRequestBodyBytes)
+        {
+            throw new InvalidOperationException($"Request body exceeds {MaxRequestBodyBytes} bytes limit");
+        }
         using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
         var text = await reader.ReadToEndAsync();
         if (string.IsNullOrEmpty(text)) return default!;

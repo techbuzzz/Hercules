@@ -59,6 +59,7 @@ public sealed class AgentCore : IConfigReload
     private readonly ToolRegistry? _tools;
 
     private readonly List<ChatTurn> _transcript = new();
+    private readonly object _transcriptLock = new();
     private string _contextBlock = "";
     private string _lastInput = "";
 
@@ -84,7 +85,16 @@ public sealed class AgentCore : IConfigReload
     public int CommandCount { get; private set; }
 
     /// <summary>Транскрипт текущей сессии (для сохранения памяти).</summary>
-    public IReadOnlyList<ChatTurn> Transcript => _transcript;
+    public IReadOnlyList<ChatTurn> Transcript
+    {
+        get
+        {
+            lock (_transcriptLock)
+            {
+                return _transcript.ToList();
+            }
+        }
+    }
 
     /// <summary>Инициализация сессии: создать запись и загрузить контекст памяти.</summary>
     public void StartSession()
@@ -125,8 +135,11 @@ public sealed class AgentCore : IConfigReload
         var (answer, confidence) = ExtractConfidence(llmResp.Text);
 
         // Поддержка диалогового контекста (история)
-        _transcript.Add(new ChatTurn(ChatRole.User, input));
-        _transcript.Add(new ChatTurn(ChatRole.Assistant, answer));
+        lock (_transcriptLock)
+        {
+            _transcript.Add(new ChatTurn(ChatRole.User, input));
+            _transcript.Add(new ChatTurn(ChatRole.Assistant, answer));
+        }
 
         var mode = !string.IsNullOrEmpty(toolUsed)
             ? "tool"
@@ -338,8 +351,13 @@ public sealed class AgentCore : IConfigReload
 
     private List<ChatTurn> BuildMessages(string systemPrompt, string input)
     {
+        List<ChatTurn> snapshot;
+        lock (_transcriptLock)
+        {
+            snapshot = _transcript.TakeLast(8).ToList();
+        }
         var msgs = new List<ChatTurn> { new(ChatRole.System, systemPrompt) };
-        msgs.AddRange(_transcript.TakeLast(8));
+        msgs.AddRange(snapshot);
         msgs.Add(new ChatTurn(ChatRole.User, input));
         return msgs;
     }

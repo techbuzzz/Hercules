@@ -10,9 +10,10 @@ namespace Hercules.LLM;
 /// </summary>
 public sealed class ResilientLLMClient : ILLMClient
 {
-    private List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
+    private volatile List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
     private readonly RoleRouter _roleRouter;
-    private LlmConfig _cfg;
+    private volatile LlmConfig _cfg;
+    private readonly LlmClientFactory _factory;
 
     public ResilientLLMClient(LlmConfig cfg, LlmClientFactory factory, RoleRouter roleRouter)
     {
@@ -24,8 +25,6 @@ public sealed class ResilientLLMClient : ILLMClient
         ModelName = "";
         RebuildChain(cfg);
     }
-
-    private readonly LlmClientFactory _factory;
 
     /// <summary>
     ///     Перезагрузить fallback-цепочку и активного провайдера по новой конфигурации.
@@ -45,9 +44,11 @@ public sealed class ResilientLLMClient : ILLMClient
             order.Add(fb);
         }
 
-        _mainChain = order
+        var newChain = order
             .Select(name => (name, new Lazy<ILLMClient>(() => _factory.Create(name))))
             .ToList();
+
+        _mainChain = newChain;
 
         ProviderName = cfg.Provider;
         ModelName = "";

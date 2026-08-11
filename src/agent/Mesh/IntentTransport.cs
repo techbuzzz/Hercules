@@ -1,32 +1,68 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Hercules.Mesh;
 
 /// <summary>
 ///     Транспорт inter-agent intent'ов. Отправляет IntentEnvelope на endpoint peer-агента
 ///     и получает IntentResponse. Поддерживает HTTP transport (по умолчанию) и bus adapter.
+///     Использует IHttpClientFactory для корректного управления жизненным циклом HttpClient
+///     (connection pooling, DNS refresh, timeout).
 ///     Спецификация: docs/ROADMAP-RU.md Phase 3 #15.
 /// </summary>
 public sealed class IntentTransport : IDisposable
 {
     private readonly HttpClient _http;
     private readonly CapabilityRegistry _registry;
+    private readonly bool _weOwnClient;
 
     /// <summary>Таймаут по умолчанию для inter-agent вызовов (мс).</summary>
     public int DefaultTimeoutMs { get; set; } = 30_000;
 
+    /// <summary>
+    ///     Создать транспорт с собственным HttpClient (для CLI-режима без DI).
+    /// </summary>
     public IntentTransport(CapabilityRegistry registry, int defaultTimeoutMs = 30_000)
     {
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-        _http = new HttpClient();
+        _http = new HttpClient
+        {
+            Timeout = TimeSpan.FromMilliseconds(defaultTimeoutMs)
+        };
         DefaultTimeoutMs = defaultTimeoutMs;
+        _weOwnClient = true;
+    }
+
+    /// <summary>
+    ///     Создать транспорт с HttpClient из IHttpClientFactory (рекомендуется для Web API).
+    /// </summary>
+    public IntentTransport(CapabilityRegistry registry, HttpClient httpClient, int defaultTimeoutMs = 30_000)
+    {
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+        _http = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        DefaultTimeoutMs = defaultTimeoutMs;
+        _weOwnClient = false;
+    }
+
+    /// <summary>
+    ///     Регистрация IntentTransport в DI с IHttpClientFactory.
+    /// </summary>
+    public static void RegisterWithHttpClient(IServiceCollection services, int defaultTimeoutMs = 30_000)
+    {
+        services.AddHttpClient<IntentTransport>(client =>
+        {
+            client.Timeout = TimeSpan.FromMilliseconds(defaultTimeoutMs);
+        });
     }
 
     public void Dispose()
     {
-        _http.Dispose();
+        if (_weOwnClient)
+        {
+            _http.Dispose();
+        }
     }
 
     /// <summary>
@@ -60,7 +96,6 @@ public sealed class IntentTransport : IDisposable
                 Content = new StringContent(envelope.ToJson(), Encoding.UTF8, "application/json"),
             };
 
-            // Auth header (еслиapikey)
             if (peerManifest.Auth.Type == "apikey" && !string.IsNullOrEmpty(peerManifest.Auth.Header))
             {
                 httpReq.Headers.TryAddWithoutValidation(peerManifest.Auth.Header, "mesh-key");

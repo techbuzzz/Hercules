@@ -56,7 +56,6 @@ public sealed class InMemoryEventBus : IEventBus
         var subs = _channelSubs.GetOrAdd(channel, _ => new List<System.Threading.Channels.Channel<AgentMessage>>());
         lock (subs) { subs.Add(ch); }
 
-        // Запускаем reader в fire-and-forget Task
         _ = Task.Run(async () =>
         {
             try
@@ -78,6 +77,14 @@ public sealed class InMemoryEventBus : IEventBus
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[HerculesBus] subscriber died for '{channel}': {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                ch.Writer.TryComplete();
+                if (_channelSubs.TryGetValue(channel, out var currentSubs))
+                {
+                    lock (currentSubs) { currentSubs.Remove(ch); }
+                }
             }
         }, ct);
 
@@ -117,6 +124,11 @@ public sealed class InMemoryEventBus : IEventBus
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[HerculesBus] global subscriber died: {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                ch.Writer.TryComplete();
+                lock (_allLock) { _allSubs.Remove(ch); }
             }
         }, ct);
 

@@ -11,7 +11,7 @@ public sealed class RuntimeConfigStore
 {
     private readonly string _filePath;
     private readonly object _lock = new();
-    private AppConfig _snapshot;
+    private volatile AppConfig _snapshot;
 
     public RuntimeConfigStore(AppConfig initial, string filePath)
     {
@@ -20,16 +20,7 @@ public sealed class RuntimeConfigStore
     }
 
     /// <summary>Текущий актуальный снимок конфигурации.</summary>
-    public AppConfig Current
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _snapshot;
-            }
-        }
-    }
+    public AppConfig Current => _snapshot;
 
     /// <summary>
     ///     Полностью заменить текущую конфигурацию, сохранить в файл и уведомить

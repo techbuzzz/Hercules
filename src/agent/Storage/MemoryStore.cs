@@ -39,61 +39,74 @@ public sealed class MemoryStore
         return Path_($"context_{date:yyyy-MM-dd}.md");
     }
 
-    public string ReadProfile()
+    public async Task<string> ReadProfileAsync(CancellationToken ct = default)
     {
-        return ReadOrDefault(ProfilePath,
-            "# Профиль пользователя\n\n_Пока ничего не известно. Профиль наполняется по мере общения._\n");
+        return await ReadOrDefaultAsync(ProfilePath,
+            "# Профиль пользователя\n\n_Пока ничего не известно. Профиль наполняется по мере общения._\n", ct);
     }
 
-    public string ReadPreferences()
+    public string ReadProfile() => ReadProfileAsync().GetAwaiter().GetResult();
+
+    public async Task<string> ReadPreferencesAsync(CancellationToken ct = default)
     {
-        return ReadOrDefault(PreferencesPath,
-            "# Предпочтения\n\n- Язык: русский\n- Тон: дружелюбный, по делу\n");
+        return await ReadOrDefaultAsync(PreferencesPath,
+            "# Предпочтения\n\n- Язык: русский\n- Тон: дружелюбный, по делу\n", ct);
     }
 
-    public string ReadEntities()
+    public string ReadPreferences() => ReadPreferencesAsync().GetAwaiter().GetResult();
+
+    public async Task<string> ReadEntitiesAsync(CancellationToken ct = default)
     {
-        return ReadOrDefault(EntitiesPath,
-            "# Известные сущности\n\n_Проекты, люди, компании появятся здесь._\n");
+        return await ReadOrDefaultAsync(EntitiesPath,
+            "# Известные сущности\n\n_Проекты, люди, компании появятся здесь._\n", ct);
     }
 
-    public void WriteProfile(string content)
+    public string ReadEntities() => ReadEntitiesAsync().GetAwaiter().GetResult();
+
+    public async Task WriteProfileAsync(string content, CancellationToken ct = default)
     {
-        File.WriteAllText(ProfilePath, content);
+        await File.WriteAllTextAsync(ProfilePath, content, ct);
     }
 
-    public void WritePreferences(string content)
+    public void WriteProfile(string content) => WriteProfileAsync(content).GetAwaiter().GetResult();
+
+    public async Task WritePreferencesAsync(string content, CancellationToken ct = default)
     {
-        File.WriteAllText(PreferencesPath, content);
+        await File.WriteAllTextAsync(PreferencesPath, content, ct);
     }
 
-    public void WriteEntities(string content)
+    public void WritePreferences(string content) => WritePreferencesAsync(content).GetAwaiter().GetResult();
+
+    public async Task WriteEntitiesAsync(string content, CancellationToken ct = default)
     {
-        File.WriteAllText(EntitiesPath, content);
+        await File.WriteAllTextAsync(EntitiesPath, content, ct);
     }
+
+    public void WriteEntities(string content) => WriteEntitiesAsync(content).GetAwaiter().GetResult();
 
     /// <summary>Добавить блок к файлу профиля/сущностей/предпочтений.</summary>
-    public void Append(string path, string markdownBlock)
+    public async Task AppendAsync(string path, string markdownBlock, CancellationToken ct = default)
     {
-        var prefix = File.Exists(path)
-            ? "\n"
-            : "";
-        File.AppendAllText(path, prefix + markdownBlock.TrimEnd() + "\n");
+        var prefix = File.Exists(path) ? "\n" : "";
+        var content = prefix + markdownBlock.TrimEnd() + "\n";
+        await File.AppendAllTextAsync(path, content, ct);
     }
+
+    public void Append(string path, string markdownBlock) => AppendAsync(path, markdownBlock).GetAwaiter().GetResult();
 
     /// <summary>Добавить запись контекста за текущий день.</summary>
-    public void AppendContext(string summary, DateOnly date)
+    public async Task AppendContextAsync(string summary, DateOnly date, CancellationToken ct = default)
     {
         var path = ContextPath(date);
-        var header = File.Exists(path)
-            ? ""
-            : $"# Контекст за {date:yyyy-MM-dd}\n\n";
+        var header = File.Exists(path) ? "" : $"# Контекст за {date:yyyy-MM-dd}\n\n";
         var entry = $"## Сессия {DateTime.Now:HH:mm:ss}\n\n{summary.TrimEnd()}\n\n";
-        File.AppendAllText(path, header + entry);
+        await File.AppendAllTextAsync(path, header + entry, ct);
     }
 
+    public void AppendContext(string summary, DateOnly date) => AppendContextAsync(summary, date).GetAwaiter().GetResult();
+
     /// <summary>Прочитать последний по дате файл контекста (для переноса между сессиями).</summary>
-    public string ReadLastContext()
+    public async Task<string> ReadLastContextAsync(CancellationToken ct = default)
     {
         if (!Directory.Exists(_dir))
         {
@@ -105,8 +118,10 @@ public sealed class MemoryStore
             .ToList();
         return files.Count == 0
             ? ""
-            : File.ReadAllText(files[0]);
+            : await File.ReadAllTextAsync(files[0], ct);
     }
+
+    public string ReadLastContext() => ReadLastContextAsync().GetAwaiter().GetResult();
 
     /// <summary>Полностью очистить память.</summary>
     public void Reset()
@@ -122,10 +137,10 @@ public sealed class MemoryStore
         }
     }
 
-    private static string ReadOrDefault(string path, string fallback)
+    private static async Task<string> ReadOrDefaultAsync(string path, string fallback, CancellationToken ct = default)
     {
         return File.Exists(path)
-            ? File.ReadAllText(path)
+            ? await File.ReadAllTextAsync(path, ct)
             : fallback;
     }
 }

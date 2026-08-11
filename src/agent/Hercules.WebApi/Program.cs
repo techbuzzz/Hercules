@@ -193,7 +193,9 @@ var app = builder.Build();
 
 // --- Middleware ---
 app.UseCors(corsPolicy);
+app.UseMiddleware<RequestBodyLimitMiddleware>();
 app.UseMiddleware<ApiKeyMiddleware>();
+app.UseMiddleware<RateLimitMiddleware>();
 
 // --- Инициализация сессии агента ---
 app.Services.GetRequiredService<WebApiAdapter>().EnsureSessionStarted();

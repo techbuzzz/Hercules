@@ -19,13 +19,56 @@ public enum CircuitState
 
 /// <summary>
 ///     Запись о состоянии circuit breaker для одного peer-агента.
+///     Использует Interlocked для атомарных переходов HalfOpen.
 /// </summary>
 internal sealed class CircuitStateRecord
 {
-    public CircuitState State { get; set; } = CircuitState.Closed;
-    public int ConsecutiveFailures { get; set; }
-    public DateTimeOffset LastFailureAt { get; set; }
-    public DateTimeOffset OpenedAt { get; set; }
+    private int _state = (int)CircuitState.Closed;
+    private int _consecutiveFailures;
+    private long _openedAtTicks;
+    private long _lastFailureAtTicks;
+
+    public CircuitState State
+    {
+        get => (CircuitState)Volatile.Read(ref _state);
+        set => Volatile.Write(ref _state, (int)value);
+    }
+
+    public int ConsecutiveFailures
+    {
+        get => Volatile.Read(ref _consecutiveFailures);
+        set => Volatile.Write(ref _consecutiveFailures, value);
+    }
+
+    public DateTimeOffset LastFailureAt
+    {
+        get => new DateTimeOffset(Interlocked.Read(ref _lastFailureAtTicks), TimeSpan.Zero);
+        set => Interlocked.Exchange(ref _lastFailureAtTicks, value.UtcTicks);
+    }
+
+    public DateTimeOffset OpenedAt
+    {
+        get => new DateTimeOffset(Interlocked.Read(ref _openedAtTicks), TimeSpan.Zero);
+        set => Interlocked.Exchange(ref _openedAtTicks, value.UtcTicks);
+    }
+
+    /// <summary>
+    ///     Атомарный переход из HalfOpen → Open (пробный запрос провалился).
+    ///     Возвращает true, если переход выполнен (CAS успешен).
+    /// </summary>
+    public bool TryTransitionHalfOpenToOpen()
+    {
+        return Interlocked.CompareExchange(ref _state, (int)CircuitState.Open, (int)CircuitState.HalfOpen) == (int)CircuitState.HalfOpen;
+    }
+
+    /// <summary>
+    ///     Атомарный переход из Open → HalfOpen (cooldown прошёл).
+    ///     Возвращает true, если переход выполнен.
+    /// </summary>
+    public bool TryTransitionOpenToHalfOpen()
+    {
+        return Interlocked.CompareExchange(ref _state, (int)CircuitState.HalfOpen, (int)CircuitState.Open) == (int)CircuitState.Open;
+    }
 }
 
 /// <summary>
@@ -49,6 +92,8 @@ public sealed class CircuitBreaker
     ///     Проверить, можно ли отправить запрос указанному peer'у.
     ///     Возвращает true, если цепь замкнута или полу-открыта (пробный запрос).
     ///     Возвращает false, если цепь разомкнута — запрос отклоняется без обращения к peer'у.
+    ///     Переход Open → HalfOpen выполняется атомарно (CAS), что гарантирует
+    ///     только один пробный запрос при HalfOpen.
     /// </summary>
     public bool CanSend(string agentId)
     {
@@ -57,25 +102,21 @@ public sealed class CircuitBreaker
             return true; // Новый peer — цепь замкнута
         }
 
-        lock (record)
+        var state = record.State;
+        switch (state)
         {
-            switch (record.State)
-            {
-                case CircuitState.Closed:
-                    return true;
-                case CircuitState.Open:
-                    // Проверяем, не прошёл ли cooldown
-                    if (DateTimeOffset.UtcNow - record.OpenedAt >= Cooldown)
-                    {
-                        record.State = CircuitState.HalfOpen;
-                        return true; // Пробный запрос
-                    }
-                    return false; // Ещё в cooldown
-                case CircuitState.HalfOpen:
-                    return true; // Пробный запрос разрешён
-                default:
-                    return true;
-            }
+            case CircuitState.Closed:
+                return true;
+            case CircuitState.Open:
+                if (DateTimeOffset.UtcNow - record.OpenedAt >= Cooldown)
+                {
+                    return record.TryTransitionOpenToHalfOpen();
+                }
+                return false;
+            case CircuitState.HalfOpen:
+                return true;
+            default:
+                return true;
         }
     }
 
@@ -84,37 +125,33 @@ public sealed class CircuitBreaker
     {
         if (_circuits.TryGetValue(agentId, out var record))
         {
-            lock (record)
-            {
-                record.State = CircuitState.Closed;
-                record.ConsecutiveFailures = 0;
-            }
+            record.State = CircuitState.Closed;
+            record.ConsecutiveFailures = 0;
         }
     }
 
     /// <summary>
     ///     Зафиксировать неудачный вызов peer'а.
     ///     Если неудач подряд >= FailureThreshold — размыкает цепь на Cooldown-период.
+    ///     Переход HalfOpen → Open атомарный (только один поток выполнит переход).
     /// </summary>
     public void RecordFailure(string agentId)
     {
         var record = _circuits.GetOrAdd(agentId, _ => new CircuitStateRecord());
-        lock (record)
-        {
-            record.ConsecutiveFailures++;
-            record.LastFailureAt = DateTimeOffset.UtcNow;
+        record.ConsecutiveFailures++;
+        record.LastFailureAt = DateTimeOffset.UtcNow;
 
-            if (record.State == CircuitState.HalfOpen)
+        if (record.State == CircuitState.HalfOpen)
+        {
+            if (record.TryTransitionHalfOpenToOpen())
             {
-                // Пробный запрос провалился — снова размыкаем
-                record.State = CircuitState.Open;
                 record.OpenedAt = DateTimeOffset.UtcNow;
             }
-            else if (record.ConsecutiveFailures >= FailureThreshold)
-            {
-                record.State = CircuitState.Open;
-                record.OpenedAt = DateTimeOffset.UtcNow;
-            }
+        }
+        else if (record.ConsecutiveFailures >= FailureThreshold)
+        {
+            record.State = CircuitState.Open;
+            record.OpenedAt = DateTimeOffset.UtcNow;
         }
     }
 
@@ -125,10 +162,7 @@ public sealed class CircuitBreaker
         {
             return CircuitState.Closed;
         }
-        lock (record)
-        {
-            return record.State;
-        }
+        return record.State;
     }
 
     /// <summary>Сбросить circuit breaker для peer'а (принудительно замкнуть цепь).</summary>
@@ -136,11 +170,8 @@ public sealed class CircuitBreaker
     {
         if (_circuits.TryGetValue(agentId, out var record))
         {
-            lock (record)
-            {
-                record.State = CircuitState.Closed;
-                record.ConsecutiveFailures = 0;
-            }
+            record.State = CircuitState.Closed;
+            record.ConsecutiveFailures = 0;
         }
     }
 
@@ -150,10 +181,7 @@ public sealed class CircuitBreaker
         var result = new Dictionary<string, CircuitState>(StringComparer.OrdinalIgnoreCase);
         foreach (var kvp in _circuits)
         {
-            lock (kvp.Value)
-            {
-                result[kvp.Key] = kvp.Value.State;
-            }
+            result[kvp.Key] = kvp.Value.State;
         }
         return result;
     }
