@@ -3,6 +3,7 @@ using Hercules.Agent;
 using Hercules.CLI;
 using Hercules.Config;
 using Hercules.LLM;
+using Hercules.Mesh;
 using Hercules.Storage;
 using Hercules.Telegram;
 using Hercules.Tools;

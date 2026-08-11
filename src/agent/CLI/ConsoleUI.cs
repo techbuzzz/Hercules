@@ -10,7 +10,7 @@ namespace Hercules.CLI;
 ///     REPL-интерфейс командной строки (primary). Реализует команды из ТЗ:
 ///     прямой ввод, /skills, /skills create, /skills improve, /memory show,
 ///     /memory reset, /reflect, /exit, /skills export, /skills import,
-///     /marketplace, /templates.
+///     /marketplace, /templates, /mesh.
 /// </summary>
 public sealed class ConsoleUI(
     AgentCore agent,
@@ -19,7 +19,10 @@ public sealed class ConsoleUI(
     ReflectionEngine reflection,
     SkillPackager packager,
     Hercules.Skills.SkillMarketplace marketplace,
-    Hercules.Skills.AgentTemplateManager templates)
+    Hercules.Skills.AgentTemplateManager templates,
+    Hercules.Mesh.AgentManifestService manifestService,
+    Hercules.Mesh.CapabilityRegistry capabilityRegistry,
+    Hercules.Mesh.IntentRouter intentRouter)
 {
     public async Task RunAsync(CancellationToken ct = default)
     {
@@ -192,6 +195,10 @@ public sealed class ConsoleUI(
 
             case "/templates":
                 HandleTemplatesCommand(parts);
+                break;
+
+            case "/mesh":
+                await HandleMeshCommand(parts, ct);
                 break;
 
             default:
@@ -430,6 +437,99 @@ public sealed class ConsoleUI(
         }
     }
 
+    private async Task HandleMeshCommand(string[] parts, CancellationToken ct)
+    {
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "status";
+
+        switch (sub)
+        {
+            case "status":
+                var manifest = manifestService.Current;
+                AnsiConsole.MarkupLineInterpolated($"[blue]Agent ID:[/] {manifest.AgentId}");
+                AnsiConsole.MarkupLineInterpolated($"[blue]Endpoint:[/] {manifest.Endpoint}");
+                AnsiConsole.MarkupLineInterpolated($"[blue]Capabilities:[/] {manifest.Capabilities.Count}");
+                AnsiConsole.MarkupLineInterpolated($"[blue]Registry agents:[/] {capabilityRegistry.ListAgents().Count}");
+                break;
+
+            case "manifest":
+                var m = manifestService.Save();
+                AnsiConsole.MarkupLineInterpolated($"[green]✓ Манифест сохранён:[/] [grey]{Markup.Escape(manifestService.ManifestPath)}[/]");
+                AnsiConsole.MarkupLineInterpolated($"  Agent: {m.AgentId} | Endpoint: {m.Endpoint} | Capabilities: {m.Capabilities.Count}");
+                break;
+
+            case "agents":
+                var agents = capabilityRegistry.ListAgents();
+                if (agents.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[grey]Реестр пуст. Зарегистрируйте peer'ов: /mesh publish-self, /mesh register {json}.[/]");
+                    return;
+                }
+                var table = new Table().Border(TableBorder.Rounded).Title("Capability Registry");
+                table.AddColumn("Agent ID");
+                table.AddColumn("Имя");
+                table.AddColumn("Endpoint");
+                table.AddColumn("Last seen");
+                foreach (var a in agents)
+                {
+                    table.AddRow(Markup.Escape(a.AgentId), Markup.Escape(a.DisplayName), Markup.Escape(a.Endpoint), a.LastSeen);
+                }
+                AnsiConsole.Write(table);
+                break;
+
+            case "publish-self":
+                manifestService.Save();
+                capabilityRegistry.Register(manifestService.Current);
+                AnsiConsole.MarkupLineInterpolated($"[green]✓ Агент опубликован в реестре:[/] {manifestService.Current.AgentId}");
+                break;
+
+            case "find" when parts.Length >= 3:
+                var found = capabilityRegistry.FindByCapability(parts[2]);
+                if (found.Count == 0)
+                {
+                    AnsiConsole.MarkupLine($"[grey]Агенты с capability '{parts[2]}' не найдены.[/]");
+                    return;
+                }
+                foreach (var f in found)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"  [blue]{f.AgentId}[/] ({f.DisplayName}) → {f.Endpoint}");
+                }
+                break;
+
+            case "send" when parts.Length >= 4:
+                // /mesh send {targetAgentId} {message...}
+                var targetId = parts[2];
+                var messageText = string.Join(" ", parts.Skip(3));
+                var envelope = new Hercules.Mesh.IntentEnvelope(
+                    RequestId: Hercules.Mesh.IntentIds.NewRequestId(),
+                    Sender: manifestService.Current.AgentId,
+                    Intent: messageText,
+                    Payload: messageText,
+                    TraceId: Guid.NewGuid().ToString("N")[..8]);
+                try
+                {
+                    var resp = await intentRouter.RouteAsync(envelope, ct);
+                    if (resp.IsSuccess)
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"[green]✓ Ответ от {resp.Agent}:[/] mode={resp.Mode} conf={resp.Confidence}");
+                        AnsiConsole.WriteLine(resp.Result ?? "");
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"[red]Ошибка ({resp.Status}):[/] {resp.Error}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Ошибка:[/] {ex.Message}");
+                }
+                break;
+
+            default:
+                AnsiConsole.MarkupLine("[grey]Команды:[/] /mesh status | manifest | agents | publish-self | find {cap} | send {agentId} {msg}");
+                break;
+        }
+    }
+
     private static void PrintBanner()
     {
         AnsiConsole.Write(new FigletText("Hercules").Color(Color.Aqua));
@@ -454,6 +554,12 @@ public sealed class ConsoleUI(
         table.AddRow("/marketplace publish {p}", "Опубликовать .skillpkg в маркетплейс");
         table.AddRow("/templates list", "Показать шаблоны агентов");
         table.AddRow("/templates apply {f}", "Применить шаблон (bundle навыков+памяти)");
+        table.AddRow("/mesh status", "Состояние mesh-узла (манифест, реестр)");
+        table.AddRow("/mesh manifest", "Сгенерировать и сохранить манифест агента");
+        table.AddRow("/mesh agents", "Список известных агентов в реестре");
+        table.AddRow("/mesh publish-self", "Опубликовать себя в capability registry");
+        table.AddRow("/mesh find {cap}", "Найти агентов по имени capability");
+        table.AddRow("/mesh send {id} {msg}", "Отправить intent агенту в mesh");
         table.AddRow("/memory show", "Показать профиль пользователя");
         table.AddRow("/memory reset", "Сбросить память");
         table.AddRow("/reflect", "Запустить рефлексию вручную");

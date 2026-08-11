@@ -29,11 +29,11 @@ public sealed record IntentEnvelope(
     public DateTimeOffset TimestampOrUtc => Timestamp ?? DateTimeOffset.UtcNow;
 
     /// <summary>Сериализовать в JSON.</summary>
-    public string ToJson() => JsonSerializer.Serialize(this, JsonOpts);
+    public string ToJson() => JsonSerializer.Serialize(this, IntentJsonOpts.Instance);
 
     /// <summary>Десериализовать из JSON.</summary>
     public static IntentEnvelope? FromJson(string json) =>
-        JsonSerializer.Deserialize<IntentEnvelope>(json, JsonOpts);
+        JsonSerializer.Deserialize<IntentEnvelope>(json, IntentJsonOpts.Instance);
 }
 
 /// <summary>
@@ -65,10 +65,10 @@ public sealed record IntentResponse(
 
     public bool IsSuccess => Status == "ok";
 
-    public string ToJson() => JsonSerializer.Serialize(this, JsonOpts);
+    public string ToJson() => JsonSerializer.Serialize(this, IntentJsonOpts.Instance);
 
     public static IntentResponse? FromJson(string json) =>
-        JsonSerializer.Deserialize<IntentResponse>(json, JsonOpts);
+        JsonSerializer.Deserialize<IntentResponse>(json, IntentJsonOpts.Instance);
 
     public static IntentResponse Ok(string requestId, string agent, string result, string mode = "direct",
         string? skill = null, double? confidence = null, string? traceId = null) => new(
@@ -114,7 +114,7 @@ public static class IntentIds
 
 internal static class IntentJsonOpts
 {
-    public static readonly JsonSerializerOptions JsonOpts = new()
+    public static readonly JsonSerializerOptions Instance = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,

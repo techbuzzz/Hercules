@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Config;
 using Hercules.LLM;
+using Hercules.Mesh;
 using Hercules.Storage;
 using Hercules.Tools;
 using Hercules.WasmSandbox;
@@ -209,7 +210,11 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/skills/{id}/export", "POST /api/skills/import",
         "GET /api/memory/profile", "PUT /api/memory/profile", "POST /api/memory/reset",
         "GET /api/reflect", "GET /api/stats",
-        "GET /api/config", "PUT /api/config", "PATCH /api/config"
+        "GET /api/config", "PUT /api/config", "PATCH /api/config",
+        "GET /agent.manifest.json", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
+        "GET /api/mesh/agents/{id}", "DELETE /api/mesh/agents/{id}",
+        "GET /api/mesh/capabilities", "GET /api/mesh/capabilities/{name}",
+        "GET /api/mesh/capabilities/search", "POST /api/mesh/intent"
     }
 }));
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", time = DateTime.UtcNow }));
@@ -220,6 +225,7 @@ app.MapSkills();
 app.MapMemory();
 app.MapStats();
 app.MapConfig();
+app.MapMesh();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");

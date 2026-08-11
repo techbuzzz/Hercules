@@ -30,25 +30,6 @@ public sealed class IntentTransport : IDisposable
     }
 
     /// <summary>
-    ///     Отправить intent на endpoint peer-агента (HTTP POST).
-    ///     Endpoint берётся из CapabilityRegistry по agentId.
-    /// </summary>
-    public async Task<IntentResponse> SendAsync(IntentEnvelope envelope, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(envelope);
-        ArgumentException.ThrowIfNullOrWhiteSpace(envelope.RequestId);
-
-        // Находим endpoint peer'а в реестре
-        var peerManifest = _registry.Get(envelope.Sender is not null ? envelope.Sender : "")
-            ?? throw new InvalidOperationException($"Peer-агент '{envelope.Sender}' не найден в реестре.");
-
-        // Sender — это мы, получатель определяется по intent (через registry.FindByCapability)
-        // Но envelope.Sender = мы, а получатель = endpoint из registry.
-        // Исправляем: метод SendToAsync принимает agentId получателя.
-        throw new NotImplementedException("Используйте SendToAsync(agentId, envelope).");
-    }
-
-    /// <summary>
     ///     Отправить intent указанному peer-агенту по его agentId.
     ///     Endpoint и auth берутся из CapabilityRegistry.
     /// </summary>

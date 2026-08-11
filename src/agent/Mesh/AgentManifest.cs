@@ -177,6 +177,9 @@ public sealed class AgentManifestService
     /// <summary>Валидировать манифест. Возвращает список ошибок (пустой = OK).</summary>
     public List<string> Validate()
     {
+        // Обновляем capabilities из провайдера перед валидацией
+        _manifest.Capabilities = _capabilitiesProvider();
+
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(_manifest.AgentId))
             errors.Add("agentId пуст.");
