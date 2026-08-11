@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Config;
 using Hercules.Storage;
+using Microsoft.Extensions.Logging;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
@@ -17,7 +18,8 @@ public sealed class TelegramBotInterface(
     TelegramConfig cfg,
     AgentCore agent,
     SkillManager skills,
-    MemoryManager memory)
+    MemoryManager memory,
+    ILogger<TelegramBotInterface> logger)
 {
     public async Task RunAsync(CancellationToken ct = default)
     {
@@ -100,9 +102,9 @@ public sealed class TelegramBotInterface(
             $"• {s.Meta.Name} (id: {s.Meta.Id}, v{s.Meta.Version}, success={s.Meta.SuccessRate:0.00})"));
     }
 
-    private static Task HandleErrorAsync(ITelegramBotClient bot, Exception ex, CancellationToken ct)
+    private Task HandleErrorAsync(ITelegramBotClient bot, Exception ex, CancellationToken ct)
     {
-        Console.Error.WriteLine($"[Telegram] Ошибка: {ex.Message}");
+        logger.LogError(ex, "Telegram error");
         return Task.CompletedTask;
     }
 

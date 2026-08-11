@@ -37,6 +37,21 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         _conn.Dispose();
     }
 
+    public bool IsHealthy()
+    {
+        try
+        {
+            using SqliteCommand cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT 1";
+            var result = cmd.ExecuteScalar();
+            return result is not null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private void EnableWalMode()
     {
         using SqliteCommand cmd = _conn.CreateCommand();

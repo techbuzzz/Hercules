@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HerculesBus.Core;
+using Microsoft.Extensions.Logging;
 
 namespace HerculesBus.Http;
 
@@ -33,15 +34,17 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
     private readonly Bus _bus;
     private readonly CancellationTokenSource _cts = new();
     private readonly HttpListener _listener;
+    private readonly ILogger<HerculesBusHttpServer> _logger;
     private readonly string _prefix;
     private readonly object _subLock = new();
     private readonly HashSet<string> _validTokens = new(StringComparer.Ordinal);
     private Task? _acceptLoop;
     private bool _started;
 
-    public HerculesBusHttpServer(Bus bus, string prefix = "http://localhost:9876/")
+    public HerculesBusHttpServer(Bus bus, ILogger<HerculesBusHttpServer> logger, string prefix = "http://localhost:9876/")
     {
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
+        _logger = logger;
         if (!prefix.EndsWith("/"))
         {
             prefix += "/";
@@ -228,7 +231,7 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[HerculesBus] HTTP handler error: {ex.GetType().Name}: {ex.Message}");
+            _logger.LogError(ex, "HTTP handler error: {ErrorType}", ex.GetType().Name);
             try
             {
                 await WriteJson(ctx, 500, new { error = ex.Message });
@@ -277,7 +280,7 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[HerculesBus] SSE write error: {ex.Message}");
+                _logger.LogWarning(ex, "SSE write error");
             }
         }, ct);
 

@@ -21,7 +21,12 @@ public sealed class SqliteAgentRegistry : IAgentRegistry, IAsyncDisposable
             throw new ArgumentException("Connection string required", nameof(connectionString));
         }
 
-        _conn = new SqliteConnection(connectionString);
+        var builder = new SqliteConnectionStringBuilder(connectionString)
+        {
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Cache = SqliteCacheMode.Shared
+        };
+        _conn = new SqliteConnection(builder.ToString());
         _conn.Open();
         _weOwnConn = true;
         SqliteSchema.EnsureCreated(_conn);

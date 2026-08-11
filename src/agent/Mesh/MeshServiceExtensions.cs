@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Config;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http;
 
 namespace Hercules.Mesh;
 
@@ -75,8 +76,15 @@ public static class MeshServiceCollectionExtensions
                 meshConfig.Endpoint.TrimEnd('/') + "/api/health");
         });
 
-        // IntentTransport — HTTP-клиент для inter-agent вызовов
-        services.AddSingleton<IntentTransport>();
+        // IntentTransport — HTTP-клиент для inter-agent вызовов (IHttpClientFactory)
+        services.AddHttpClient();
+        services.AddSingleton<IntentTransport>(sp =>
+        {
+            var registry = sp.GetRequiredService<CapabilityRegistry>();
+            var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient(nameof(IntentTransport));
+            return new IntentTransport(registry, httpClient);
+        });
 
         // IntentRouter — маршрутизация intent'ов (локально или peer'у) — Phase 3
         services.AddSingleton<IntentRouter>();

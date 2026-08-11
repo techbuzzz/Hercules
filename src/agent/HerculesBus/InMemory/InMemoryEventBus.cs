@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using HerculesBus.Core;
+using Microsoft.Extensions.Logging;
 
 namespace HerculesBus.InMemory;
 
@@ -16,6 +17,12 @@ public sealed class InMemoryEventBus : IEventBus
     private readonly object _allLock = new();
     private readonly List<Channel<AgentMessage>> _allSubs = new();
     private readonly ConcurrentDictionary<string, List<Channel<AgentMessage>>> _channelSubs = new();
+    private readonly ILogger<InMemoryEventBus> _logger;
+
+    public InMemoryEventBus(ILogger<InMemoryEventBus> logger)
+    {
+        _logger = logger;
+    }
 
     public ValueTask PublishAsync(AgentMessage message, CancellationToken ct = default)
     {
@@ -78,7 +85,7 @@ public sealed class InMemoryEventBus : IEventBus
                     }
                     catch (Exception ex)
                     {
-                        Console.Error.WriteLine($"[HerculesBus] handler error in channel '{channel}': {ex.GetType().Name}: {ex.Message}");
+                        _logger.LogWarning(ex, "Handler error in channel '{Channel}'", channel);
                     }
                 }
             }
@@ -88,7 +95,7 @@ public sealed class InMemoryEventBus : IEventBus
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[HerculesBus] subscriber died for '{channel}': {ex.GetType().Name}: {ex.Message}");
+                _logger.LogError(ex, "Subscriber died for channel '{Channel}'", channel);
             }
             finally
             {
@@ -137,7 +144,7 @@ public sealed class InMemoryEventBus : IEventBus
                     }
                     catch (Exception ex)
                     {
-                        Console.Error.WriteLine($"[HerculesBus] global handler error: {ex.GetType().Name}: {ex.Message}");
+                        _logger.LogWarning(ex, "Global handler error");
                     }
                 }
             }
@@ -146,7 +153,7 @@ public sealed class InMemoryEventBus : IEventBus
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[HerculesBus] global subscriber died: {ex.GetType().Name}: {ex.Message}");
+                _logger.LogError(ex, "Global subscriber died");
             }
             finally
             {

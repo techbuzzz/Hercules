@@ -1,4 +1,5 @@
 using Hercules.Agent;
+using Hercules.Storage;
 
 namespace Hercules.WebApi.Controllers;
 
@@ -18,5 +19,10 @@ public static class StatsController
         app.MapGet("/api/reflect", async (WebApiAdapter adapter, CancellationToken ct) =>
                 Results.Ok(await adapter.ReflectAsync(ct)))
             .WithName("Reflect");
+
+        // GET /api/health/detailed — SQLite health check
+        app.MapGet("/api/health/detailed", (SqliteSessionStore sessions) =>
+                Results.Ok(new { sqlite = new { healthy = sessions.IsHealthy() } }))
+            .WithName("HealthDetailed");
     }
 }

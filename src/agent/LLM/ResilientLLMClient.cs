@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Hercules.Config;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.LLM;
 
@@ -11,15 +12,17 @@ namespace Hercules.LLM;
 public sealed class ResilientLLMClient : ILLMClient
 {
     private readonly LlmClientFactory _factory;
+    private readonly ILogger<ResilientLLMClient> _logger;
     private readonly RoleRouter _roleRouter;
     private volatile LlmConfig _cfg;
     private volatile List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
 
-    public ResilientLLMClient(LlmConfig cfg, LlmClientFactory factory, RoleRouter roleRouter)
+    public ResilientLLMClient(LlmConfig cfg, LlmClientFactory factory, RoleRouter roleRouter, ILogger<ResilientLLMClient> logger)
     {
         _cfg = cfg;
         _roleRouter = roleRouter;
         _factory = factory;
+        _logger = logger;
         _mainChain = [];
         ProviderName = "";
         ModelName = "";
@@ -113,7 +116,7 @@ public sealed class ResilientLLMClient : ILLMClient
             catch (Exception ex)
             {
                 last = ex;
-                await Console.Error.WriteLineAsync($"[LLM] Провайдер '{name}' недоступен: {ex.Message}. Пробую следующий...");
+                _logger.LogWarning("Provider '{Name}' unavailable: {Message}. Trying next...", name, ex.Message);
             }
         }
 
@@ -137,8 +140,7 @@ public sealed class ResilientLLMClient : ILLMClient
         catch (Exception ex)
         {
             // Fallback: если роль-клиент упал — пробуем main-цепочку
-            await Console.Error.WriteLineAsync(
-                $"[LLM] Роль '{role}' ({client.ProviderName}) недоступна: {ex.Message}. Fallback на main.");
+            _logger.LogWarning("Role '{Role}' ({Provider}) unavailable: {Message}. Falling back to main.", role, client.ProviderName, ex.Message);
             return await CompleteMainAsync(messages, ct);
         }
     }
@@ -164,7 +166,7 @@ public sealed class ResilientLLMClient : ILLMClient
             }
             catch (Exception ex)
             {
-                await Console.Error.WriteLineAsync($"[LLM] Провайдер '{name}' недоступен (stream): {ex.Message}. Пробую следующий...");
+                _logger.LogWarning("Provider '{Name}' unavailable (stream): {Message}. Trying next...", name, ex.Message);
                 if (enumerator is not null)
                 {
                     await enumerator.DisposeAsync();

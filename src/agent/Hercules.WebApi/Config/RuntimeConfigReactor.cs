@@ -1,6 +1,7 @@
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.Tools;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.WebApi.Config;
 
@@ -12,6 +13,7 @@ namespace Hercules.WebApi.Config;
 public sealed class RuntimeConfigReactor
 {
     private readonly LlmClientFactory _factory;
+    private readonly ILogger<RuntimeConfigReactor> _logger;
     private readonly IEnumerable<IConfigReload> _reloadConsumers;
     private readonly ResilientLLMClient _resilient;
     private readonly RoleRouter _roleRouter;
@@ -24,6 +26,7 @@ public sealed class RuntimeConfigReactor
         ResilientLLMClient resilient,
         RoleRouter roleRouter,
         ToolRegistry tools,
+        ILogger<RuntimeConfigReactor> logger,
         IEnumerable<IConfigReload> reloadConsumers)
     {
         _store = store;
@@ -31,6 +34,7 @@ public sealed class RuntimeConfigReactor
         _resilient = resilient;
         _roleRouter = roleRouter;
         _tools = tools;
+        _logger = logger;
         _reloadConsumers = reloadConsumers;
         _store.Changed += OnConfigChanged;
     }
@@ -55,10 +59,10 @@ public sealed class RuntimeConfigReactor
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[RuntimeConfigReactor] {consumer.GetType().Name}.Reload failed: {ex.Message}");
+                _logger.LogError(ex, "{ConsumerType}.Reload failed", consumer.GetType().Name);
             }
         }
 
-        Console.Error.WriteLine("[RuntimeConfigReactor] Конфигурация применена без перезагрузки.");
+        _logger.LogInformation("Configuration applied without restart.");
     }
 }

@@ -5,6 +5,7 @@ using Hercules.Config;
 using Hercules.LLM;
 using Hercules.Storage;
 using Hercules.Tools;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.Agent;
 
@@ -51,6 +52,7 @@ public sealed class AgentCore : IConfigReload
     };
 
     private readonly ILLMClient _llm;
+    private readonly ILogger<AgentCore> _logger;
     private readonly MemoryManager _memory;
     private readonly SkillRouter _router;
     private readonly SqliteSessionStore _sessions;
@@ -70,6 +72,7 @@ public sealed class AgentCore : IConfigReload
         MemoryManager memory,
         SqliteSessionStore sessions,
         AgentConfig cfg,
+        ILogger<AgentCore> logger,
         ToolRegistry? tools = null)
     {
         _llm = llm;
@@ -78,6 +81,7 @@ public sealed class AgentCore : IConfigReload
         _memory = memory;
         _sessions = sessions;
         _cfg = cfg;
+        _logger = logger;
         _tools = tools;
     }
 
@@ -221,9 +225,7 @@ public sealed class AgentCore : IConfigReload
                 error = toolResult.Error
             }, ActionJsonOpts);
 
-            await Console.Error.WriteLineAsync(
-                $"[AgentCore] Tool '{toolName}' → {(toolResult.Success ? "ok" : "FAIL")} " +
-                $"(output: {toolResult.Output.Length} chars, error: {toolResult.Error?.Length ?? 0} chars)");
+            _logger.LogWarning("Tool '{ToolName}' → {Status} (output: {OutputLen} chars, error: {Error_len} chars)", toolName, toolResult.Success ? "ok" : "FAIL", toolResult.Output.Length, toolResult.Error?.Length ?? 0);
 
             messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
             messages.Add(new ChatTurn(ChatRole.User,

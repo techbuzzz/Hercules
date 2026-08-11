@@ -41,10 +41,12 @@ if (Directory.Exists(Path.GetDirectoryName(sharedData)!))
 }
 
 var runtimeConfigFile = Path.Combine(appConfig.Storage.DataRoot, "runtime-config.json");
-var runtimeConfigStore = new RuntimeConfigStore(appConfig, runtimeConfigFile);
 
 // --- Регистрация сервисов ядра (как в консольном приложении) ---
-builder.Services.AddSingleton(runtimeConfigStore);
+builder.Services.AddSingleton(sp => new RuntimeConfigStore(
+    appConfig,
+    runtimeConfigFile,
+    sp.GetRequiredService<ILogger<RuntimeConfigStore>>()));
 // Конфигурационные секции резолвятся из RuntimeConfigStore.Current, чтобы при
 // runtime-изменении конфигурации (через Web UI / PATCH /api/config) сервисы
 // получали свежие значения, а не snapshot на момент первого resolve.
@@ -67,7 +69,8 @@ builder.Services.AddSingleton<ResilientLLMClient>(sp =>
     new ResilientLLMClient(
         sp.GetRequiredService<LlmConfig>(),
         sp.GetRequiredService<LlmClientFactory>(),
-        sp.GetRequiredService<RoleRouter>()));
+        sp.GetRequiredService<RoleRouter>(),
+        sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
 builder.Services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
 
 // Code execution (Stage 2, v2)

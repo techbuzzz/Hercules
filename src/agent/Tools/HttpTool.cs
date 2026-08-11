@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Hercules.Config;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.Tools;
 
@@ -19,11 +20,13 @@ public sealed class HttpTool : ITool
 
     private readonly HttpConfig _cfg;
     private readonly HttpClient _http;
+    private readonly ILogger<HttpTool> _logger;
     private readonly RateLimiter _rateLimiter;
 
-    public HttpTool(HttpConfig cfg)
+    public HttpTool(HttpConfig cfg, ILogger<HttpTool> logger)
     {
         _cfg = cfg;
+        _logger = logger;
         _http = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(cfg.TimeoutSeconds)
@@ -118,8 +121,7 @@ public sealed class HttpTool : ITool
                 : "http_error";
             var output = $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}\n{text}";
 
-            await Console.Error.WriteLineAsync(
-                $"[HTTP] {req.Method} {host} → {(int)resp.StatusCode} ({bytes.Length} bytes)");
+            _logger.LogWarning("HTTP {Method} {Host} → {StatusCode} ({Bytes} bytes)", req.Method, host, (int)resp.StatusCode, bytes.Length);
 
             return resp.IsSuccessStatusCode
                 ? ToolResult.Ok(output, meta)

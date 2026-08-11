@@ -1,6 +1,7 @@
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.Tools;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.WebApi.Config;
 
@@ -18,9 +19,10 @@ public sealed class RuntimeConfigHostedService : IHostedService
         ResilientLLMClient resilient,
         RoleRouter roleRouter,
         ToolRegistry tools,
+        ILogger<RuntimeConfigReactor> logger,
         IEnumerable<IConfigReload> reloadConsumers)
     {
-        _reactor = new RuntimeConfigReactor(store, factory, resilient, roleRouter, tools, reloadConsumers);
+        _reactor = new RuntimeConfigReactor(store, factory, resilient, roleRouter, tools, logger, reloadConsumers);
     }
 
     public Task StartAsync(CancellationToken ct)

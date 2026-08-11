@@ -1,4 +1,5 @@
 using Hercules.Config;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.Tools;
 
@@ -15,12 +16,14 @@ namespace Hercules.Tools;
 public sealed class McpClient
 {
     private readonly McpConfig _cfg;
+    private readonly ILogger<McpClient> _logger;
     private readonly List<McpServerConnection> _servers = new();
     private bool _initialized;
 
-    public McpClient(McpConfig cfg)
+    public McpClient(McpConfig cfg, ILogger<McpClient> logger)
     {
         _cfg = cfg;
+        _logger = logger;
     }
 
     /// <summary>Список подключённых серверов (для диагностики / shutdown).</summary>
@@ -48,7 +51,7 @@ public sealed class McpClient
         {
             if (string.IsNullOrWhiteSpace(serverCfg.Name))
             {
-                await Console.Error.WriteLineAsync("[MCP] Skipping server with empty name");
+                _logger.LogWarning("Skipping MCP server with empty name");
                 continue;
             }
 
@@ -58,9 +61,7 @@ public sealed class McpClient
             // foreach (var tool in tools) registry.Add(new McpToolAdapter(serverCfg.Name, tool));
             var conn = new McpServerConnection(serverCfg.Name, serverCfg.Transport, true);
             _servers.Add(conn);
-            await Console.Error.WriteLineAsync(
-                $"[MCP] Registered server '{conn.Name}' (transport: {conn.Transport}). " +
-                $"NOTE: ModelContextProtocol client SDK not yet available — stub mode.");
+            _logger.LogWarning("Registered MCP server '{Name}' (transport: {Transport}). NOTE: ModelContextProtocol client SDK not yet available — stub mode.", conn.Name, conn.Transport);
         }
     }
 

@@ -1,5 +1,6 @@
 using System.Text;
 using Hercules.Config;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.Tools;
 
@@ -11,10 +12,12 @@ namespace Hercules.Tools;
 public sealed class ToolRegistry
 {
     private readonly Dictionary<string, ITool> _tools = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ILoggerFactory _loggerFactory;
     private readonly Func<IEnumerable<ITool>> _toolsFactory;
 
-    public ToolRegistry(IEnumerable<ITool> tools)
+    public ToolRegistry(IEnumerable<ITool> tools, ILoggerFactory loggerFactory)
     {
+        _loggerFactory = loggerFactory;
         _toolsFactory = () => tools;
         Register(tools);
     }
@@ -35,7 +38,7 @@ public sealed class ToolRegistry
         _tools.Clear();
         IEnumerable<ITool> fresh = _toolsFactory().Select(t => t switch
         {
-            HttpTool => new HttpTool(cfg.Http),
+            HttpTool => new HttpTool(cfg.Http, _loggerFactory.CreateLogger<HttpTool>()),
             A2AClient => new A2AClient(cfg.A2A),
             _ => t
         });

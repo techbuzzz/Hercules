@@ -15,6 +15,8 @@ using HerculesBus;
 using HerculesBus.InMemory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 // ============================================================================
 //  Hercules — самообучающийся микроагент (C# 15 / .NET 10)
@@ -24,127 +26,127 @@ using Microsoft.Extensions.DependencyInjection;
 // Поддержка корректного отображения кириллицы
 Console.OutputEncoding = Encoding.UTF8;
 
-// --- 1. Конфигурация ---
-IConfigurationRoot configuration = new ConfigurationBuilder()
-    .SetBasePath(AppContext.BaseDirectory)
-    .AddUserSecrets<Program>()
-    .AddJsonFile("appsettings.json", false, false)
-    .AddEnvironmentVariables("HERCULES_")
-    .Build();
+var builder = Host.CreateDefaultBuilder(args);
 
-AppConfig appConfig = configuration.Get<AppConfig>() ?? new AppConfig();
-
-// --- 2. Dependency Injection ---
-var services = new ServiceCollection();
-
-// Конфигурационные секции
-services.AddSingleton(appConfig);
-services.AddSingleton(appConfig.Llm);
-services.AddSingleton(appConfig.Storage);
-services.AddSingleton(appConfig.Agent);
-services.AddSingleton(appConfig.Telegram);
-services.AddSingleton(appConfig.CodeExecution);
-services.AddSingleton(appConfig.Http);
-services.AddSingleton(appConfig.Mcp);
-services.AddSingleton(appConfig.A2A);
-services.AddSingleton(appConfig.Mesh);
-
-// LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
-services.AddSingleton<LlmClientFactory>();
-services.AddSingleton<RoleRouter>();
-services.AddSingleton<ResilientLLMClient>(sp =>
-    new ResilientLLMClient(
-        sp.GetRequiredService<LlmConfig>(),
-        sp.GetRequiredService<LlmClientFactory>(),
-        sp.GetRequiredService<RoleRouter>()));
-services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
-
-// Code execution (Stage 2, v2)
-services.AddSingleton<SandboxOptions>(sp =>
+builder.ConfigureAppConfiguration(config =>
 {
-    CodeExecutionConfig cfg = sp.GetRequiredService<CodeExecutionConfig>();
-    var opts = new SandboxOptions
-    {
-        CpuTimeoutSeconds = cfg.CpuTimeoutSeconds,
-        MaxFileSizeMb = cfg.MaxFileSizeMb,
-        MaxProcesses = cfg.MaxProcesses,
-        MaxOpenFiles = cfg.MaxOpenFiles,
-        MaxVirtualMemoryMb = cfg.MaxVirtualMemoryMb,
-        AllowNetwork = cfg.AllowNetwork,
-        MaxCodeSizeKb = cfg.MaxCodeSizeKb,
-        SessionTtlSeconds = cfg.SessionTtlSeconds
-    };
-    if (!string.IsNullOrWhiteSpace(cfg.TempRoot))
-    {
-        opts.TempRoot = cfg.TempRoot;
-    }
-
-    return opts;
+    config.SetBasePath(AppContext.BaseDirectory)
+        .AddUserSecrets<Program>()
+        .AddJsonFile("appsettings.json", false, false)
+        .AddEnvironmentVariables("HERCULES_");
 });
-services.AddSingleton<ICodeExecutor, DotnetFileBasedExecutor>();
 
-// Tool ecosystem (Stage 3, v2)
-services.AddSingleton<ITool, HttpTool>();
-services.AddSingleton<ITool, A2AClient>();
-services.AddSingleton<ITool, CodeExecutionTool>();
-services.AddSingleton<ToolRegistry>();
-services.AddSingleton<McpClient>();
-
-// WASM sandbox (v3) — Wasmtime-based code execution с capability-based isolation.
-// Регистрируем IWasmSandbox, CompilerRegistry (с PassthroughCompiler для готовых .wasm),
-// WasmTool (высокоуровневый API компиляция+исполнение) и адаптер к ITool для AgentCore.
-services.AddSingleton<IWasmSandbox, WasmtimeSandbox>();
-services.AddSingleton<CompilerRegistry>(sp =>
+builder.ConfigureServices((context, services) =>
 {
-    var registry = new CompilerRegistry();
-    registry.Register(new PassthroughCompiler());
-    return registry;
+    var appConfig = context.Configuration.Get<AppConfig>() ?? new AppConfig();
+
+    // Конфигурационные секции
+    services.AddSingleton(appConfig);
+    services.AddSingleton(appConfig.Llm);
+    services.AddSingleton(appConfig.Storage);
+    services.AddSingleton(appConfig.Agent);
+    services.AddSingleton(appConfig.Telegram);
+    services.AddSingleton(appConfig.CodeExecution);
+    services.AddSingleton(appConfig.Http);
+    services.AddSingleton(appConfig.Mcp);
+    services.AddSingleton(appConfig.A2A);
+    services.AddSingleton(appConfig.Mesh);
+
+    // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
+    services.AddSingleton<LlmClientFactory>();
+    services.AddSingleton<RoleRouter>();
+    services.AddSingleton<ResilientLLMClient>(sp =>
+        new ResilientLLMClient(
+            sp.GetRequiredService<LlmConfig>(),
+            sp.GetRequiredService<LlmClientFactory>(),
+            sp.GetRequiredService<RoleRouter>(),
+            sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
+    services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
+
+    // Code execution (Stage 2, v2)
+    services.AddSingleton<SandboxOptions>(sp =>
+    {
+        var cfg = sp.GetRequiredService<CodeExecutionConfig>();
+        var opts = new SandboxOptions
+        {
+            CpuTimeoutSeconds = cfg.CpuTimeoutSeconds,
+            MaxFileSizeMb = cfg.MaxFileSizeMb,
+            MaxProcesses = cfg.MaxProcesses,
+            MaxOpenFiles = cfg.MaxOpenFiles,
+            MaxVirtualMemoryMb = cfg.MaxVirtualMemoryMb,
+            AllowNetwork = cfg.AllowNetwork,
+            MaxCodeSizeKb = cfg.MaxCodeSizeKb,
+            SessionTtlSeconds = cfg.SessionTtlSeconds
+        };
+        if (!string.IsNullOrWhiteSpace(cfg.TempRoot))
+        {
+            opts.TempRoot = cfg.TempRoot;
+        }
+
+        return opts;
+    });
+    services.AddSingleton<ICodeExecutor, DotnetFileBasedExecutor>();
+
+    // Tool ecosystem (Stage 3, v2)
+    services.AddSingleton<ITool, HttpTool>();
+    services.AddSingleton<ITool, A2AClient>();
+    services.AddSingleton<ITool, CodeExecutionTool>();
+    services.AddSingleton<ToolRegistry>();
+    services.AddSingleton<McpClient>();
+
+    // WASM sandbox (v3)
+    services.AddSingleton<IWasmSandbox, WasmtimeSandbox>();
+    services.AddSingleton<CompilerRegistry>(sp =>
+    {
+        var registry = new CompilerRegistry();
+        registry.Register(new PassthroughCompiler());
+        return registry;
+    });
+    services.AddSingleton<WasmTool>();
+    services.AddSingleton<ITool, WasmToolAdapter>();
+
+    // HerculesBus (v3.1)
+    services.AddSingleton<InMemoryChannelStore>();
+    services.AddSingleton<InMemoryAgentRegistry>();
+    services.AddSingleton<InMemoryEventBus>();
+    services.AddSingleton<Bus>();
+
+    // Phase 3: Inter-agent mesh
+    services.AddMeshServices(appConfig.Mesh, appConfig.Storage.DataRoot);
+
+    // Хранилища
+    services.AddSingleton<FileSkillRepository>();
+    services.AddSingleton<MemoryStore>();
+    services.AddSingleton<SqliteSessionStore>();
+
+    // Phase 2: Skill packager
+    services.AddSingleton<SkillPackager>();
+
+    // Phase 2: Semantic routing
+    services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();
+    services.AddSingleton<EmbeddingSkillRouter>();
+
+    // Phase 2: Skill marketplace + agent templates
+    services.AddSingleton<SkillMarketplace>();
+    services.AddSingleton<AgentTemplateManager>();
+
+    // Агент
+    services.AddSingleton<SkillManager>();
+    services.AddSingleton<SkillRouter>();
+    services.AddSingleton<MemoryManager>();
+    services.AddSingleton<ReflectionEngine>();
+    services.AddSingleton<AgentCore>();
+
+    // Интерфейсы
+    services.AddSingleton<ConsoleUI>();
+    services.AddSingleton<TelegramBotInterface>();
 });
-services.AddSingleton<WasmTool>();
-services.AddSingleton<ITool, WasmToolAdapter>();
 
-// HerculesBus (v3.1) — мессенджер для ИИ агентов. In-process pub/sub + registry + channel store.
-// В v3.1 используется in-memory реализация; v3.2 добавит SQLite и HTTP transport.
-services.AddSingleton<InMemoryChannelStore>();
-services.AddSingleton<InMemoryAgentRegistry>();
-services.AddSingleton<InMemoryEventBus>();
-services.AddSingleton<Bus>();
+using var host = builder.Build();
 
-// Phase 3: Inter-agent mesh (manifest, capability registry, intent routing, transport)
-services.AddMeshServices(appConfig.Mesh, appConfig.Storage.DataRoot);
+var appConfig = host.Services.GetRequiredService<AppConfig>();
 
-// Хранилища
-services.AddSingleton<FileSkillRepository>();
-services.AddSingleton<MemoryStore>();
-services.AddSingleton<SqliteSessionStore>();
-
-// Phase 2: Skill packager (export/import .skillpkg)
-services.AddSingleton<SkillPackager>();
-
-// Phase 2: Semantic routing (embedding-based). Stub provider — offline, без внешних зависимостей.
-// В проде заменяется на YandexEmbeddingProvider или OllamaEmbeddingProvider.
-services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();
-services.AddSingleton<EmbeddingSkillRouter>();
-
-// Phase 2: Skill marketplace + agent templates
-services.AddSingleton<SkillMarketplace>();
-services.AddSingleton<AgentTemplateManager>();
-
-// Агент
-services.AddSingleton<SkillManager>();
-services.AddSingleton<SkillRouter>();
-services.AddSingleton<MemoryManager>();
-services.AddSingleton<ReflectionEngine>();
-services.AddSingleton<AgentCore>();
-
-// Интерфейсы
-services.AddSingleton<ConsoleUI>();
-services.AddSingleton<TelegramBotInterface>();
-
-await using ServiceProvider provider = services.BuildServiceProvider();
-
-// --- 3. Выбор режима запуска ---
-// Аргументы: --telegram запускает Telegram-бот, иначе — CLI (по умолчанию).
+// --- Выбор режима запуска ---
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -158,13 +160,13 @@ try
 {
     if (telegramMode)
     {
-        TelegramBotInterface bot = provider.GetRequiredService<TelegramBotInterface>();
+        TelegramBotInterface bot = host.Services.GetRequiredService<TelegramBotInterface>();
         Console.WriteLine("Запуск в режиме Telegram-бота. Ctrl+C для остановки.");
         await bot.RunAsync(cts.Token);
     }
     else
     {
-        ConsoleUI ui = provider.GetRequiredService<ConsoleUI>();
+        ConsoleUI ui = host.Services.GetRequiredService<ConsoleUI>();
         await ui.RunAsync(cts.Token);
     }
 }

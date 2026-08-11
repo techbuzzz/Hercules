@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Hercules.Config;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.Storage;
 
@@ -23,8 +24,11 @@ public sealed class FileSkillRepository
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
-    public FileSkillRepository(StorageConfig cfg)
+    private readonly ILogger<FileSkillRepository> _logger;
+
+    public FileSkillRepository(StorageConfig cfg, ILogger<FileSkillRepository> logger)
     {
+        _logger = logger;
         SkillsDirectory = Path.Combine(cfg.DataRoot, cfg.SkillsDir);
         Directory.CreateDirectory(SkillsDirectory);
     }
@@ -85,7 +89,7 @@ public sealed class FileSkillRepository
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[Skills] Не удалось загрузить {metaFile}: {ex.Message}");
+                _logger.LogWarning(ex, "Failed to load skill from {File}", metaFile);
             }
         }
 

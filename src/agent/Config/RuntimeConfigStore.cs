@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.Config;
 
@@ -17,13 +18,15 @@ public sealed class RuntimeConfigStore
     };
 
     private readonly string _filePath;
+    private readonly ILogger<RuntimeConfigStore> _logger;
     private readonly object _lock = new();
     private volatile AppConfig _snapshot;
 
-    public RuntimeConfigStore(AppConfig initial, string filePath)
+    public RuntimeConfigStore(AppConfig initial, string filePath, ILogger<RuntimeConfigStore> logger)
     {
         _snapshot = initial ?? throw new ArgumentNullException(nameof(initial));
         _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
+        _logger = logger;
     }
 
     /// <summary>Текущий актуальный снимок конфигурации.</summary>
@@ -83,7 +86,7 @@ public sealed class RuntimeConfigStore
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[RuntimeConfigStore] Не удалось сохранить конфигурацию: {ex.Message}");
+            _logger.LogError(ex, "Failed to save configuration to {FilePath}", _filePath);
         }
     }
 
