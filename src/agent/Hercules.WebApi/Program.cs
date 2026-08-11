@@ -14,6 +14,7 @@ using Hercules.WebApi.Auth;
 using Hercules.WebApi.Config;
 using Hercules.WebApi.Controllers;
 using HerculesBus;
+using HerculesBus.Core;
 using HerculesBus.InMemory;
 
 // ============================================================================
@@ -117,9 +118,9 @@ builder.Services.AddSingleton<WasmTool>();
 builder.Services.AddSingleton<ITool, WasmToolAdapter>();
 
 // HerculesBus (v3.1) — мессенджер для ИИ агентов (in-memory pub/sub + registry + channel store).
-builder.Services.AddSingleton<InMemoryChannelStore>();
-builder.Services.AddSingleton<InMemoryAgentRegistry>();
-builder.Services.AddSingleton<InMemoryEventBus>();
+builder.Services.AddSingleton<IChannelStore, InMemoryChannelStore>();
+builder.Services.AddSingleton<IAgentRegistry, InMemoryAgentRegistry>();
+builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
 builder.Services.AddSingleton<Bus>();
 
 // Phase 3: Inter-agent mesh (manifest, capability registry, intent routing, transport)

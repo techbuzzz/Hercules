@@ -12,6 +12,7 @@ using Hercules.Tools;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
 using HerculesBus;
+using HerculesBus.Core;
 using HerculesBus.InMemory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -106,9 +107,9 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<ITool, WasmToolAdapter>();
 
     // HerculesBus (v3.1)
-    services.AddSingleton<InMemoryChannelStore>();
-    services.AddSingleton<InMemoryAgentRegistry>();
-    services.AddSingleton<InMemoryEventBus>();
+    services.AddSingleton<IChannelStore, InMemoryChannelStore>();
+    services.AddSingleton<IAgentRegistry, InMemoryAgentRegistry>();
+    services.AddSingleton<IEventBus, InMemoryEventBus>();
     services.AddSingleton<Bus>();
 
     // Phase 3: Inter-agent mesh

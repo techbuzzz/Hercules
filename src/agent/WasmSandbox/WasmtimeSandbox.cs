@@ -85,7 +85,7 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
             var fuelAmount = limits.MaxFuel > 0
                 ? (ulong)limits.MaxFuel
                 : 1_000_000_000_000UL;
-            store.AddFuel(fuelAmount);
+            store.Fuel = fuelAmount;
 
             // 4. Memory cap. SetLimits(memorySize, tableElements, ?, ?, ?) — 5 nullable позиционных.
             if (limits.MaxMemoryBytes > 0)
@@ -138,7 +138,7 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
             entry.Invoke();
 
             sw.Stop();
-            fuelConsumed = (long)store.GetConsumedFuel();
+            fuelConsumed = (long)(fuelAmount - store.Fuel);
 
             var stdout = ReadAndTruncate(stdoutFile, limits.MaxOutputBytes);
             var stderr = ReadAndTruncate(stderrFile, limits.MaxOutputBytes);

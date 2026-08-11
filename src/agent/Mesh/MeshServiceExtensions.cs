@@ -100,7 +100,11 @@ public static class MeshServiceCollectionExtensions
         services.AddSingleton<DistributedReflection>();
 
         // Phase 4: SharedMemorySync — синхронизация избранных фактов памяти
-        services.AddSingleton<SharedMemorySync>();
+        services.AddSingleton(sp => new SharedMemorySync(
+            dataRoot,
+            sp.GetRequiredService<CapabilityRegistry>(),
+            sp.GetRequiredService<IntentTransport>(),
+            sp.GetRequiredService<AgentManifestService>()));
 
         return services;
     }
