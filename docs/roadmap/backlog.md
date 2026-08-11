@@ -89,6 +89,12 @@
 | 50 | [Distributed reflection](tasks/task_050.md) | `distributed-reflection` | pending |
 | 51 | [Shared memory sync](tasks/task_051.md) | `shared-memory-sync` | pending |
 | 52 | [Mesh evaluation suite](tasks/task_052.md) | `mesh-eval-suite` | pending |
+| 65 | [Mesh observability](tasks/task_065.md) | `mesh-observability` | pending |
+| 66 | [Абстракция mesh-бэкендов](tasks/task_066.md) | `mesh-backends-abstraction` | pending |
+| 67 | [Redis/Valkey coordination backend](tasks/task_067.md) | `redis-coordination-backend` | pending |
+| 68 | [NATS / JetStream transport option](tasks/task_068.md) | `nats-jetstream-transport` | pending |
+| 69 | [PostgreSQL shared state backend](tasks/task_069.md) | `postgres-shared-state` | pending |
+| 70 | [Backend-профили и деградация](tasks/task_070.md) | `backend-profiles-degradation` | pending |
 
 ## Phase 5 — IoT/edge fleet and mesh operations (Q3 2027)
 

@@ -6,7 +6,7 @@
 **Slug:** `distributed-reflection`
 
 ## Goal
-Отчёты сравнивают производительность навыков и peer-ов, выявляют повторяющиеся сбои и предлагают кандидатов: skills, тесты, routing rules, peer relationships. Создают proposals, никогда не делают unreviewed prod changes.
+Отчёты рефлексии включают производительность peer-агентов, routing-решения, паттерны сбоев и предлагают улучшения: новые skills, routing-правила, peer-связи. Формируют proposals, а не unreviewed prod-изменения.
 
 ## Acceptance criteria
 - [ ] TBD при старте работы (декомпозиция в sub-tasks)
@@ -19,7 +19,7 @@ src/agent/Mesh/Reflection/
 - блокирует / опирается на: [task_041 — inter-agent-audit](task_041.md)
 
 ## Risks / Rollback
-Слишком много proposals; rate-limit + ranking.
+Перегрузка шумными proposals; rate-limit + ранжирование + человек-в-контуре.
 
 ## Links
 - Backlog: [../backlog.md](../backlog.md)

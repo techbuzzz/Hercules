@@ -6,7 +6,7 @@
 **Slug:** `retry-timeout-breaker`
 
 ## Goal
-Неудачные peer-вызовы используют deadline-aware retries, exponential backoff с jitter, bulkheads, rate limits и circuit breakers. Non-idempotent вызовы не ретраятся вслепую.
+Peer-вызовы защищены deadline-aware retries, exponential backoff с jitter, per-peer circuit breaker'ами и bulkheads. Non-idempotent операции не ретраятся вслепую и требуют idempotency keys.
 
 ## Acceptance criteria
 - [ ] TBD при старте работы (декомпозиция в sub-tasks)
@@ -19,7 +19,7 @@ src/agent/Mesh/Resilience/
 - блокирует / опирается на: [task_040 — trust-admission](task_040.md)
 
 ## Risks / Rollback
-Retry storm; per-peer rate limit + breaker state observability.
+Retry storm; per-peer rate limit + наблюдаемое состояние breaker'ов.
 
 ## Links
 - Backlog: [../backlog.md](../backlog.md)

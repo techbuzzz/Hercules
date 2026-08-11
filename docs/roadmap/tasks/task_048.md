@@ -6,7 +6,7 @@
 **Slug:** `delegation-boundaries`
 
 ## Goal
-Mesh ограничивает hop count, fan-out width, суммарные tool calls, кумулятивную стоимость и время. Каждый агент может отклонить делегацию, превышающую его policy/capacity.
+Mesh ограничивает hop count, fan-out width, кумулятивные tool calls, общую стоимость и время на запрос. Агенты могут отклонить делегацию, чтобы не превышать свою policy или capacity.
 
 ## Acceptance criteria
 - [ ] TBD при старте работы (декомпозиция в sub-tasks)
@@ -19,7 +19,7 @@ src/agent/Mesh/Budget/
 - блокирует / опирается на: [task_040 — trust-admission](task_040.md)
 
 ## Risks / Rollback
-Ложные отказы; явный reason code в ответе.
+Слишком жёсткие границы блокируют легитимные задачи; явный reason code + метрики.
 
 ## Links
 - Backlog: [../backlog.md](../backlog.md)

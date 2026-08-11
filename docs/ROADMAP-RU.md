@@ -89,30 +89,41 @@ flowchart LR
 
 ## Phase 4 — Оркестрация mesh (Q2 2027)
 
-Цель: сеть микро-агентов ведёт себя как единая агентская система с маршрутизацией, ретраями, observability и совместным обучением.
+Цель: сеть микро-агентов ведёт себя как единая агентская система с маршрутизацией по capability, ограниченной делегацией, ретраями, observability, совместным обучением и опциональными распределёнными бэкендами для больших mesh.
 
 ```mermaid
 flowchart TD
-    User["Запрос пользователя"] -->|1. спросить| Router["Mesh router"]
-    Router -->|2a. локальный навык| Skills["Локальные навыки"]
-    Router -->|2b. переслать intent| Peer["Peer-агент"]
+    User["Запрос пользователя"] --> Router["Mesh router"]
+    Router -->|2a. локальный навык| Local["Локальные навыки"]
+    Router -->|2b. переслать intent| Peer["Лучший peer-агент"]
     Router -->|2c. fan-out| Peers["Агент A\nАгент B\nАгент C"]
-    Peers -->|3. judge / голосование| Judge["LLM judge"]
-    Skills -->|4. ответ| User
-    Peer -->|4. ответ| User
-    Judge -->|4. лучший ответ| User
-    Reflection["Distributed reflection"] -->|5. улучшить| Skills
+    Peers --> Judge["Verifier / LLM judge"]
+    Local --> Response["Типизированный ответ"]
+    Peer --> Response
+    Judge --> Response
+    Response --> User
+    Eval["Distributed reflection"] --> Skills["Кандидаты версий навыков"]
 ```
 
 | # | Инициатива | Результат |
 | - | ---------- | --------- |
-| 17 | **Mesh router** | Когда локальный навык отсутствует или уверенность низка, агент пересылает запрос наиболее подходящему peer-агенту. |
-| 18 | **Fan-out / fan-in** | Запрос можно разослать нескольким агентам, а лучший ответ выбрать через LLM-judge или голосование. |
-| 19 | **Retry и circuit breaker** | Упавшие вызовы к peer'ам ретраятся, логируются и в итоге short-circuit'ятся. |
-| 20 | **Distributed reflection** | Отчёты рефлексии включают производительность peer-агентов и предлагают новые навыки или связи. |
-| 21 | **Shared memory sync** | Опциональная синхронизация избранных фактов памяти и навыков между доверенными агентами mesh. |
+| 17 | **Mesh router** | Когда локальный навык отсутствует, неприменим или ниже confidence-threshold, агент пересылает запрос наиболее подходящему trusted peer-агенту по capability, policy, health, latency и ожидаемому качеству. |
+| 18 | **Fan-out / fan-in** | Запрос можно разослать нескольким применимым агентам под строгими лимитами concurrency и бюджета; ответы валидируются по схемам и выбираются детерминированными правилами, голосованием или опциональным judge-моделью. |
+| 19 | **Retry и circuit breaker** | Упавшие peer-вызовы используют deadline-aware retries, exponential backoff с jitter, per-peer circuit breaker'ы и bulkheads. Non-idempotent операции не ретраятся вслепую и требуют idempotency keys. |
+| 20 | **Distributed reflection** | Отчёты рефлексии включают производительность peer-агентов, routing-решения, паттерны сбоев и предлагают новые навыки, routing-правила или peer-связи. Они создают proposals, а не unreviewed prod-изменения. |
+| 21 | **Shared memory sync** | Избранные факты памяти и навыки синхронизируются между trusted агентами с явными namespaces, provenance, правилами разрешения конфликтов, TTL, шифрованием in transit и per-field data-classification policy. |
+| 22 | **Verification pipeline** | High-impact или safety-sensitive ответы проверяются verifier-навыками, числовыми валидаторами, policy-enforcer'ами или независимыми peer-агентами до возврата или выполнения. |
+| 23 | **Границы делегации** | Mesh ограничивает hop count, fan-out width, кумулятивные tool calls, общую стоимость и время на запрос. Агенты могут отклонить делегацию, чтобы не превышать свою policy или capacity. |
+| 24 | **Human-in-the-loop эскалация** | Неоднозначные, low-confidence, разрушительные или policy-sensitive операции эскалируются с кратким action plan и контекстом для подтверждения человеком. Гейты выполнения обеспечиваются кодом, а не только промптами. |
+| 25 | **Mesh observability** | Каждый локальный и межагентный шаг эмитит коррелированные traces, метрики и структурированные логи. Mesh-трафик, routing-решения, ретраи и взаимодействия с хранилищами видимы и атрибутируемы per request и per agent. |
+| 26 | **Абстракция mesh-бэкендов** | Интерфейсы `IMeshBus`, `ITaskQueue` и `IMeshStateStore` отделяют mesh-оркестрацию от конкретных бэкендов. Single-host mesh продолжает работать с in-process очередями и SQLite по умолчанию. |
+| 27 | **Redis/Valkey coordination backend** | Опциональный RESP-совместимый in-memory бэкенд (Redis или Valkey) даёт working memory, distributed locks и эфемерные очереди для координации при высокой concurrency. Durable truth остаётся в SQLite/PostgreSQL. |
+| 28 | **Опция транспорта NATS / JetStream** | Опциональный NATS-бэкбон для сообщений: subject-based routing, queue groups для load-balanced agent workers, JetStream-стримы для durable at-least-once доставки и replay при дисконнектах. |
+| 29 | **PostgreSQL shared state backend** | Опциональный PostgreSQL state store хранит cross-agent workflow state, shared skill registry, evaluation records и audit logs. Job-очереди используют `SKIP LOCKED` для умеренно-throughput исполнения. |
+| 30 | **Backend-профили и деградация** | Профили развёртывания объявляют, какой mesh используется: только локальный SQLite, Redis/Valkey, NATS, PostgreSQL или комбинации. Если бэкенд становится недоступен, агенты деградируют в local-only режим или прекращают приём новых делегаций по policy, а не падают молча. |
+| 31 | **Mesh evaluation suite** | Воспроизводимые сценарии измеряют task success, safety denials, routing quality, latency, cost, resilience и деградацию при отказе peer/tool/backend/LLM-провайдера. |
 
-**Доставляемый результат:** mesh из 3–5 агентов Hercules отвечает на вопросы, которые ни один агент не мог бы решить в одиночку.
+**Доставляемый результат:** mesh из 3–5 агентов Hercules безопасно отвечает на запросы, которые ни один агент не мог бы решить в одиночку, с ограниченной стоимостью и объяснимой делегацией. Большие swarm'ы могут подключать Redis/Valkey, NATS и PostgreSQL через configuration profiles, не делая ни один внешний сервис обязательным для одиночного локального агента.
 
 ---
 
@@ -122,14 +133,14 @@ flowchart TD
 
 | # | Инициатива | Результат |
 | - | ---------- | --------- |
-| 22 | **Mesh dashboard** | Веб-UI показывает живую топологию агентов, трафик между ними, health per-agent и heatmap использования навыков. |
-| 23 | **Централизованное логирование и трассировка** | У каждого межагентного вызова есть `traceId`; логи можно сливать в OpenTelemetry/Loki и т.п. |
-| 24 | **Идентификация и доверие** | Mutual TLS или API-key trust между агентами; ACL per-agent для навыков и памяти. |
-| 25 | **Rate limiting и квоты** | Rate limits per-agent и per-skill; бюджеты стоимости LLM по всему mesh. |
-| 26 | **Управление жизненным циклом** | CLI и API для запуска, остановки, обновления и rollback агентов в mesh. |
-| 27 | **Edge provisioning** | Образ SD-карты / Docker-образ для Raspberry Pi с flow активации Wi-Fi и API-ключа при первом включении. |
-| 28 | **Offline resilience** | Агент буферизирует сенсорные логи и исходящие алерты; синхронизируется с mesh/облаком при возвращении связи. |
-| 29 | **Флит-шаблоны** | Один шаблон на вертикаль (теплица, холодовая цепь, серверная, вендинг) с валидированной спецификацией железа. |
+| 32 | **Mesh dashboard** | Веб-UI показывает живую топологию агентов, трафик между ними, health per-agent и heatmap использования навыков. |
+| 33 | **Централизованное логирование и трассировка** | У каждого межагентного вызова есть `traceId`; логи можно сливать в OpenTelemetry/Loki и т.п. |
+| 34 | **Идентификация и доверие** | Mutual TLS или API-key trust между агентами; ACL per-agent для навыков и памяти. |
+| 35 | **Rate limiting и квоты** | Rate limits per-agent и per-skill; бюджеты стоимости LLM по всему mesh. |
+| 36 | **Управление жизненным циклом** | CLI и API для запуска, остановки, обновления и rollback агентов в mesh. |
+| 37 | **Edge provisioning** | Образ SD-карты / Docker-образ для Raspberry Pi с flow активации Wi-Fi и API-ключа при первом включении. |
+| 38 | **Offline resilience** | Агент буферизирует сенсорные логи и исходящие алерты; синхронизируется с mesh/облаком при возвращении связи. |
+| 39 | **Флит-шаблоны** | Один шаблон на вертикаль (теплица, холодовая цепь, серверная, вендинг) с валидированной спецификацией железа. |
 
 **Доставляемый результат:** mesh Hercules можно развёртывать как набор маленьких сервисов за gateway и как флот Raspberry Pi edge-агентов с операционной видимостью.
 

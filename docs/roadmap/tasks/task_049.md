@@ -6,7 +6,7 @@
 **Slug:** `human-escalation`
 
 ## Goal
-Mesh эскалирует оператору неоднозначные, low-confidence, policy-sensitive, деструктивные и budget-exceeding операции с concise action plan и approval context.
+Mesh эскалирует неоднозначные, low-confidence, policy-sensitive, разрушительные или budget-exceeding операции с кратким action plan и контекстом для подтверждения человеком. Гейты выполнения обеспечиваются кодом, а не только промптами.
 
 ## Acceptance criteria
 - [ ] TBD при старте работы (декомпозиция в sub-tasks)
@@ -19,7 +19,7 @@ src/agent/Mesh/Escalation/, src/hercules-web/src/components/EscalationPanel.astr
 - блокирует / опирается на: [task_040 — trust-admission](task_040.md)
 
 ## Risks / Rollback
-Operator fatigue; приоритизация и группировка эскалаций.
+Operator fatigue; агрегация эскалаций + приоритезация + удобный batch-approve.
 
 ## Links
 - Backlog: [../backlog.md](../backlog.md)

@@ -6,7 +6,7 @@
 **Slug:** `verification-pipeline`
 
 ## Goal
-High-impact ответы проверяются независимым verifier skill, source policy, numeric validator или вторым агентом до возврата/действия.
+High-impact или safety-sensitive ответы проверяются verifier-навыками, числовыми валидаторами, policy-enforcer'ами или независимыми peer-агентами до возврата пользователю или выполнения действия.
 
 ## Acceptance criteria
 - [ ] TBD при старте работы (декомпозиция в sub-tasks)
@@ -19,7 +19,7 @@ src/agent/Mesh/Verification/
 - блокирует / опирается на: [task_040 — trust-admission](task_040.md)
 
 ## Risks / Rollback
-Verifier сам может ошибаться; meta-verification для критичных операций.
+Verifier может быть скомпрометирован или ошибочен; meta-verification несколькими независимыми проверками + re-check критических операций.
 
 ## Links
 - Backlog: [../backlog.md](../backlog.md)

@@ -89,30 +89,41 @@ flowchart LR
 
 ## Phase 4 — Mesh orchestration (Q2 2027)
 
-Goal: a network of micro-agents behaves like one coherent agent system, with routing, retries, observability, and shared learning.
+Goal: a network of micro-agents behaves like one coherent agent system, with capability-aware routing, bounded delegation, retries, observability, shared learning, and optional distributed backends for larger meshes.
 
 ```mermaid
 flowchart TD
-    User["User request"] -->|1. ask| Router["Mesh router"]
-    Router -->|2a. local skill| Skills["Local skills"]
-    Router -->|2b. forward intent| Peer["Peer agent"]
+    User["User request"] --> Router["Mesh router"]
+    Router -->|2a. local skill| Local["Local skills"]
+    Router -->|2b. forward intent| Peer["Best peer agent"]
     Router -->|2c. fan-out| Peers["Peer A\nPeer B\nPeer C"]
-    Peers -->|3. judge / vote| Judge["LLM judge"]
-    Skills -->|4. answer| User
-    Peer -->|4. answer| User
-    Judge -->|4. best answer| User
-    Reflection["Distributed reflection"] -->|5. improve| Skills
+    Peers --> Judge["Verifier / LLM judge"]
+    Local --> Response["Typed response"]
+    Peer --> Response
+    Judge --> Response
+    Response --> User
+    Eval["Distributed reflection"] --> Skills["Candidate skill versions"]
 ```
 
 | # | Initiative | Outcome |
 | - | ---------- | ------- |
-| 17 | **Mesh router** | When a local skill is missing or confidence is low, the agent forwards the request to the most suitable peer agent. |
-| 18 | **Fan-out / fan-in** | A request can be broadcast to several agents and the best answer selected by an LLM judge or voting. |
-| 19 | **Retry and circuit breaker** | Failed peer calls are retried, logged, and eventually short-circuited. |
-| 20 | **Distributed reflection** | Reflection reports include peer-agent performance and suggest new skills or peer relationships. |
-| 21 | **Shared memory sync** | Optional synchronization of selected memory facts and skills across trusted agents in the mesh. |
+| 17 | **Mesh router** | When a local skill is missing, ineligible, or below its confidence threshold, the agent forwards the request to the most suitable trusted peer agent based on capability, policy, health, latency, and expected quality. |
+| 18 | **Fan-out / fan-in** | A request can be broadcast to several eligible agents under strict concurrency and budget limits; responses are validated against schemas and selected by deterministic rules, voting, or an optional judge model. |
+| 19 | **Retry and circuit breaker** | Failed peer calls use deadline-aware retries, exponential backoff with jitter, per-peer circuit breakers, and bulkheads. Non-idempotent operations are never retried blindly and require idempotency keys. |
+| 20 | **Distributed reflection** | Reflection reports include peer-agent performance, routing decisions, failure patterns, and suggest new skills, routing rules, or peer relationships. They create proposals, not unreviewed production changes. |
+| 21 | **Shared memory sync** | Selected memory facts and skills can be synchronised between trusted agents using explicit namespaces, provenance, conflict-resolution rules, TTL, encryption in transit, and per-field data-classification policy. |
+| 22 | **Verification pipeline** | High-impact or safety-sensitive answers can be checked by verifier skills, numeric validators, policy enforcers, or independent peer agents before being returned or acted upon. |
+| 23 | **Delegation boundaries** | The mesh limits hop count, fan-out width, cumulative tool calls, total cost, and elapsed time per request. Agents may decline delegation rather than exceeding their policy or capacity. |
+| 24 | **Human-in-the-loop escalation** | Ambiguous, low-confidence, destructive, or policy-sensitive operations are escalated with a concise action plan and context for human approval. Execution gates are enforced by code, not by prompts alone. |
+| 25 | **Mesh observability** | Every local and inter-agent step emits correlated traces, metrics, and structured logs. Mesh traffic, routing decisions, retries, and backing-store interactions are visible and attributable per request and per agent. |
+| 26 | **Mesh backends abstraction** | `IMeshBus`, `ITaskQueue`, and `IMeshStateStore` interfaces decouple mesh orchestration from concrete backends. A single-host mesh continues to run with in-process queues and SQLite by default. |
+| 27 | **Redis/Valkey coordination backend** | Optional RESP-compatible in-memory backend (Redis or Valkey) provides working memory, distributed locks, and ephemeral queues for coordination at higher concurrency. Durable truth remains in SQLite/PostgreSQL. |
+| 28 | **NATS / JetStream transport option** | Optional NATS messaging backbone provides subject-based routing, queue groups for load-balanced agent workers, and JetStream streams for durable, at-least-once delivery and replay when agents disconnect. |
+| 29 | **PostgreSQL shared state backend** | Optional PostgreSQL-backed state store holds cross-agent workflow state, shared skill registries, evaluation records, and audit logs. Job queues use `SKIP LOCKED` patterns for moderate-throughput agent execution. |
+| 30 | **Backend profiles and degradation** | Deployment profiles declare whether the mesh uses only local SQLite, Redis/Valkey, NATS, PostgreSQL, or combinations. If a backend becomes unavailable, agents degrade to local-only mode or stop accepting new delegations according to policy, instead of failing silently. |
+| 31 | **Mesh evaluation suite** | Reproducible scenarios measure task success, safety denials, routing quality, latency, cost, resilience, and degradation when a peer, tool, backend, or LLM provider fails or becomes slow. |
 
-**Deliverable:** a mesh of 3–5 Hercules agents can answer queries that no single agent could answer alone.
+**Deliverable:** a mesh of 3–5 Hercules agents can safely answer queries that no single agent could answer alone, with bounded cost and explainable delegation. Larger swarms can opt into Redis/Valkey, NATS, and PostgreSQL backends through configuration profiles, without making any external service mandatory for a single local agent.
 
 ---
 
@@ -122,14 +133,14 @@ Goal: make the mesh production-ready, observable, and governable — including f
 
 | # | Initiative | Outcome |
 | - | ---------- | ------- |
-| 22 | **Mesh dashboard** | Web UI shows live agent topology, traffic between agents, per-agent health, and skill usage heatmap. |
-| 23 | **Centralized logging and tracing** | Every inter-agent call has a `traceId`; logs can be shipped to OpenTelemetry/Loki/etc. |
-| 24 | **Identity and trust** | Mutual TLS or API-key trust between agents; per-agent access control lists for skills and memory. |
-| 25 | **Rate limiting and quotas** | Per-agent and per-skill rate limits; LLM cost budgets across the mesh. |
-| 26 | **Lifecycle management** | CLI and API to start, stop, update, and rollback agents in the mesh. |
-| 27 | **Edge provisioning** | SD-card image / Docker image for Raspberry Pi with first-boot Wi-Fi and API-key activation flow. |
-| 28 | **Offline resilience** | Agent buffers sensor logs and outgoing alerts; syncs with mesh/cloud when connectivity returns. |
-| 29 | **Fleet templates** | One template per vertical (greenhouse, cold-chain, closet, vending) with validated hardware bill of materials. |
+| 32 | **Mesh dashboard** | Web UI shows live agent topology, traffic between agents, per-agent health, and skill usage heatmap. |
+| 33 | **Centralized logging and tracing** | Every inter-agent call has a `traceId`; logs can be shipped to OpenTelemetry/Loki/etc. |
+| 34 | **Identity and trust** | Mutual TLS or API-key trust between agents; per-agent access control lists for skills and memory. |
+| 35 | **Rate limiting and quotas** | Per-agent and per-skill rate limits; LLM cost budgets across the mesh. |
+| 36 | **Lifecycle management** | CLI and API to start, stop, update, and rollback agents in the mesh. |
+| 37 | **Edge provisioning** | SD-card image / Docker image for Raspberry Pi with first-boot Wi-Fi and API-key activation flow. |
+| 38 | **Offline resilience** | Agent buffers sensor logs and outgoing alerts; syncs with mesh/cloud when connectivity returns. |
+| 39 | **Fleet templates** | One template per vertical (greenhouse, cold-chain, closet, vending) with validated hardware bill of materials. |
 
 **Deliverable:** Hercules mesh can be deployed as a set of small services behind a gateway, and as a fleet of Raspberry Pi edge agents, with operational visibility.
 
