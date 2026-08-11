@@ -5,6 +5,7 @@ using System.Text.Json;
 using HerculesBus;
 using HerculesBus.Http;
 using HerculesBus.InMemory;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Hercules.Agent.Tests.BusTests;
@@ -25,8 +26,8 @@ public class HerculesBusHttpServerTests : IAsyncLifetime
       var port = GetFreePort();
       _baseUrl = $"http://localhost:{port}/";
 
-      var bus = new Bus(new InMemoryChannelStore(), new InMemoryAgentRegistry(), new InMemoryEventBus());
-      _server = new HerculesBusHttpServer(bus, _baseUrl);
+      var bus = new Bus(new InMemoryChannelStore(), new InMemoryAgentRegistry(), new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
+      _server = new HerculesBusHttpServer(bus, NullLogger<HerculesBusHttpServer>.Instance, _baseUrl);
       _server.AddToken(_token);
 
       _http = new HttpClient { BaseAddress = new Uri(_baseUrl) };

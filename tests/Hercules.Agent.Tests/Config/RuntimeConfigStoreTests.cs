@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Hercules.Config;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Hercules.Agent.Tests.Config;
@@ -28,7 +29,7 @@ public class RuntimeConfigStoreTests
       try
       {
          var initial = SampleConfig();
-         var store = new RuntimeConfigStore(initial, path);
+         var store = new RuntimeConfigStore(initial, path, NullLogger<RuntimeConfigStore>.Instance);
 
          Assert.Same(initial, store.Current);
          Assert.Equal("yandexgpt", store.Current.Llm.Provider);
@@ -45,7 +46,7 @@ public class RuntimeConfigStoreTests
       var path = NewTempFile();
       try
       {
-         var store = new RuntimeConfigStore(SampleConfig(), path);
+         var store = new RuntimeConfigStore(SampleConfig(), path, NullLogger<RuntimeConfigStore>.Instance);
          var next = new AppConfig
          {
             Llm = new LlmConfig { Provider = "ollama-local" },
@@ -72,7 +73,7 @@ public class RuntimeConfigStoreTests
       var path = NewTempFile();
       try
       {
-         var store = new RuntimeConfigStore(SampleConfig(), path);
+         var store = new RuntimeConfigStore(SampleConfig(), path, NullLogger<RuntimeConfigStore>.Instance);
          AppConfig? received = null;
          store.Changed += (_, cfg) => received = cfg;
 
@@ -104,7 +105,7 @@ public class RuntimeConfigStoreTests
             },
             Agent = new AgentConfig { SkillCreationThreshold = 3, ReflectionEveryNCommands = 10 }
          };
-         var store = new RuntimeConfigStore(initial, path);
+         var store = new RuntimeConfigStore(initial, path, NullLogger<RuntimeConfigStore>.Instance);
 
          // Патчим только llm.provider — остальные поля llm должны сохраниться.
          // Merge patch использует camelCase (JsonNamingPolicy.CamelCase в JsonOptions).
@@ -135,7 +136,7 @@ public class RuntimeConfigStoreTests
          {
             Agent = new AgentConfig { SystemPrompt = "старый промпт", SkillCreationThreshold = 3 }
          };
-         var store = new RuntimeConfigStore(initial, path);
+         var store = new RuntimeConfigStore(initial, path, NullLogger<RuntimeConfigStore>.Instance);
 
          // Патчим systemPrompt = null → должен удалиться из результата (camelCase).
          var patch = JsonDocument.Parse("""{"agent":{"systemPrompt":null}}""").RootElement;
@@ -158,7 +159,7 @@ public class RuntimeConfigStoreTests
       var path = NewTempFile();
       try
       {
-         var store = new RuntimeConfigStore(SampleConfig(), path);
+         var store = new RuntimeConfigStore(SampleConfig(), path, NullLogger<RuntimeConfigStore>.Instance);
          var eventCount = 0;
          store.Changed += (_, _) => eventCount++;
 
@@ -180,7 +181,7 @@ public class RuntimeConfigStoreTests
       var path = NewTempFile();
       try
       {
-         var store = new RuntimeConfigStore(SampleConfig(), path);
+         var store = new RuntimeConfigStore(SampleConfig(), path, NullLogger<RuntimeConfigStore>.Instance);
 
          var patch = JsonDocument.Parse("""{"llm":{"provider":"ollama-cloud"}}""").RootElement;
          store.Patch(patch);
@@ -203,7 +204,7 @@ public class RuntimeConfigStoreTests
       var path = NewTempFile();
       try
       {
-         var store = new RuntimeConfigStore(SampleConfig(), path);
+         var store = new RuntimeConfigStore(SampleConfig(), path, NullLogger<RuntimeConfigStore>.Instance);
          store.Update(new AppConfig { Llm = new LlmConfig { Provider = "ollama-local" } });
 
          Assert.True(File.Exists(path));

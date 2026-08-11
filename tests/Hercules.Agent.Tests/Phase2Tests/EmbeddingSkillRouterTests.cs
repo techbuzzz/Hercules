@@ -1,6 +1,7 @@
 using Hercules.Config;
 using Hercules.Skills;
 using Hercules.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Hercules.Agent.Tests.Phase2Tests;
@@ -18,7 +19,7 @@ public class EmbeddingSkillRouterTests : IDisposable
       _tempDir = Path.Combine(Path.GetTempPath(), $"hercules-emb-{Guid.NewGuid():N}");
       Directory.CreateDirectory(_tempDir);
       var storageCfg = new StorageConfig { DataRoot = _tempDir };
-      _repo = new FileSkillRepository(storageCfg);
+      _repo = new FileSkillRepository(storageCfg, NullLogger<FileSkillRepository>.Instance);
       _skillManager = new SkillManager(_repo, new StubLlm("test"), new AgentConfig());
       _embedder = new StubEmbeddingProvider();
       _router = new EmbeddingSkillRouter(_embedder, _skillManager)

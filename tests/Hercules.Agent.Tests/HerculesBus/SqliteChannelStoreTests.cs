@@ -2,6 +2,7 @@ using HerculesBus;
 using HerculesBus.Core;
 using HerculesBus.InMemory;
 using HerculesBus.Sqlite;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Hercules.Agent.Tests.BusTests;
@@ -23,7 +24,7 @@ public class SqliteChannelStoreTests : IAsyncDisposable
       var connStr = $"Data Source={_dbPath}";
       _store = new SqliteChannelStore(connStr);
       _registry = new SqliteAgentRegistry(connStr);
-      _bus = new Bus(_store, _registry, new InMemoryEventBus());
+      _bus = new Bus(_store, _registry, new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
    }
 
    public async ValueTask DisposeAsync()
@@ -145,7 +146,7 @@ public class SqliteChannelStoreTests : IAsyncDisposable
       // Новый Bus с тем же SQLite — сообщения должны быть
       await using var store2 = new SqliteChannelStore($"Data Source={_dbPath}");
       await using var reg2 = new SqliteAgentRegistry($"Data Source={_dbPath}");
-      var bus2 = new Bus(store2, reg2, new InMemoryEventBus());
+      var bus2 = new Bus(store2, reg2, new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
 
       var recent = await bus2.GetRecentAsync("main");
       Assert.Equal(2, recent.Count);

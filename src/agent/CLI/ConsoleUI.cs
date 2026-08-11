@@ -278,9 +278,8 @@ public sealed class ConsoleUI(
     private async Task ShutdownAsync(CancellationToken ct)
     {
         AnsiConsole.MarkupLine("[grey]Сохраняю память и запускаю финальную рефлексию...[/]");
-        await AnsiConsole.Status().StartAsync("Завершение сессии...", async _ => { await memory.PersistSessionAsync(agent.Transcript, ct); });
+        await AnsiConsole.Status().StartAsync("Завершение сессии...", async _ => { await agent.EndSessionAsync(ct); });
         await RunReflection(ct);
-        agent.EndSession();
         AnsiConsole.MarkupLine("[green]До встречи![/]");
     }
 

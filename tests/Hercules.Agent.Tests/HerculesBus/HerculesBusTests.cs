@@ -1,6 +1,7 @@
 using HerculesBus;
 using HerculesBus.Core;
 using HerculesBus.InMemory;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Hercules.Agent.Tests.BusTests;
@@ -12,7 +13,7 @@ public class HerculesBusTests
       return new Bus(
          new InMemoryChannelStore(),
          new InMemoryAgentRegistry(),
-         new InMemoryEventBus());
+         new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance));
    }
 
    [Fact]

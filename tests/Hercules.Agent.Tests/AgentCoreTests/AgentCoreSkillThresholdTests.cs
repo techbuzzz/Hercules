@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Hercules.Agent.Tests.AgentCoreTests;
@@ -63,7 +64,7 @@ public class AgentCoreSkillThresholdTests : IDisposable
       Directory.CreateDirectory(_tempDir);
       var storageCfg = new StorageConfig { DataRoot = _tempDir };
       _sessions = new SqliteSessionStore(storageCfg);
-      _skillRepo = new FileSkillRepository(storageCfg);
+      _skillRepo = new FileSkillRepository(storageCfg, NullLogger<FileSkillRepository>.Instance);
       _skillManager = new SkillManager(_skillRepo, new StubLlmClient("test"), new AgentConfig
       {
          SkillCreationThreshold = 3,
@@ -103,7 +104,8 @@ public class AgentCoreSkillThresholdTests : IDisposable
          _skillManager,
          _memory,
          _sessions,
-         cfg ?? new AgentConfig { SkillCreationThreshold = 3, SkillImprovementThreshold = 0.6, SkillEvaluationWindow = 5 });
+         cfg ?? new AgentConfig { SkillCreationThreshold = 3, SkillImprovementThreshold = 0.6, SkillEvaluationWindow = 5 },
+         NullLogger<AgentCore>.Instance);
    }
 
    [Fact]
@@ -198,7 +200,7 @@ public class AgentCoreSkillThresholdTests : IDisposable
       // Теперь запрос с low confidence должен предложить улучшение
       var lowCore = new AgentCore(
          new StubLlmClient("плохой ответ", "low"),
-         _router, _skillManager, _memory, _sessions, cfg);
+         _router, _skillManager, _memory, _sessions, cfg, NullLogger<AgentCore>.Instance);
       lowCore.StartSession();
 
       var resp = await lowCore.HandleAsync("тестовый запрос");
@@ -239,7 +241,7 @@ public class AgentCoreSkillThresholdTests : IDisposable
       var initialCfg = new AgentConfig { SkillCreationThreshold = 3, ReflectionEveryNCommands = 10 };
       var core = new AgentCore(
          new StubLlmClient("x"),
-         _router, _skillManager, _memory, _sessions, initialCfg);
+         _router, _skillManager, _memory, _sessions, initialCfg, NullLogger<AgentCore>.Instance);
 
       var newCfg = new AppConfig
       {

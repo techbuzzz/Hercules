@@ -1,6 +1,7 @@
 using Hercules.Config;
 using Hercules.Skills;
 using Hercules.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Hercules.Agent.Tests.Phase2Tests;
@@ -18,7 +19,7 @@ public class SkillMarketplaceTests : IDisposable
       _tempDir = Path.Combine(Path.GetTempPath(), $"hercules-mkt-{Guid.NewGuid():N}");
       Directory.CreateDirectory(_tempDir);
       var storageCfg = new StorageConfig { DataRoot = _tempDir };
-      _repo = new FileSkillRepository(storageCfg);
+      _repo = new FileSkillRepository(storageCfg, NullLogger<FileSkillRepository>.Instance);
       _packager = new SkillPackager(_repo);
       _skillManager = new SkillManager(_repo, new StubLlm("test"), new AgentConfig());
       _marketplace = new SkillMarketplace(storageCfg, _packager);

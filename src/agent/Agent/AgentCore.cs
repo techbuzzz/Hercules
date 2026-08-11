@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Hercules.Agent.Loop;
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.Storage;
@@ -121,36 +123,43 @@ public sealed class AgentCore : IConfigReload
     public async Task<AgentResponse> HandleAsync(string input, CancellationToken ct = default)
     {
         CommandCount++;
+        var loopCtx = LoopContext.Initial;
 
-        // 1-2. Маршрутизация навыка
+        // [Loop] Step 1 — Skill routing
+        _logger.LogDebug("[Loop] {Step} started (input: {InputLen} chars)", loopCtx.CurrentStep, input.Length);
+        var routeSw = Stopwatch.StartNew();
         RouteResult route = _router.Route(input);
         _lastInput = input;
         var systemPrompt = BuildSystemPrompt(route.MatchedSkill);
+        routeSw.Stop();
+        _logger.LogDebug("[Loop] {Step} finished in {ElapsedMs}ms — skill={SkillName}",
+            LoopStep.SkillRoute, routeSw.ElapsedMilliseconds, route.MatchedSkill?.Meta.Name ?? "(direct)");
 
-        // 3. Вызов LLM (с возможной tool-итерацией)
-        List<ChatTurn> messages = BuildMessages(systemPrompt, input);
+        // [Loop] Step 2 — LLM call (with tool iteration)
+        var messages = BuildMessages(systemPrompt, input);
+        loopCtx = loopCtx with { CurrentStep = LoopStep.LlmCall };
+        _logger.LogDebug("[Loop] {Step} started", loopCtx.CurrentStep);
         LlmResponse llmResp;
-        var toolUsed = "";
+        string toolUsed = "";
         try
         {
-            (llmResp, toolUsed) = await RunWithToolsAsync(messages, ct);
+            (llmResp, toolUsed, loopCtx) = await RunWithToolsAsync(messages, loopCtx, ct);
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "[Loop] {Step} failed: {Error}", LoopStep.LlmCall, ex.Message);
             return new AgentResponse
             {
                 Answer = $"Ошибка обращения к LLM: {ex.Message}",
                 Confidence = "low",
-                Mode = route.IsSkill
-                    ? "skill"
-                    : "direct",
+                Mode = route.IsSkill ? "skill" : "direct",
                 UsedSkill = route.MatchedSkill
             };
         }
 
         var (answer, confidence) = ExtractConfidence(llmResp.Text);
 
-        // Поддержка диалогового контекста (история)
+        // [Loop] Step 3 — Transcript update
         lock (_transcriptLock)
         {
             _transcript.Add(new ChatTurn(ChatRole.User, input));
@@ -159,11 +168,10 @@ public sealed class AgentCore : IConfigReload
 
         var mode = !string.IsNullOrEmpty(toolUsed)
             ? "tool"
-            : route.IsSkill
-                ? "skill"
-                : "direct";
+            : route.IsSkill ? "skill" : "direct";
 
-        // 4. Логирование взаимодействия
+        // [Loop] Step 4 — Interaction log
+        var logCtx = loopCtx with { CurrentStep = LoopStep.LogInteraction };
         _sessions.LogInteraction(new InteractionLog(
             SessionId, input, answer, confidence, mode,
             route.MatchedSkill?.Meta.Id, llmResp.Provider, DateTime.UtcNow));
@@ -174,7 +182,7 @@ public sealed class AgentCore : IConfigReload
             _skills.RecordUsage(route.MatchedSkill!.Meta.Id, confidence != "low", confidence);
         }
 
-        // 5-6. Пороги (skill creation/improvement) — без изменений
+        // 5-6. Пороги (skill creation/improvement)
         return BuildResponse(answer, confidence, llmResp.Provider, route.MatchedSkill, toolUsed, mode);
     }
 
@@ -182,9 +190,10 @@ public sealed class AgentCore : IConfigReload
     ///     Вызвать LLM с возможной tool-итерацией: если LLM вернул JSON с action,
     ///     выполнить tool, положить результат в transcript, вызвать LLM снова.
     ///     Max MaxToolIterations итераций (защита от infinite loops).
+    ///     Контекст обновляется после каждого tool execution для observability.
     /// </summary>
-    private async Task<(LlmResponse Response, string ToolUsed)> RunWithToolsAsync(
-        List<ChatTurn> messages, CancellationToken ct)
+    private async Task<(LlmResponse Response, string ToolUsed, LoopContext Context)> RunWithToolsAsync(
+        List<ChatTurn> messages, LoopContext ctx, CancellationToken ct)
     {
         var toolUsed = "";
         LlmResponse last = default!;
@@ -194,14 +203,16 @@ public sealed class AgentCore : IConfigReload
 
             if (_tools is null || _tools.Names.Count == 0)
             {
-                return (last, toolUsed);
+                _logger.LogDebug("[Loop] {Step} finished (no tools configured)", LoopStep.LlmCall);
+                return (last, toolUsed, ctx);
             }
 
             // Try to parse tool action from LLM output
             (string Name, string ArgsJson)? action = TryParseAction(last.Text);
             if (action is null)
             {
-                return (last, toolUsed);
+                _logger.LogDebug("[Loop] {Step} finished — no tool action parsed", LoopStep.LlmCall);
+                return (last, toolUsed, ctx);
             }
 
             var (toolName, argsJson) = action.Value;
@@ -215,8 +226,12 @@ public sealed class AgentCore : IConfigReload
                 continue;
             }
 
-            // Execute tool
+            // Execute tool — log step
             toolUsed = toolName;
+            ctx = ctx.AfterTool(toolName);
+            _logger.LogDebug("[Loop] {Step} started — tool={ToolName} iter={Iter}",
+                LoopStep.ToolExecute, toolName, iter);
+
             ToolResult toolResult = await tool.ExecuteAsync(argsJson, ct);
             var resultJson = JsonSerializer.Serialize(new
             {
@@ -238,10 +253,12 @@ public sealed class AgentCore : IConfigReload
             {
                 messages.Add(new ChatTurn(ChatRole.System,
                     "[system] Maximum tool iterations reached. Provide final answer now."));
+                _logger.LogWarning("[Loop] {Step} — max iterations ({Max}) reached, stopping tool loop",
+                    LoopStep.ToolExecute, MaxToolIterations);
             }
         }
 
-        return (last, toolUsed);
+        return (last, toolUsed, ctx);
     }
 
     private static (string Name, string ArgsJson)? TryParseAction(string llmText)
@@ -329,6 +346,19 @@ public sealed class AgentCore : IConfigReload
                CommandCount % _cfg.ReflectionEveryNCommands == 0;
     }
 
+    /// <summary>
+    ///     Завершить сессию: записать транскрипт в память и закрыть сессионное хранилище.
+    /// </summary>
+    public async Task EndSessionAsync(CancellationToken ct = default)
+    {
+        // [Loop] Memory update — сохраняем итоги сессии
+        _logger.LogDebug("[Loop] {Step} started — session={SessionId}", LoopStep.MemoryUpdate, SessionId);
+        await _memory.PersistSessionAsync(Transcript, ct);
+        _sessions.EndSession(SessionId);
+        _logger.LogDebug("[Loop] {Step} finished", LoopStep.MemoryUpdate);
+    }
+
+    /// <summary>Завершить сессию синхронно (без сохранения памяти — для совместимости).</summary>
     public void EndSession()
     {
         _sessions.EndSession(SessionId);
