@@ -12,10 +12,10 @@ namespace HerculesBus.InMemory;
 /// </summary>
 public sealed class InMemoryChannelStore : IChannelStore
 {
-    private readonly ConcurrentDictionary<string, BusChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, AgentMessage> _messages = new(StringComparer.Ordinal);
     private readonly object _appendLock = new();
     private readonly ConcurrentDictionary<string, List<string>> _channelMessages = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, BusChannel> _channels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, AgentMessage> _messages = new(StringComparer.Ordinal);
 
     /// <summary>Максимальное количество сообщений в канале. При превышении удаляются самые старые.</summary>
     public int MaxMessagesPerChannel { get; set; } = 10_000;
@@ -25,11 +25,11 @@ public sealed class InMemoryChannelStore : IChannelStore
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
         var existing = _channels.GetOrAdd(name, _ => new BusChannel(
-            Name: name,
-            Description: description,
-            IsPrivate: isPrivate,
-            CreatedAt: DateTimeOffset.UtcNow,
-            CreatedBy: createdBy));
+            name,
+            description,
+            isPrivate,
+            DateTimeOffset.UtcNow,
+            createdBy));
 
         return Task.FromResult(existing);
     }
@@ -52,7 +52,9 @@ public sealed class InMemoryChannelStore : IChannelStore
         // Server-assigned ID + timestamp, если не заданы
         var withMeta = message with
         {
-            Id = string.IsNullOrEmpty(message.Id) ? Ulid.NewId() : message.Id,
+            Id = string.IsNullOrEmpty(message.Id)
+                ? Ulid.NewId()
+                : message.Id,
             Timestamp = message.Timestamp ?? DateTimeOffset.UtcNow
         };
 
@@ -65,10 +67,11 @@ public sealed class InMemoryChannelStore : IChannelStore
             if (list.Count > MaxMessagesPerChannel)
             {
                 var evictCount = list.Count - MaxMessagesPerChannel;
-                for (int i = 0; i < evictCount; i++)
+                for (var i = 0; i < evictCount; i++)
                 {
                     _messages.TryRemove(list[i], out _);
                 }
+
                 list.RemoveRange(0, evictCount);
             }
         }
@@ -79,20 +82,27 @@ public sealed class InMemoryChannelStore : IChannelStore
     public Task<IReadOnlyList<AgentMessage>> GetRecentMessagesAsync(string channel, int limit = 50, string? beforeId = null, CancellationToken ct = default)
     {
         if (!_channelMessages.TryGetValue(channel, out var ids))
+        {
             return Task.FromResult<IReadOnlyList<AgentMessage>>(Array.Empty<AgentMessage>());
+        }
 
         IEnumerable<string> filtered = ids;
         if (beforeId != null)
         {
             var idx = ids.IndexOf(beforeId);
-            if (idx > 0) filtered = ids.Take(idx);
+            if (idx > 0)
+            {
+                filtered = ids.Take(idx);
+            }
         }
 
         var result = filtered
             .Reverse()
             .Take(limit)
             .Reverse()
-            .Select(id => _messages.TryGetValue(id, out var m) ? m : null)
+            .Select(id => _messages.TryGetValue(id, out var m)
+                ? m
+                : null)
             .Where(m => m != null)
             .Cast<AgentMessage>()
             .ToList();

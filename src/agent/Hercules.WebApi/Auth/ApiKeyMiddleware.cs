@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using Hercules.WebApi.Config;
 
 namespace Hercules.WebApi.Auth;
@@ -12,16 +13,14 @@ public sealed class ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILo
 {
     public const string HeaderName = "X-Api-Key";
 
-    private readonly byte[] _expectedKeyBytes = System.Text.Encoding.UTF8.GetBytes(cfg.ApiKey ?? "");
+    private readonly byte[] _expectedKeyBytes = Encoding.UTF8.GetBytes(cfg.ApiKey ?? "");
 
     public async Task InvokeAsync(HttpContext context)
     {
         var path = context.Request.Path;
 
         // CORS preflight, не-API маршруты и публичный health-check пропускаем без проверки.
-        if (HttpMethods.IsOptions(context.Request.Method)
-            || !path.StartsWithSegments("/api")
-            || path.StartsWithSegments("/api/health"))
+        if (HttpMethods.IsOptions(context.Request.Method) || !path.StartsWithSegments("/api") || path.StartsWithSegments("/api/health"))
         {
             await next(context);
             return;
@@ -36,7 +35,7 @@ public sealed class ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILo
 
         if (!context.Request.Headers.TryGetValue(HeaderName, out var provided) ||
             !CryptographicOperations.FixedTimeEquals(
-                System.Text.Encoding.UTF8.GetBytes(provided.ToString()),
+                Encoding.UTF8.GetBytes(provided.ToString()),
                 _expectedKeyBytes))
         {
             logger.LogWarning("Отклонён запрос {Path}: неверный или отсутствующий {Header}", path, HeaderName);

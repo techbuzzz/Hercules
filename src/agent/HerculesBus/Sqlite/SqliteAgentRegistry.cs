@@ -1,3 +1,4 @@
+using System.Data;
 using System.Text.Json;
 using HerculesBus.Core;
 using Microsoft.Data.Sqlite;
@@ -16,7 +17,10 @@ public sealed class SqliteAgentRegistry : IAgentRegistry, IAsyncDisposable
     public SqliteAgentRegistry(string connectionString)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
+        {
             throw new ArgumentException("Connection string required", nameof(connectionString));
+        }
+
         _conn = new SqliteConnection(connectionString);
         _conn.Open();
         _weOwnConn = true;
@@ -27,7 +31,11 @@ public sealed class SqliteAgentRegistry : IAgentRegistry, IAsyncDisposable
     {
         _conn = sharedConnection ?? throw new ArgumentNullException(nameof(sharedConnection));
         _weOwnConn = false;
-        if (_conn.State != System.Data.ConnectionState.Open) _conn.Open();
+        if (_conn.State != ConnectionState.Open)
+        {
+            _conn.Open();
+        }
+
         SqliteSchema.EnsureCreated(_conn);
     }
 
@@ -57,17 +65,20 @@ ON CONFLICT(agent_id) DO UPDATE SET
         cmd.Parameters.AddWithValue("$registered_at", (existing?.RegisteredAt ?? now).ToString("O"));
         cmd.Parameters.AddWithValue("$last_seen", now.ToString("O"));
         cmd.Parameters.AddWithValue("$subscribed_channels",
-            (object?)(identity.SubscribedChannels is { Count: > 0 } ? string.Join(",", identity.SubscribedChannels) : null) ?? DBNull.Value);
+            (object?)(identity.SubscribedChannels is { Count: > 0 }
+                ? string.Join(",", identity.SubscribedChannels)
+                : null) ??
+            DBNull.Value);
         await cmd.ExecuteNonQueryAsync(ct);
 
         var info = new AgentInfo(
-            AgentId: identity.AgentId,
-            DisplayName: identity.DisplayName,
-            Roles: identity.Roles,
-            Status: AgentStatus.Online,
-            RegisteredAt: existing?.RegisteredAt ?? now,
-            LastSeen: now,
-            SubscribedChannels: identity.SubscribedChannels);
+            identity.AgentId,
+            identity.DisplayName,
+            identity.Roles,
+            AgentStatus.Online,
+            existing?.RegisteredAt ?? now,
+            now,
+            identity.SubscribedChannels);
 
         return new AgentRegistrationResult(isNew, info);
     }
@@ -95,7 +106,10 @@ FROM bus_agents ORDER BY agent_id";
         {
             result.Add(ReadAgent(reader));
         }
-        return includeOffline ? result : result.Where(a => a.IsOnline).ToList();
+
+        return includeOffline
+            ? result
+            : result.Where(a => a.IsOnline).ToList();
     }
 
     public async Task<AgentInfo?> GetAsync(string agentId, CancellationToken ct = default)
@@ -106,33 +120,47 @@ SELECT agent_id, display_name, roles_json, status, registered_at, last_seen, sub
 FROM bus_agents WHERE agent_id = $agent_id";
         cmd.Parameters.AddWithValue("$agent_id", agentId);
         using var reader = await cmd.ExecuteReaderAsync(ct);
-        if (await reader.ReadAsync(ct)) return ReadAgent(reader);
+        if (await reader.ReadAsync(ct))
+        {
+            return ReadAgent(reader);
+        }
+
         return null;
-    }
-
-    private static AgentInfo ReadAgent(SqliteDataReader r)
-    {
-        var rolesJson = r.GetString(2);
-        var roles = JsonSerializer.Deserialize<List<string>>(rolesJson) ?? new List<string>();
-        var subsStr = r.IsDBNull(6) ? null : r.GetString(6);
-        var subs = subsStr?.Split(',', StringSplitOptions.RemoveEmptyEntries);
-
-        return new AgentInfo(
-            AgentId: r.GetString(0),
-            DisplayName: r.GetString(1),
-            Roles: roles,
-            Status: Enum.Parse<AgentStatus>(r.GetString(3)),
-            RegisteredAt: DateTimeOffset.Parse(r.GetString(4)),
-            LastSeen: DateTimeOffset.Parse(r.GetString(5)),
-            SubscribedChannels: subs);
     }
 
     public ValueTask DisposeAsync()
     {
         if (_weOwnConn)
         {
-            try { _conn.Close(); _conn.Dispose(); } catch { }
+            try
+            {
+                _conn.Close();
+                _conn.Dispose();
+            }
+            catch
+            {
+            }
         }
+
         return ValueTask.CompletedTask;
+    }
+
+    private static AgentInfo ReadAgent(SqliteDataReader r)
+    {
+        var rolesJson = r.GetString(2);
+        var roles = JsonSerializer.Deserialize<List<string>>(rolesJson) ?? new List<string>();
+        var subsStr = r.IsDBNull(6)
+            ? null
+            : r.GetString(6);
+        var subs = subsStr?.Split(',', StringSplitOptions.RemoveEmptyEntries);
+
+        return new AgentInfo(
+            r.GetString(0),
+            r.GetString(1),
+            roles,
+            Enum.Parse<AgentStatus>(r.GetString(3)),
+            DateTimeOffset.Parse(r.GetString(4)),
+            DateTimeOffset.Parse(r.GetString(5)),
+            subs);
     }
 }

@@ -48,15 +48,8 @@ public static class DangerousCodeScanner
         // Persistence
         new(@"\bRegistry\.(CurrentUser|LocalMachine|ClassesRoot)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
         new(@"\bSCHTASKS\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
-        new(@"\bcrontab\b", RegexOptions.Compiled | RegexOptions.IgnoreCase),
+        new(@"\bcrontab\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)
     };
-
-    public sealed record ScanResult(bool IsAllowed, IReadOnlyList<string> BlockedReasons, IReadOnlyList<int> LineNumbers)
-    {
-        public static ScanResult Allow { get; } = new(true, Array.Empty<string>(), Array.Empty<int>());
-        public static ScanResult Deny(string reason, int line) =>
-            new(false, new[] { reason }, new[] { line });
-    }
 
     /// <summary>
     ///     Сканировать код построчно. Возвращает на первом нарушении (fail-fast).
@@ -70,7 +63,7 @@ public static class DangerousCodeScanner
         opts.Validate();
 
         var lines = code.Split('\n');
-        for (int i = 0; i < lines.Length; i++)
+        for (var i = 0; i < lines.Length; i++)
         {
             if (IsLineExplicitlyAllowed(lines[i], opts.CustomAllowedNamespaces))
             {
@@ -102,12 +95,17 @@ public static class DangerousCodeScanner
                 }
             }
         }
+
         return ScanResult.Allow;
     }
 
     private static bool IsLineExplicitlyAllowed(string line, string[]? allowed)
     {
-        if (allowed is null || allowed.Length == 0) return false;
+        if (allowed is null || allowed.Length == 0)
+        {
+            return false;
+        }
+
         foreach (var ns in allowed)
         {
             // Token-based match: берём короткий токен (последний сегмент namespace, например "HttpClient")
@@ -127,22 +125,41 @@ public static class DangerousCodeScanner
                 return true;
             }
         }
+
         return false;
     }
 
     private static bool ContainsToken(string line, string token)
     {
         // Простая проверка: токен окружён не-identifier символами или границами строки.
-        int idx = 0;
+        var idx = 0;
         while ((idx = line.IndexOf(token, idx, StringComparison.Ordinal)) >= 0)
         {
-            bool leftOk = idx == 0 || !IsIdentifierChar(line[idx - 1]);
-            bool rightOk = idx + token.Length >= line.Length || !IsIdentifierChar(line[idx + token.Length]);
-            if (leftOk && rightOk) return true;
+            var leftOk = idx == 0 || !IsIdentifierChar(line[idx - 1]);
+            var rightOk = idx + token.Length >= line.Length || !IsIdentifierChar(line[idx + token.Length]);
+            if (leftOk && rightOk)
+            {
+                return true;
+            }
+
             idx += token.Length;
         }
+
         return false;
     }
 
-    private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+    private static bool IsIdentifierChar(char c)
+    {
+        return char.IsLetterOrDigit(c) || c == '_';
+    }
+
+    public sealed record ScanResult(bool IsAllowed, IReadOnlyList<string> BlockedReasons, IReadOnlyList<int> LineNumbers)
+    {
+        public static ScanResult Allow { get; } = new(true, Array.Empty<string>(), Array.Empty<int>());
+
+        public static ScanResult Deny(string reason, int line)
+        {
+            return new ScanResult(false, new[] { reason }, new[] { line });
+        }
+    }
 }

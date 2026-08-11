@@ -18,7 +18,7 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         {
             DataSource = dbPath,
             Mode = SqliteOpenMode.ReadWriteCreate,
-            Cache = SqliteCacheMode.Shared,
+            Cache = SqliteCacheMode.Shared
         }.ToString();
         _conn = new SqliteConnection(connStr);
         _conn.Open();
@@ -26,11 +26,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         EnableWalMode();
     }
 
-    private void EnableWalMode()
+    public ValueTask DisposeAsync()
     {
-        using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;";
-        cmd.ExecuteNonQuery();
+        _conn.Dispose();
+        return ValueTask.CompletedTask;
     }
 
     public void Dispose()
@@ -38,10 +37,11 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         _conn.Dispose();
     }
 
-    public ValueTask DisposeAsync()
+    private void EnableWalMode()
     {
-        _conn.Dispose();
-        return ValueTask.CompletedTask;
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;";
+        cmd.ExecuteNonQuery();
     }
 
     private void InitSchema()
@@ -97,7 +97,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public void StartSession(string sessionId) => StartSessionAsync(sessionId).GetAwaiter().GetResult();
+    public void StartSession(string sessionId)
+    {
+        StartSessionAsync(sessionId).GetAwaiter().GetResult();
+    }
 
     public Task EndSessionAsync(string sessionId, CancellationToken ct = default)
     {
@@ -108,7 +111,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public void EndSession(string sessionId) => EndSessionAsync(sessionId).GetAwaiter().GetResult();
+    public void EndSession(string sessionId)
+    {
+        EndSessionAsync(sessionId).GetAwaiter().GetResult();
+    }
 
     public Task LogInteractionAsync(InteractionLog log, CancellationToken ct = default)
     {
@@ -128,7 +134,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public void LogInteraction(InteractionLog log) => LogInteractionAsync(log).GetAwaiter().GetResult();
+    public void LogInteraction(InteractionLog log)
+    {
+        LogInteractionAsync(log).GetAwaiter().GetResult();
+    }
 
     /// <summary>
     ///     Увеличить счётчик нормализованного запроса и вернуть текущее количество повторов.
@@ -152,7 +161,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return Convert.ToInt32(await sel.ExecuteScalarAsync(ct) ?? 0);
     }
 
-    public int IncrementRequestCount(string normalizedInput) => IncrementRequestCountAsync(normalizedInput).GetAwaiter().GetResult();
+    public int IncrementRequestCount(string normalizedInput)
+    {
+        return IncrementRequestCountAsync(normalizedInput).GetAwaiter().GetResult();
+    }
 
     /// <summary>Сбросить счётчик повторов для запроса (после создания навыка).</summary>
     public Task ResetRequestCountAsync(string normalizedInput, CancellationToken ct = default)
@@ -163,7 +175,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return cmd.ExecuteNonQueryAsync(ct);
     }
 
-    public void ResetRequestCount(string normalizedInput) => ResetRequestCountAsync(normalizedInput).GetAwaiter().GetResult();
+    public void ResetRequestCount(string normalizedInput)
+    {
+        ResetRequestCountAsync(normalizedInput).GetAwaiter().GetResult();
+    }
 
     /// <summary>Получить low-confidence взаимодействия за текущую сессию (для рефлексии).</summary>
     public async Task<List<InteractionLog>> GetLowConfidenceAsync(string sessionId, CancellationToken ct = default)
@@ -193,7 +208,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return list;
     }
 
-    public List<InteractionLog> GetLowConfidence(string sessionId) => GetLowConfidenceAsync(sessionId).GetAwaiter().GetResult();
+    public List<InteractionLog> GetLowConfidence(string sessionId)
+    {
+        return GetLowConfidenceAsync(sessionId).GetAwaiter().GetResult();
+    }
 
     /// <summary>Сводная статистика по режимам (skill vs direct) за сессию.</summary>
     public async Task<(int Skill, int Direct)> GetModeStatsAsync(string sessionId, CancellationToken ct = default)
@@ -219,7 +237,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return (0, 0);
     }
 
-    public (int Skill, int Direct) GetModeStats(string sessionId) => GetModeStatsAsync(sessionId).GetAwaiter().GetResult();
+    public (int Skill, int Direct) GetModeStats(string sessionId)
+    {
+        return GetModeStatsAsync(sessionId).GetAwaiter().GetResult();
+    }
 
     /// <summary>Глобальная статистика режимов (skill vs direct) по всем сессиям.</summary>
     public async Task<(int Skill, int Direct)> GetGlobalModeStatsAsync(CancellationToken ct = default)
@@ -244,7 +265,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return (0, 0);
     }
 
-    public (int Skill, int Direct) GetGlobalModeStats() => GetGlobalModeStatsAsync().GetAwaiter().GetResult();
+    public (int Skill, int Direct) GetGlobalModeStats()
+    {
+        return GetGlobalModeStatsAsync().GetAwaiter().GetResult();
+    }
 
     /// <summary>
     ///     Глобальный success_rate: доля ответов с уверенностью не 'low' среди всех взаимодействий.
@@ -278,7 +302,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return 1.0;
     }
 
-    public double GetGlobalSuccessRate() => GetGlobalSuccessRateAsync().GetAwaiter().GetResult();
+    public double GetGlobalSuccessRate()
+    {
+        return GetGlobalSuccessRateAsync().GetAwaiter().GetResult();
+    }
 
     /// <summary>Количество взаимодействий по дням (для графиков фронтенда).</summary>
     public async Task<List<(string Date, int Total, int Skill, int Direct)>> GetDailyStatsAsync(int days = 14, CancellationToken ct = default)
@@ -317,7 +344,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return list;
     }
 
-    public List<(string Date, int Total, int Skill, int Direct)> GetDailyStats(int days = 14) => GetDailyStatsAsync(days).GetAwaiter().GetResult();
+    public List<(string Date, int Total, int Skill, int Direct)> GetDailyStats(int days = 14)
+    {
+        return GetDailyStatsAsync(days).GetAwaiter().GetResult();
+    }
 
     /// <summary>Общее количество взаимодействий.</summary>
     public async Task<int> GetTotalInteractionsAsync(CancellationToken ct = default)
@@ -327,7 +357,10 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct) ?? 0);
     }
 
-    public int GetTotalInteractions() => GetTotalInteractionsAsync().GetAwaiter().GetResult();
+    public int GetTotalInteractions()
+    {
+        return GetTotalInteractionsAsync().GetAwaiter().GetResult();
+    }
 
     // ---- Sandbox audit (Stage 4) ----
 
@@ -358,7 +391,9 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         cmd.Parameters.AddWithValue("$st", status);
         cmd.Parameters.AddWithValue("$d", durationMs);
         cmd.Parameters.AddWithValue("$b",
-            blockedPatterns.Count > 0 ? (object)string.Join("; ", blockedPatterns) : DBNull.Value);
+            blockedPatterns.Count > 0
+                ? string.Join("; ", blockedPatterns)
+                : DBNull.Value);
         cmd.Parameters.AddWithValue("$t", DateTime.UtcNow.ToString("o"));
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -366,7 +401,9 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
     public void LogSandboxExecution(
         string sessionId, string codeHash, string language, int? exitCode,
         string status, long durationMs, IReadOnlyList<string> blockedPatterns)
-        => LogSandboxExecutionAsync(sessionId, codeHash, language, exitCode, status, durationMs, blockedPatterns).GetAwaiter().GetResult();
+    {
+        LogSandboxExecutionAsync(sessionId, codeHash, language, exitCode, status, durationMs, blockedPatterns).GetAwaiter().GetResult();
+    }
 
     /// <summary>Последние N выполнений в sandbox (для админ-вывода).</summary>
     public async Task<List<SandboxExecutionLog>> GetRecentSandboxExecutionsAsync(int limit = 20, CancellationToken ct = default)
@@ -388,16 +425,24 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
                 r.GetString(1),
                 r.GetString(2),
                 r.GetString(3),
-                r.IsDBNull(4) ? null : r.GetInt32(4),
+                r.IsDBNull(4)
+                    ? null
+                    : r.GetInt32(4),
                 r.GetString(5),
                 r.GetInt64(6),
-                r.IsDBNull(7) ? "" : r.GetString(7),
+                r.IsDBNull(7)
+                    ? ""
+                    : r.GetString(7),
                 DateTime.Parse(r.GetString(8))));
         }
+
         return list;
     }
 
-    public List<SandboxExecutionLog> GetRecentSandboxExecutions(int limit = 20) => GetRecentSandboxExecutionsAsync(limit).GetAwaiter().GetResult();
+    public List<SandboxExecutionLog> GetRecentSandboxExecutions(int limit = 20)
+    {
+        return GetRecentSandboxExecutionsAsync(limit).GetAwaiter().GetResult();
+    }
 
     /// <summary>Failure rate за последние N выполнений (для ReflectionEngine).</summary>
     public async Task<double> GetRecentSandboxFailureRateAsync(int window = 5, CancellationToken ct = default)
@@ -413,15 +458,27 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
         if (await r.ReadAsync(ct))
         {
-            var total = r.IsDBNull(1) ? 0 : r.GetInt32(1);
-            if (total == 0) return 0.0;
-            var fails = r.IsDBNull(0) ? 0 : r.GetInt32(0);
+            var total = r.IsDBNull(1)
+                ? 0
+                : r.GetInt32(1);
+            if (total == 0)
+            {
+                return 0.0;
+            }
+
+            var fails = r.IsDBNull(0)
+                ? 0
+                : r.GetInt32(0);
             return Math.Round(fails / (double)total, 2);
         }
+
         return 0.0;
     }
 
-    public double GetRecentSandboxFailureRate(int window = 5) => GetRecentSandboxFailureRateAsync(window).GetAwaiter().GetResult();
+    public double GetRecentSandboxFailureRate(int window = 5)
+    {
+        return GetRecentSandboxFailureRateAsync(window).GetAwaiter().GetResult();
+    }
 }
 
 /// <summary>Запись о выполнении кода в sandbox (audit log).</summary>

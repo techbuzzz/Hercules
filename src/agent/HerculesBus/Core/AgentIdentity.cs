@@ -39,8 +39,7 @@ public sealed record AgentInfo(
     DateTimeOffset LastSeen,
     IReadOnlyList<string>? SubscribedChannels = null)
 {
-    public bool IsOnline => Status != AgentStatus.Offline
-        && (DateTimeOffset.UtcNow - LastSeen).TotalSeconds < 60;
+    public bool IsOnline => Status != AgentStatus.Offline && (DateTimeOffset.UtcNow - LastSeen).TotalSeconds < 60;
 }
 
 public sealed record AgentRegistrationResult(

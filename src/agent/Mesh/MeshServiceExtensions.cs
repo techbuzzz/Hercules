@@ -1,6 +1,5 @@
 using Hercules.Agent;
 using Hercules.Config;
-using Hercules.Mesh;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Hercules.Mesh;
@@ -29,7 +28,7 @@ public sealed class ManifestCapabilitiesProvider
             Name = s.Meta.Id,
             Description = s.Meta.Description,
             PhraseReceivers = s.Meta.PhraseReceivers,
-            Tools = s.Meta.Tools?.Select(t => t.Name).ToList(),
+            Tools = s.Meta.Tools?.Select(t => t.Name).ToList()
         }).ToList();
     }
 }
@@ -60,20 +59,20 @@ public static class MeshServiceCollectionExtensions
         // AgentManifestService — генерирует и публикует манифест
         services.AddSingleton<AgentManifestService>(sp =>
         {
-            var meshConfig = sp.GetRequiredService<MeshConfig>();
-            var capsProvider = sp.GetRequiredService<ManifestCapabilitiesProvider>();
+            MeshConfig meshConfig = sp.GetRequiredService<MeshConfig>();
+            ManifestCapabilitiesProvider capsProvider = sp.GetRequiredService<ManifestCapabilitiesProvider>();
             var manifestDir = dataRoot;
 
             return new AgentManifestService(
-                agentId: meshConfig.AgentId,
-                displayName: meshConfig.DisplayName,
-                description: meshConfig.Description,
-                endpoint: meshConfig.Endpoint,
-                manifestDir: manifestDir,
-                capabilitiesProvider: capsProvider.GetCapabilities,
-                primaryModel: "",
-                fallbackModels: null,
-                healthEndpoint: meshConfig.Endpoint.TrimEnd('/') + "/api/health");
+                meshConfig.AgentId,
+                meshConfig.DisplayName,
+                meshConfig.Description,
+                meshConfig.Endpoint,
+                manifestDir,
+                capsProvider.GetCapabilities,
+                "",
+                null,
+                meshConfig.Endpoint.TrimEnd('/') + "/api/health");
         });
 
         // IntentTransport — HTTP-клиент для inter-agent вызовов

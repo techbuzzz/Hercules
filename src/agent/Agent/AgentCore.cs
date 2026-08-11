@@ -34,6 +34,9 @@ public sealed record AgentResponse
 /// </summary>
 public sealed class AgentCore : IConfigReload
 {
+    /// <summary>Максимум tool-итераций (защита от infinite loops).</summary>
+    private const int MaxToolIterations = 3;
+
     private static readonly Regex ConfidenceRx =
         new(@"\[confidence:\s*(high|medium|low)\s*\]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -44,22 +47,19 @@ public sealed class AgentCore : IConfigReload
 
     private static readonly JsonSerializerOptions ActionJsonOpts = new()
     {
-        PropertyNameCaseInsensitive = true,
+        PropertyNameCaseInsensitive = true
     };
 
-    /// <summary>Максимум tool-итераций (защита от infinite loops).</summary>
-    private const int MaxToolIterations = 3;
-
     private readonly ILLMClient _llm;
-    private readonly SkillRouter _router;
-    private readonly SkillManager _skills;
     private readonly MemoryManager _memory;
+    private readonly SkillRouter _router;
     private readonly SqliteSessionStore _sessions;
-    private AgentConfig _cfg;
+    private readonly SkillManager _skills;
     private readonly ToolRegistry? _tools;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
+    private AgentConfig _cfg;
     private string _contextBlock = "";
     private string _lastInput = "";
 
@@ -96,6 +96,16 @@ public sealed class AgentCore : IConfigReload
         }
     }
 
+    /// <summary>
+    ///     Применить новую конфигурацию агента без перезагрузки.
+    ///     Пороги (SkillCreationThreshold, SkillImprovementThreshold, SkillEvaluationWindow,
+    ///     ReflectionEveryNCommands) и SystemPrompt обновляются сразу.
+    /// </summary>
+    public void Reload(AppConfig config)
+    {
+        _cfg = config.Agent;
+    }
+
     /// <summary>Инициализация сессии: создать запись и загрузить контекст памяти.</summary>
     public void StartSession()
     {
@@ -116,7 +126,7 @@ public sealed class AgentCore : IConfigReload
         // 3. Вызов LLM (с возможной tool-итерацией)
         List<ChatTurn> messages = BuildMessages(systemPrompt, input);
         LlmResponse llmResp;
-        string toolUsed = "";
+        var toolUsed = "";
         try
         {
             (llmResp, toolUsed) = await RunWithToolsAsync(messages, ct);
@@ -127,8 +137,10 @@ public sealed class AgentCore : IConfigReload
             {
                 Answer = $"Ошибка обращения к LLM: {ex.Message}",
                 Confidence = "low",
-                Mode = route.IsSkill ? "skill" : "direct",
-                UsedSkill = route.MatchedSkill,
+                Mode = route.IsSkill
+                    ? "skill"
+                    : "direct",
+                UsedSkill = route.MatchedSkill
             };
         }
 
@@ -143,7 +155,9 @@ public sealed class AgentCore : IConfigReload
 
         var mode = !string.IsNullOrEmpty(toolUsed)
             ? "tool"
-            : route.IsSkill ? "skill" : "direct";
+            : route.IsSkill
+                ? "skill"
+                : "direct";
 
         // 4. Логирование взаимодействия
         _sessions.LogInteraction(new InteractionLog(
@@ -168,9 +182,9 @@ public sealed class AgentCore : IConfigReload
     private async Task<(LlmResponse Response, string ToolUsed)> RunWithToolsAsync(
         List<ChatTurn> messages, CancellationToken ct)
     {
-        string toolUsed = "";
+        var toolUsed = "";
         LlmResponse last = default!;
-        for (int iter = 0; iter <= MaxToolIterations; iter++)
+        for (var iter = 0; iter <= MaxToolIterations; iter++)
         {
             last = await _llm.CompleteAsync(messages, ct);
 
@@ -180,14 +194,14 @@ public sealed class AgentCore : IConfigReload
             }
 
             // Try to parse tool action from LLM output
-            var action = TryParseAction(last.Text);
+            (string Name, string ArgsJson)? action = TryParseAction(last.Text);
             if (action is null)
             {
                 return (last, toolUsed);
             }
 
             var (toolName, argsJson) = action.Value;
-            var tool = _tools.Get(toolName);
+            ITool? tool = _tools.Get(toolName);
             if (tool is null)
             {
                 messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
@@ -199,12 +213,12 @@ public sealed class AgentCore : IConfigReload
 
             // Execute tool
             toolUsed = toolName;
-            var toolResult = await tool.ExecuteAsync(argsJson, ct);
+            ToolResult toolResult = await tool.ExecuteAsync(argsJson, ct);
             var resultJson = JsonSerializer.Serialize(new
             {
                 success = toolResult.Success,
                 output = toolResult.Output,
-                error = toolResult.Error,
+                error = toolResult.Error
             }, ActionJsonOpts);
 
             await Console.Error.WriteLineAsync(
@@ -224,6 +238,7 @@ public sealed class AgentCore : IConfigReload
                     "[system] Maximum tool iterations reached. Provide final answer now."));
             }
         }
+
         return (last, toolUsed);
     }
 
@@ -231,14 +246,17 @@ public sealed class AgentCore : IConfigReload
     {
         // Ищем JSON-блок с action. LLM может обернуть его в markdown ```json ... ```
         var cleaned = llmText;
-        var jsonMatch = Regex.Match(cleaned, @"```(?:json)?\s*(\{.*?\})\s*```", RegexOptions.Singleline);
+        Match jsonMatch = Regex.Match(cleaned, @"```(?:json)?\s*(\{.*?\})\s*```", RegexOptions.Singleline);
         if (jsonMatch.Success)
         {
             cleaned = jsonMatch.Groups[1].Value;
         }
 
-        var match = ActionRx.Match(cleaned);
-        if (!match.Success) return null;
+        Match match = ActionRx.Match(cleaned);
+        if (!match.Success)
+        {
+            return null;
+        }
 
         return (match.Groups["name"].Value.Trim(), match.Groups["args"].Value.Trim());
     }
@@ -278,10 +296,12 @@ public sealed class AgentCore : IConfigReload
             Confidence = confidence,
             Provider = provider,
             UsedSkill = usedSkill,
-            ToolUsed = string.IsNullOrEmpty(toolUsed) ? null : toolUsed,
+            ToolUsed = string.IsNullOrEmpty(toolUsed)
+                ? null
+                : toolUsed,
             ProposeSkillForInput = proposeSkill,
             ProposeImproveSkillId = proposeImproveId,
-            ProposeImproveSkillName = proposeImproveName,
+            ProposeImproveSkillName = proposeImproveName
         };
     }
 
@@ -310,16 +330,6 @@ public sealed class AgentCore : IConfigReload
     public void EndSession()
     {
         _sessions.EndSession(SessionId);
-    }
-
-    /// <summary>
-    ///     Применить новую конфигурацию агента без перезагрузки.
-    ///     Пороги (SkillCreationThreshold, SkillImprovementThreshold, SkillEvaluationWindow,
-    ///     ReflectionEveryNCommands) и SystemPrompt обновляются сразу.
-    /// </summary>
-    public void Reload(AppConfig config)
-    {
-        _cfg = config.Agent;
     }
 
     // ---- Вспомогательные методы ----
@@ -356,6 +366,7 @@ public sealed class AgentCore : IConfigReload
         {
             snapshot = _transcript.TakeLast(8).ToList();
         }
+
         var msgs = new List<ChatTurn> { new(ChatRole.System, systemPrompt) };
         msgs.AddRange(snapshot);
         msgs.Add(new ChatTurn(ChatRole.User, input));

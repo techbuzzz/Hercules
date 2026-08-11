@@ -51,14 +51,16 @@ public sealed class StubEmbeddingProvider : IEmbeddingProvider
             // Знак и вес — из другого части hash
             var signBit = (hash >> 63) & 1;
             var weight = ((hash >> 56) & 0x7F) / 127.0f; // 0..1
-            vector[pos] += signBit == 0 ? weight : -weight;
+            vector[pos] += signBit == 0
+                ? weight
+                : -weight;
         }
 
         // L2-нормализация
         var norm = MathF.Sqrt(vector.Sum(v => v * v));
         if (norm > 0)
         {
-            for (int i = 0; i < vector.Length; i++)
+            for (var i = 0; i < vector.Length; i++)
             {
                 vector[i] /= norm;
             }
@@ -71,11 +73,12 @@ public sealed class StubEmbeddingProvider : IEmbeddingProvider
     {
         unchecked
         {
-            ulong hash = 14695981039346656037UL; // FNV offset
+            var hash = 14695981039346656037UL; // FNV offset
             foreach (var c in s)
             {
                 hash = (hash ^ c) * 1099511628211UL; // FNV prime
             }
+
             return hash;
         }
     }

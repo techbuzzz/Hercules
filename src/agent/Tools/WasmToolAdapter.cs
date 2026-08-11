@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Hercules.Tools;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
 
@@ -13,6 +12,23 @@ namespace Hercules.Tools;
 /// </summary>
 public sealed class WasmToolAdapter : ITool
 {
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    private readonly CompilerRegistry _compilers;
+    private readonly IWasmSandbox _sandbox;
+
+    private readonly WasmTool _wasmTool;
+
+    public WasmToolAdapter(WasmTool wasmTool, IWasmSandbox sandbox, CompilerRegistry compilers)
+    {
+        _wasmTool = wasmTool ?? throw new ArgumentNullException(nameof(wasmTool));
+        _sandbox = sandbox ?? throw new ArgumentNullException(nameof(sandbox));
+        _compilers = compilers ?? throw new ArgumentNullException(nameof(compilers));
+    }
+
     public string Name => "execute_wasm";
 
     public string Description =>
@@ -22,27 +38,16 @@ public sealed class WasmToolAdapter : ITool
         "файловая система и сеть запрещены по умолчанию. Безопаснее чем execute_code.";
 
     public string? ParametersSchema => """
-        {
-          "type": "object",
-          "properties": {
-            "source": { "type": "string", "description": "Исходный код (csharp/python/rust) или готовый .wasm в hex/base64" },
-            "language": { "type": "string", "description": "Язык: csharp | python | rust | wasm", "default": "wasm" },
-            "args": { "type": "array", "items": { "type": "string" }, "description": "CLI args (опц.)" }
-          },
-          "required": ["source", "language"]
-        }
-        """;
-
-    private readonly WasmTool _wasmTool;
-    private readonly IWasmSandbox _sandbox;
-    private readonly CompilerRegistry _compilers;
-
-    public WasmToolAdapter(WasmTool wasmTool, IWasmSandbox sandbox, CompilerRegistry compilers)
-    {
-        _wasmTool = wasmTool ?? throw new ArgumentNullException(nameof(wasmTool));
-        _sandbox = sandbox ?? throw new ArgumentNullException(nameof(sandbox));
-        _compilers = compilers ?? throw new ArgumentNullException(nameof(compilers));
-    }
+                                       {
+                                         "type": "object",
+                                         "properties": {
+                                           "source": { "type": "string", "description": "Исходный код (csharp/python/rust) или готовый .wasm в hex/base64" },
+                                           "language": { "type": "string", "description": "Язык: csharp | python | rust | wasm", "default": "wasm" },
+                                           "args": { "type": "array", "items": { "type": "string" }, "description": "CLI args (опц.)" }
+                                         },
+                                         "required": ["source", "language"]
+                                       }
+                                       """;
 
     public async Task<ToolResult> ExecuteAsync(string argumentsJson, CancellationToken ct = default)
     {
@@ -69,10 +74,10 @@ public sealed class WasmToolAdapter : ITool
         try
         {
             var toolRequest = new WasmToolRequest(
-                SourceCode: req.Source,
-                Language: req.Language,
-                Args: req.Args?.ToArray());
-            var result = await _wasmTool.ExecuteAsync(toolRequest, ct);
+                req.Source,
+                req.Language,
+                req.Args?.ToArray());
+            WasmToolResult result = await _wasmTool.ExecuteAsync(toolRequest, ct);
 
             var meta = new Dictionary<string, object>
             {
@@ -82,7 +87,7 @@ public sealed class WasmToolAdapter : ITool
                 ["fuel_consumed"] = result.Execution.FuelConsumed,
                 ["compiled"] = result.Compiled,
                 ["compile_duration_ms"] = result.CompileDuration.TotalMilliseconds,
-                ["total_duration_ms"] = result.TotalDuration.TotalMilliseconds,
+                ["total_duration_ms"] = result.TotalDuration.TotalMilliseconds
             };
 
             if (!string.IsNullOrEmpty(result.CompilationError))
@@ -97,12 +102,15 @@ public sealed class WasmToolAdapter : ITool
                 {
                     output += $"\nstderr:\n{result.Execution.Stderr}";
                 }
+
                 return ToolResult.Ok(output, meta);
             }
 
             return ToolResult.Fail(
                 $"❌ {result.Execution.Status} (exit={result.Execution.ExitCode}, {result.Execution.DurationMs}ms)\n" +
-                (string.IsNullOrEmpty(result.Execution.Stderr) ? result.Execution.Stdout : result.Execution.Stderr),
+                (string.IsNullOrEmpty(result.Execution.Stderr)
+                    ? result.Execution.Stdout
+                    : result.Execution.Stderr),
                 meta);
         }
         catch (Exception ex)
@@ -117,9 +125,4 @@ public sealed class WasmToolAdapter : ITool
         public string? Language { get; set; }
         public List<string>? Args { get; set; }
     }
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
 }

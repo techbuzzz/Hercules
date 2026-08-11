@@ -15,19 +15,23 @@ public static class Ulid
     private static readonly char[] _alphabet = CrockfordBase32.ToCharArray();
 
     /// <summary>Сгенерировать новый ULID для текущего UTC времени.</summary>
-    public static string NewId() => NewId(DateTimeOffset.UtcNow);
+    public static string NewId()
+    {
+        return NewId(DateTimeOffset.UtcNow);
+    }
 
     /// <summary>Сгенерировать ULID для конкретного timestamp (полезно для тестов и replay).</summary>
     public static string NewId(DateTimeOffset timestamp)
     {
-        var tsMs = (long)timestamp.ToUnixTimeMilliseconds();
+        var tsMs = timestamp.ToUnixTimeMilliseconds();
 
         // 6 bytes timestamp (48 бит) + 10 bytes random (80 бит) = 16 bytes = 128 бит.
         Span<byte> bytes = stackalloc byte[16];
-        for (int i = 5; i >= 0; i--)
+        for (var i = 5; i >= 0; i--)
         {
             bytes[5 - i] = (byte)(tsMs >> (8 * i));
         }
+
         RandomNumberGenerator.Fill(bytes[6..16]);
 
         return EncodeBase32(bytes);
@@ -37,16 +41,23 @@ public static class Ulid
     public static DateTimeOffset ExtractTimestamp(string ulid)
     {
         if (string.IsNullOrEmpty(ulid) || ulid.Length != 26)
+        {
             throw new ArgumentException("ULID must be 26 chars", nameof(ulid));
+        }
 
         // Decode первые 10 chars → 50 бит, но timestamp 48 бит, последние 2 бита = 0 padding
         ulong hi = 0;
-        for (int i = 0; i < 10; i++)
+        for (var i = 0; i < 10; i++)
         {
-            int val = AlphabetIndex(ulid[i]);
-            if (val < 0) throw new ArgumentException($"Invalid ULID char at {i}: {ulid[i]}");
+            var val = AlphabetIndex(ulid[i]);
+            if (val < 0)
+            {
+                throw new ArgumentException($"Invalid ULID char at {i}: {ulid[i]}");
+            }
+
             hi = (hi << 5) | (uint)val;
         }
+
         // hi содержит 50 бит = 48 бит timestamp + 2 бита padding (= 0)
         var tsMs = (long)(hi >> 2);
         return DateTimeOffset.FromUnixTimeMilliseconds(tsMs);
@@ -57,9 +68,9 @@ public static class Ulid
         // 128 бит / 5 бит на char = 25.6 chars → 26 chars (последние 2 бита padding).
         Span<char> output = stackalloc char[26];
         ulong acc = 0;
-        int bitsInAcc = 0;
-        int oi = 0;
-        for (int bi = 0; bi < bytes.Length; bi++)
+        var bitsInAcc = 0;
+        var oi = 0;
+        for (var bi = 0; bi < bytes.Length; bi++)
         {
             acc = (acc << 8) | bytes[bi];
             bitsInAcc += 8;
@@ -69,6 +80,7 @@ public static class Ulid
                 output[oi++] = _alphabet[(int)((acc >> bitsInAcc) & 0x1F)];
             }
         }
+
         // Flush оставшиеся биты (< 5, padding)
         if (bitsInAcc > 0)
         {
@@ -80,8 +92,14 @@ public static class Ulid
 
     private static int AlphabetIndex(char c)
     {
-        for (int i = 0; i < _alphabet.Length; i++)
-            if (_alphabet[i] == c) return i;
+        for (var i = 0; i < _alphabet.Length; i++)
+        {
+            if (_alphabet[i] == c)
+            {
+                return i;
+            }
+        }
+
         return -1;
     }
 }

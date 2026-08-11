@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace Hercules.CodeExecution;
 
 /// <summary>
@@ -55,23 +53,39 @@ public sealed class SandboxOptions
     /// <summary>Сколько времени хранить сессию на диске после выполнения (секунды, для отладки). 0 = чистить сразу.</summary>
     public int SessionTtlSeconds { get; set; } = 3600; // 1 час
 
-    private static string DefaultTempRoot() =>
-        OperatingSystem.IsWindows()
+    private static string DefaultTempRoot()
+    {
+        return OperatingSystem.IsWindows()
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Hercules", "sessions")
             : "/tmp/hercules/sessions";
+    }
 
     /// <summary>Валидация — вызывать при создании executor'а.</summary>
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(TempRoot))
+        {
             throw new InvalidOperationException("SandboxOptions.TempRoot is required");
+        }
+
         if (CpuTimeoutSeconds <= 0 || CpuTimeoutSeconds > 300)
+        {
             throw new InvalidOperationException("CpuTimeoutSeconds must be 1..300");
+        }
+
         if (MaxFileSizeMb <= 0 || MaxFileSizeMb > 100)
+        {
             throw new InvalidOperationException("MaxFileSizeMb must be 1..100");
+        }
+
         if (MaxCodeSizeKb <= 0 || MaxCodeSizeKb > 1024)
+        {
             throw new InvalidOperationException("MaxCodeSizeKb must be 1..1024");
+        }
+
         if (MaxVirtualMemoryMb < 0 || MaxVirtualMemoryMb > 16384)
+        {
             throw new InvalidOperationException("MaxVirtualMemoryMb must be 0..16384 (0 = no limit)");
+        }
     }
 }

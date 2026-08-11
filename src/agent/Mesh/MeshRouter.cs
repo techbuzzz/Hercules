@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -47,24 +46,12 @@ public sealed class FanOutResult
 public sealed class MeshRouter
 {
     private readonly AgentCore _agent;
-    private readonly CapabilityRegistry _registry;
-    private readonly IntentTransport _transport;
-    private readonly AgentManifestService _manifestService;
-    private readonly ILLMClient _llm;
     private readonly CircuitBreaker _breaker;
+    private readonly ILLMClient _llm;
+    private readonly AgentManifestService _manifestService;
+    private readonly CapabilityRegistry _registry;
     private readonly RetryPolicy _retry;
-
-    /// <summary>Стратегия выбора лучшего ответа при fan-out.</summary>
-    public FanOutStrategy Strategy { get; set; } = FanOutStrategy.HighestConfidence;
-
-    /// <summary>Максимум параллельных peer-вызовов при fan-out.</summary>
-    public int MaxParallelPeers { get; set; } = 5;
-
-    /// <summary>Минимум peer-ответов для fan-out (если меньше — запрос отправляется одному peer'у).</summary>
-    public int MinPeersForFanOut { get; set; } = 2;
-
-    /// <summary>Таймаут ожидания всех ответов при fan-out (мс).</summary>
-    public int FanOutTimeoutMs { get; set; } = 30_000;
+    private readonly IntentTransport _transport;
 
     public MeshRouter(
         AgentCore agent,
@@ -84,16 +71,30 @@ public sealed class MeshRouter
         _retry = retry ?? throw new ArgumentNullException(nameof(retry));
     }
 
+    /// <summary>Стратегия выбора лучшего ответа при fan-out.</summary>
+    public FanOutStrategy Strategy { get; set; } = FanOutStrategy.HighestConfidence;
+
+    /// <summary>Максимум параллельных peer-вызовов при fan-out.</summary>
+    public int MaxParallelPeers { get; set; } = 5;
+
+    /// <summary>Минимум peer-ответов для fan-out (если меньше — запрос отправляется одному peer'у).</summary>
+    public int MinPeersForFanOut { get; set; } = 2;
+
+    /// <summary>Таймаут ожидания всех ответов при fan-out (мс).</summary>
+    public int FanOutTimeoutMs { get; set; } = 30_000;
+
     /// <summary>
     ///     Маршрутизировать intent с поддержкой fan-out:
     ///     1. Найти всех peer'ов с подходящей capability.
     ///     2. Если peer'ов >= MinPeersForFanOut — fan-out (параллельно), затем выбрать лучший.
-    ///     3. Если peer'ов < MinPeersForFanOut — отправить одному (как IntentRouter).
-    ///     4. Если peer'ов нет — обработать локально.
+    ///     3. Если peer'ов
+    ///     < MinPeersForFanOut — отправить одному ( как IntentRouter).
+    ///         4. Если peer'ов нет — обработать локально.
+    /// 
     /// </summary>
     public async Task<FanOutResult> RouteWithFanOutAsync(IntentEnvelope envelope, CancellationToken ct = default)
     {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var sw = Stopwatch.StartNew();
         ArgumentNullException.ThrowIfNull(envelope);
 
         var ownAgentId = _manifestService.Current.AgentId;
@@ -118,34 +119,36 @@ public sealed class MeshRouter
         // 2. Нет peer'ов — обрабатываем локально
         if (peers.Count == 0)
         {
-            var localResponse = await ProcessLocallyAsync(envelope, ct);
+            IntentResponse localResponse = await ProcessLocallyAsync(envelope, ct);
             return new FanOutResult
             {
                 Winner = localResponse,
                 AllResponses = [localResponse],
                 SelectionMethod = "local",
-                Duration = sw.Elapsed,
+                Duration = sw.Elapsed
             };
         }
 
         // 3. Один peer — отправляем ему (с retry)
         if (peers.Count < MinPeersForFanOut)
         {
-            var singleResponse = await SendWithRetryAsync(peers[0].AgentId, envelope, ct);
+            IntentResponse singleResponse = await SendWithRetryAsync(peers[0].AgentId, envelope, ct);
             return new FanOutResult
             {
-                Winner = singleResponse.IsSuccess ? singleResponse : null,
+                Winner = singleResponse.IsSuccess
+                    ? singleResponse
+                    : null,
                 AllResponses = [singleResponse],
                 SelectionMethod = "single-peer",
-                Duration = sw.Elapsed,
+                Duration = sw.Elapsed
             };
         }
 
         // 4. Fan-out: отправляем нескольким peer'ам параллельно
-        var responses = await FanOutAsync(peers, envelope, ct);
+        List<IntentResponse> responses = await FanOutAsync(peers, envelope, ct);
 
         // 5. Fan-in: выбираем лучший ответ
-        var (winner, method, rationale) = await SelectBestAsync(envelope, responses);
+        (IntentResponse? winner, var method, var rationale) = await SelectBestAsync(envelope, responses);
 
         sw.Stop();
         return new FanOutResult
@@ -154,7 +157,7 @@ public sealed class MeshRouter
             AllResponses = responses,
             SelectionMethod = method,
             Duration = sw.Elapsed,
-            JudgeRationale = rationale,
+            JudgeRationale = rationale
         };
     }
 
@@ -167,8 +170,8 @@ public sealed class MeshRouter
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(FanOutTimeoutMs);
 
-        var tasks = peers.Select(peer => SendWithRetryAsync(peer.AgentId, envelope, cts.Token));
-        var responses = await Task.WhenAll(tasks);
+        IEnumerable<Task<IntentResponse>> tasks = peers.Select(peer => SendWithRetryAsync(peer.AgentId, envelope, cts.Token));
+        IntentResponse[] responses = await Task.WhenAll(tasks);
         return responses.ToList();
     }
 
@@ -178,7 +181,7 @@ public sealed class MeshRouter
     private async Task<IntentResponse> SendWithRetryAsync(
         string agentId, IntentEnvelope envelope, CancellationToken ct)
     {
-        for (int attempt = 0; attempt < _retry.MaxAttempts; attempt++)
+        for (var attempt = 0; attempt < _retry.MaxAttempts; attempt++)
         {
             if (!_breaker.CanSend(agentId))
             {
@@ -186,7 +189,7 @@ public sealed class MeshRouter
                     "Circuit breaker open — peer temporarily unavailable", envelope.TraceId);
             }
 
-            var response = await _transport.SendToAsync(agentId, envelope, ct);
+            IntentResponse response = await _transport.SendToAsync(agentId, envelope, ct);
 
             if (response.IsSuccess)
             {
@@ -201,9 +204,15 @@ public sealed class MeshRouter
                 return response;
             }
 
-            var delay = _retry.GetDelay(attempt + 1);
-            try { await Task.Delay(delay, ct); }
-            catch (OperationCanceledException) { return response; }
+            TimeSpan delay = _retry.GetDelay(attempt + 1);
+            try
+            {
+                await Task.Delay(delay, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return response;
+            }
         }
 
         return IntentResponse.Failed(envelope.RequestId, agentId,
@@ -233,7 +242,7 @@ public sealed class MeshRouter
                 return (successful[0], "first-success", null);
 
             case FanOutStrategy.HighestConfidence:
-                var best = successful
+                IntentResponse best = successful
                     .OrderByDescending(r => r.Confidence ?? 0)
                     .First();
                 return (best, "highest-confidence", null);
@@ -253,7 +262,7 @@ public sealed class MeshRouter
         IntentEnvelope envelope, List<IntentResponse> responses)
     {
         var optionsText = new StringBuilder();
-        for (int i = 0; i < responses.Count; i++)
+        for (var i = 0; i < responses.Count; i++)
         {
             optionsText.AppendLine($"### Вариант {i + 1} (от {responses[i].Agent}, confidence={responses[i].Confidence})");
             optionsText.AppendLine(responses[i].Result ?? "(пустой ответ)");
@@ -261,19 +270,19 @@ public sealed class MeshRouter
         }
 
         var prompt = $$"""
-            Ты — судья (LLM-judge) в multi-agent системе. Пользователь задал вопрос,
-            и несколько агентов дали ответы. Выбери лучший ответ.
+                       Ты — судья (LLM-judge) в multi-agent системе. Пользователь задал вопрос,
+                       и несколько агентов дали ответы. Выбери лучший ответ.
 
-            Вопрос: {{envelope.Payload}}
+                       Вопрос: {{envelope.Payload}}
 
-            {{optionsText}}
+                       {{optionsText}}
 
-            Верни СТРОГО валидный JSON:
-            {
-              "best_index": <номер лучшего варианта, начиная с 1>,
-              "rationale": "<краткое объяснение выбора на русском>"
-            }
-            """;
+                       Верни СТРОГО валидный JSON:
+                       {
+                         "best_index": <номер лучшего варианта, начиная с 1>,
+                         "rationale": "<краткое объяснение выбора на русском>"
+                       }
+                       """;
 
         try
         {
@@ -297,7 +306,7 @@ public sealed class MeshRouter
             // Fallback — возвращаем ответ с высшей уверенностью
         }
 
-        var fallback = responses.OrderByDescending(r => r.Confidence ?? 0).First();
+        IntentResponse fallback = responses.OrderByDescending(r => r.Confidence ?? 0).First();
         return (fallback, "llm-judge-fallback", "LLM-judge failed, used highest confidence");
     }
 
@@ -306,12 +315,12 @@ public sealed class MeshRouter
         var ownAgentId = _manifestService.Current.AgentId;
         try
         {
-            var response = await _agent.ProcessMessageAsync(envelope.Payload, ct);
+            AgentResponse response = await _agent.ProcessMessageAsync(envelope.Payload, ct);
             var confidence = response.Confidence switch
             {
                 "high" => 0.9,
                 "medium" => 0.5,
-                _ => 0.2,
+                _ => 0.2
             };
             return IntentResponse.Ok(envelope.RequestId, ownAgentId, response.Answer,
                 response.Mode, response.UsedSkill?.Meta.Name, confidence, envelope.TraceId);
@@ -331,6 +340,8 @@ public sealed class MeshRouter
     {
         var start = text.IndexOf('{');
         var end = text.LastIndexOf('}');
-        return start >= 0 && end > start ? text[start..(end + 1)] : "{}";
+        return start >= 0 && end > start
+            ? text[start..(end + 1)]
+            : "{}";
     }
 }

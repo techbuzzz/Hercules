@@ -37,8 +37,12 @@ public sealed record ToolResult(
     IReadOnlyDictionary<string, object>? Metadata = null)
 {
     public static ToolResult Ok(string output, IReadOnlyDictionary<string, object>? meta = null)
-        => new(true, output, null, meta);
+    {
+        return new ToolResult(true, output, null, meta);
+    }
 
     public static ToolResult Fail(string error, IReadOnlyDictionary<string, object>? meta = null)
-        => new(false, "", error, meta);
+    {
+        return new ToolResult(false, "", error, meta);
+    }
 }

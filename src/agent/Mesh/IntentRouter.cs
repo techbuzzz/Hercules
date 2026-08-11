@@ -1,5 +1,4 @@
 using Hercules.Agent;
-using Hercules.LLM;
 
 namespace Hercules.Mesh;
 
@@ -16,15 +15,9 @@ namespace Hercules.Mesh;
 public sealed class IntentRouter
 {
     private readonly AgentCore _agent;
+    private readonly AgentManifestService _manifestService;
     private readonly CapabilityRegistry _registry;
     private readonly IntentTransport _transport;
-    private readonly AgentManifestService _manifestService;
-
-    /// <summary>
-    ///     Минимальная уверенность локального навыка, при которой intent обрабатывается локально.
-    ///     Если ниже — intent пересылается peer'у (если есть).
-    /// </summary>
-    public double LocalConfidenceThreshold { get; set; } = 0.5;
 
     public IntentRouter(
         AgentCore agent,
@@ -39,6 +32,12 @@ public sealed class IntentRouter
     }
 
     /// <summary>
+    ///     Минимальная уверенность локального навыка, при которой intent обрабатывается локально.
+    ///     Если ниже — intent пересылается peer'у (если есть).
+    /// </summary>
+    public double LocalConfidenceThreshold { get; set; } = 0.5;
+
+    /// <summary>
     ///     Маршрутизировать intent: локально или peer-агенту.
     ///     Возвращает ответ (локальный или от peer'а).
     /// </summary>
@@ -48,7 +47,7 @@ public sealed class IntentRouter
         ArgumentException.ThrowIfNullOrWhiteSpace(envelope.RequestId);
 
         // 1. Проверяем локальные capabilities — есть ли у нас навык для этого intent
-        var localCap = FindLocalCapability(envelope.Intent);
+        ManifestCapability? localCap = FindLocalCapability(envelope.Intent);
         if (localCap is not null)
         {
             // Обрабатываем локально
@@ -56,14 +55,14 @@ public sealed class IntentRouter
         }
 
         // 2. Ищем peer'а в registry по capability name
-        var peers = _registry.FindByCapability(envelope.Intent);
+        List<RegistryAgentEntry> peers = _registry.FindByCapability(envelope.Intent);
         var ownAgentId = _manifestService.Current.AgentId;
-        var peer = peers.FirstOrDefault(p => !p.AgentId.Equals(ownAgentId, StringComparison.OrdinalIgnoreCase));
+        RegistryAgentEntry? peer = peers.FirstOrDefault(p => !p.AgentId.Equals(ownAgentId, StringComparison.OrdinalIgnoreCase));
 
         if (peer is null)
         {
             // 3. Ищем peer'а по фразе-приёмнику (semantic lookup)
-            var phrasePeers = _registry.FindByPhrase(envelope.Intent);
+            List<RegistryAgentEntry> phrasePeers = _registry.FindByPhrase(envelope.Intent);
             peer = phrasePeers.FirstOrDefault(p => !p.AgentId.Equals(ownAgentId, StringComparison.OrdinalIgnoreCase));
         }
 
@@ -88,23 +87,23 @@ public sealed class IntentRouter
         {
             // Payload — это текст запроса пользователя
             var message = envelope.Payload;
-            var response = await _agent.ProcessMessageAsync(message, ct);
+            AgentResponse response = await _agent.ProcessMessageAsync(message, ct);
 
             var confidence = response.Confidence switch
             {
                 "high" => 0.9,
                 "medium" => 0.5,
-                _ => 0.2,
+                _ => 0.2
             };
 
             return IntentResponse.Ok(
-                requestId: envelope.RequestId,
-                agent: ownAgentId,
-                result: response.Answer,
-                mode: response.Mode,
-                skill: response.UsedSkill?.Meta.Name,
-                confidence: confidence,
-                traceId: envelope.TraceId);
+                envelope.RequestId,
+                ownAgentId,
+                response.Answer,
+                response.Mode,
+                response.UsedSkill?.Meta.Name,
+                confidence,
+                envelope.TraceId);
         }
         catch (OperationCanceledException)
         {
@@ -123,9 +122,12 @@ public sealed class IntentRouter
     /// </summary>
     private ManifestCapability? FindLocalCapability(string intent)
     {
-        if (string.IsNullOrWhiteSpace(intent)) return null;
-        return _manifestService.Current.Capabilities.FirstOrDefault(
-            c => c.Name.Equals(intent, StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(intent))
+        {
+            return null;
+        }
+
+        return _manifestService.Current.Capabilities.FirstOrDefault(c => c.Name.Equals(intent, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -133,7 +135,7 @@ public sealed class IntentRouter
     /// </summary>
     public void PublishSelf()
     {
-        var manifest = _manifestService.Save();
+        AgentManifest manifest = _manifestService.Save();
         _registry.Register(manifest);
     }
 }

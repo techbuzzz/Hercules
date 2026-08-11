@@ -1,4 +1,3 @@
-using Hercules.Agent;
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.Tools;
@@ -18,12 +17,19 @@ public sealed class RuntimeConfigHostedService : IHostedService
         LlmClientFactory factory,
         ResilientLLMClient resilient,
         RoleRouter roleRouter,
-        Hercules.Tools.ToolRegistry tools,
+        ToolRegistry tools,
         IEnumerable<IConfigReload> reloadConsumers)
     {
         _reactor = new RuntimeConfigReactor(store, factory, resilient, roleRouter, tools, reloadConsumers);
     }
 
-    public Task StartAsync(CancellationToken ct) => Task.CompletedTask;
-    public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+    public Task StartAsync(CancellationToken ct)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken ct)
+    {
+        return Task.CompletedTask;
+    }
 }

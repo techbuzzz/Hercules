@@ -7,27 +7,24 @@ namespace Hercules.WasmSandbox;
 /// <summary>
 ///     WASM sandbox на базе Wasmtime.NET v14 (Bytecode Alliance, MIT).
 ///     Capability-based security с WASI:
-///       • Fuel limit (CPU instruction counting) — Store.AddFuel
-///       • Epoch interruption (wall-clock deadline) — Store.SetEpochDeadline + Engine.IncrementEpoch
-///       • Memory cap через Store.SetLimits
-///       • Filesystem: DENY (WasiConfiguration без preopened dirs)
-///       • Network: DENY (WasiConfiguration без inherit network)
-///       • Environment: allow-list переменных через WasiConfiguration.WithEnvironmentVariable
+///     • Fuel limit (CPU instruction counting) — Store.AddFuel
+///     • Epoch interruption (wall-clock deadline) — Store.SetEpochDeadline + Engine.IncrementEpoch
+///     • Memory cap через Store.SetLimits
+///     • Filesystem: DENY (WasiConfiguration без preopened dirs)
+///     • Network: DENY (WasiConfiguration без inherit network)
+///     • Environment: allow-list переменных через WasiConfiguration.WithEnvironmentVariable
 ///     API Wasmtime.NET v14: Engine(Config), Store, Linker.DefineWasi.
 /// </summary>
 public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
 {
-    public string Name => "wasmtime-wasi";
-
-    public string RuntimeVersion => "wasmtime-14.0.0";
+    private readonly WasmResourceLimits _defaultLimits;
 
     private readonly Engine _engine;
-    private readonly WasmResourceLimits _defaultLimits;
     private bool _disposed;
 
     public WasmtimeSandbox(WasmResourceLimits? defaultLimits = null)
     {
-        var config = new Wasmtime.Config()
+        Wasmtime.Config config = new Wasmtime.Config()
             .WithFuelConsumption(true)
             .WithEpochInterruption(true)
             .WithReferenceTypes(true)
@@ -39,6 +36,21 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
         _defaultLimits = defaultLimits ?? WasmResourceLimits.Default;
     }
 
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _engine.Dispose();
+    }
+
+    public string Name => "wasmtime-wasi";
+
+    public string RuntimeVersion => "wasmtime-14.0.0";
+
     public Task<WasmExecutionResult> ExecuteAsync(WasmExecutionRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -48,7 +60,7 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
 
     private WasmExecutionResult ExecuteCore(WasmExecutionRequest request, CancellationToken ct)
     {
-        var limits = request.Limits ?? _defaultLimits;
+        WasmResourceLimits limits = request.Limits ?? _defaultLimits;
         var sw = Stopwatch.StartNew();
 
         // Stdout/stderr → файлы (WasiConfiguration принимает string path)
@@ -70,16 +82,17 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
             store = new Store(_engine);
 
             // 3. Fuel limit
-            var fuelAmount = limits.MaxFuel > 0 ? (ulong)limits.MaxFuel : 1_000_000_000_000UL;
+            var fuelAmount = limits.MaxFuel > 0
+                ? (ulong)limits.MaxFuel
+                : 1_000_000_000_000UL;
             store.AddFuel(fuelAmount);
 
             // 4. Memory cap. SetLimits(memorySize, tableElements, ?, ?, ?) — 5 nullable позиционных.
             if (limits.MaxMemoryBytes > 0)
             {
                 store.SetLimits(
-                    (long)limits.MaxMemoryBytes, // total memory bytes
-                    (uint?)10_000,               // max table elements
-                    null, null, null);
+                    limits.MaxMemoryBytes, // total memory bytes
+                    (uint?)10_000);
             }
 
             // 5. Epoch deadline (wall-clock в единицах engine epoch)
@@ -96,7 +109,7 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
             linker.DefineWasi();
 
             // 7. WASI config: stdout/stderr → файлы, args/env → allow-list. БЕЗ preopened dirs.
-            var wasiConfig = new WasiConfiguration()
+            WasiConfiguration wasiConfig = new WasiConfiguration()
                 .WithStandardOutput(stdoutFile)
                 .WithStandardError(stderrFile);
 
@@ -119,8 +132,7 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
             linker.Instantiate(store, module);
 
             // 9. Entry point: "_start" для WASI, можно кастомное имя
-            var entry = linker.GetDefaultFunction(store, request.EntryPoint)
-                ?? throw new InvalidOperationException($"Entry point '{request.EntryPoint}' not found");
+            Function entry = linker.GetDefaultFunction(store, request.EntryPoint) ?? throw new InvalidOperationException($"Entry point '{request.EntryPoint}' not found");
 
             // 10. Запускаем
             entry.Invoke();
@@ -137,13 +149,13 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
             }
 
             return new WasmExecutionResult(
-                ExitCode: 0,
-                Stdout: stdout,
-                Stderr: stderr,
-                DurationMs: sw.ElapsedMilliseconds,
-                Status: "ok",
-                FuelConsumed: fuelConsumed,
-                PeakMemoryBytes: 0);
+                0,
+                stdout,
+                stderr,
+                sw.ElapsedMilliseconds,
+                "ok",
+                fuelConsumed,
+                0);
         }
         catch (WasmtimeException ex) when (ex.Message.Contains("all fuel exhausted", StringComparison.OrdinalIgnoreCase))
         {
@@ -164,15 +176,17 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
         {
             sw.Stop();
             return new WasmExecutionResult(
-                ExitCode: 1,
-                Stdout: ReadAndTruncate(stdoutFile, limits.MaxOutputBytes),
-                Stderr: ReadAndTruncate(stderrFile, limits.MaxOutputBytes).Length > 0
+                1,
+                ReadAndTruncate(stdoutFile, limits.MaxOutputBytes),
+                ReadAndTruncate(stderrFile, limits.MaxOutputBytes).Length > 0
                     ? ReadAndTruncate(stderrFile, limits.MaxOutputBytes)
                     : $"Wasm trap: {ex.Message}",
-                DurationMs: sw.ElapsedMilliseconds,
-                Status: epochInterrupted ? "timeout" : "failed",
-                FuelConsumed: fuelConsumed,
-                PeakMemoryBytes: 0);
+                sw.ElapsedMilliseconds,
+                epochInterrupted
+                    ? "timeout"
+                    : "failed",
+                fuelConsumed,
+                0);
         }
         catch (Exception ex)
         {
@@ -201,7 +215,9 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
                     onInterrupt();
                 }
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException)
+            {
+            }
         }, ct);
     }
 
@@ -209,12 +225,17 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
     {
         try
         {
-            if (!File.Exists(path)) return "";
+            if (!File.Exists(path))
+            {
+                return "";
+            }
+
             var bytes = File.ReadAllBytes(path);
             if (maxBytes > 0 && bytes.Length > maxBytes)
             {
                 return Encoding.UTF8.GetString(bytes, 0, maxBytes) + "\n[... output truncated]";
             }
+
             return Encoding.UTF8.GetString(bytes);
         }
         catch
@@ -225,13 +246,15 @@ public sealed class WasmtimeSandbox : IWasmSandbox, IDisposable
 
     private static void TryDelete(string path)
     {
-        try { if (File.Exists(path)) File.Delete(path); } catch { }
-    }
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-        _engine.Dispose();
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+        }
     }
 }

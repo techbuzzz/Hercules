@@ -11,21 +11,24 @@ namespace Hercules.WebApi.Controllers;
 /// </summary>
 public static class ConfigController
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = false
+    };
+
     public static void MapConfig(this IEndpointRouteBuilder app)
     {
         // GET /api/config — текущая "живая" конфигурация
-        app.MapGet("/api/config", (RuntimeConfigStore store) =>
-        {
-            return Results.Ok(new { config = store.Current, source = "runtime" });
-        }).WithName("GetConfig");
+        app.MapGet("/api/config", (RuntimeConfigStore store) => { return Results.Ok(new { config = store.Current, source = "runtime" }); }).WithName("GetConfig");
 
         // PUT /api/config — полная замена конфигурации
         app.MapPut("/api/config", (JsonElement body, RuntimeConfigStore store) =>
         {
             try
             {
-                var next = body.Deserialize<AppConfig>(JsonOptions)
-                           ?? throw new InvalidOperationException("Config body is empty");
+                var next = body.Deserialize<AppConfig>(JsonOptions) ?? throw new InvalidOperationException("Config body is empty");
                 store.Update(next);
                 return Results.Ok(new { status = "updated", config = store.Current });
             }
@@ -49,11 +52,4 @@ public static class ConfigController
             }
         }).WithName("PatchConfig");
     }
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        WriteIndented = false,
-    };
 }

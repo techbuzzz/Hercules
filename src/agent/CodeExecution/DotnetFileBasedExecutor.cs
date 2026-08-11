@@ -7,20 +7,13 @@ namespace Hercules.CodeExecution;
 /// <summary>
 ///     Sandbox-исполнитель C# кода через <c>dotnet run --file</c> (file-based apps, .NET 10).
 ///     Три уровня защиты:
-///       1) Pre-execution regex scan (DangerousCodeScanner)
-///       2) Изолированная temp-директория
-///       3) POSIX ulimit (через wrapper-скрипт) + process timeout
+///     1) Pre-execution regex scan (DangerousCodeScanner)
+///     2) Изолированная temp-директория
+///     3) POSIX ulimit (через wrapper-скрипт) + process timeout
 ///     Reference: <c>references/code-execution-sandbox.md</c>.
 /// </summary>
 public sealed class DotnetFileBasedExecutor : ICodeExecutor
 {
-    public string Name => "dotnet-file-based";
-
-    public IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "csharp", "cs", "c#"
-    };
-
     private readonly SandboxOptions _options;
     private readonly string _wrapperScriptPath;
 
@@ -38,6 +31,13 @@ public sealed class DotnetFileBasedExecutor : ICodeExecutor
             $"hercules-ulimit-{Guid.NewGuid():N}.sh");
         EnsureWrapperScript();
     }
+
+    public string Name => "dotnet-file-based";
+
+    public IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "csharp", "cs", "c#"
+    };
 
     public async Task<ExecutionResult> ExecuteAsync(ExecutionRequest request, CancellationToken ct = default)
     {
@@ -75,7 +75,7 @@ public sealed class DotnetFileBasedExecutor : ICodeExecutor
         var codeFile = Path.Combine(sessionDir, "code.cs");
 
         // Layer 3 — process spawn
-        var timeoutMs = request.TimeoutMs ?? (_options.CpuTimeoutSeconds * 1000);
+        var timeoutMs = request.TimeoutMs ?? _options.CpuTimeoutSeconds * 1000;
 
         try
         {
@@ -85,8 +85,14 @@ public sealed class DotnetFileBasedExecutor : ICodeExecutor
             // File permissions: только чтение для пользователя (защита от self-modification)
             if (!OperatingSystem.IsWindows())
             {
-                try { File.SetUnixFileMode(codeFile, UnixFileMode.UserRead | UnixFileMode.UserWrite); }
-                catch { /* best effort */ }
+                try
+                {
+                    File.SetUnixFileMode(codeFile, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                }
+                catch
+                {
+                    /* best effort */
+                }
             }
 
             return await RunProcessAsync(codeFile, sessionDir, request.Args ?? Array.Empty<string>(), timeoutMs, ct);
@@ -135,7 +141,7 @@ public sealed class DotnetFileBasedExecutor : ICodeExecutor
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
-            WorkingDirectory = sessionDir,
+            WorkingDirectory = sessionDir
         };
         foreach (var a in arguments)
         {
@@ -176,7 +182,15 @@ public sealed class DotnetFileBasedExecutor : ICodeExecutor
         }
         catch (OperationCanceledException)
         {
-            try { proc.Kill(entireProcessTree: true); } catch { /* already exited */ }
+            try
+            {
+                proc.Kill(true);
+            }
+            catch
+            {
+                /* already exited */
+            }
+
             sw.Stop();
             return ExecutionResult.TimedOut(sw.ElapsedMilliseconds);
         }
@@ -188,13 +202,13 @@ public sealed class DotnetFileBasedExecutor : ICodeExecutor
         if (proc.ExitCode != 0 && sw.ElapsedMilliseconds >= timeoutMs - 1000)
         {
             return new ExecutionResult(
-                ExitCode: proc.ExitCode,
-                Stdout: SafeGetResult(stdoutTask),
-                Stderr: SafeGetResult(stderrTask),
-                DurationMs: sw.ElapsedMilliseconds,
-                Status: "timeout",
-                BlockedPatterns: Array.Empty<string>(),
-                SessionDir: sessionDir);
+                proc.ExitCode,
+                SafeGetResult(stdoutTask),
+                SafeGetResult(stderrTask),
+                sw.ElapsedMilliseconds,
+                "timeout",
+                Array.Empty<string>(),
+                sessionDir);
         }
 
         // Дождаться чтения stdout/stderr (могут быть большими)
@@ -210,21 +224,26 @@ public sealed class DotnetFileBasedExecutor : ICodeExecutor
         sw.Stop();
 
         return new ExecutionResult(
-            ExitCode: proc.ExitCode,
-            Stdout: SafeGetResult(stdoutTask),
-            Stderr: SafeGetResult(stderrTask),
-            DurationMs: sw.ElapsedMilliseconds,
-            Status: proc.ExitCode == 0 ? "ok" : "failed",
-            BlockedPatterns: Array.Empty<string>(),
-            SessionDir: sessionDir);
+            proc.ExitCode,
+            SafeGetResult(stdoutTask),
+            SafeGetResult(stderrTask),
+            sw.ElapsedMilliseconds,
+            proc.ExitCode == 0
+                ? "ok"
+                : "failed",
+            Array.Empty<string>(),
+            sessionDir);
     }
 
     private static string SafeGetResult(Task<string> task)
     {
-        return task.IsCompletedSuccessfully ? task.Result : "";
+        return task.IsCompletedSuccessfully
+            ? task.Result
+            : "";
     }
 
-    [SupportedOSPlatform("linux"), SupportedOSPlatform("macos")]
+    [SupportedOSPlatform("linux")]
+    [SupportedOSPlatform("macos")]
     private void WrapWithUlimit(ProcessStartInfo psi, string codeFile, List<string> dotnetArgs, string sessionDir)
     {
         // Build wrapper script (overwrite)
@@ -239,23 +258,34 @@ public sealed class DotnetFileBasedExecutor : ICodeExecutor
         {
             sb.AppendLine($"ulimit -n {_options.MaxOpenFiles} 2>/dev/null");
         }
+
         // MaxVirtualMemoryMb = 0 → пропускаем ulimit -v (CLR heap init требует много VM)
         if (_options.MaxVirtualMemoryMb > 0)
         {
             sb.AppendLine($"ulimit -v {_options.MaxVirtualMemoryMb * 1024} 2>/dev/null");
         }
+
         // MaxProcesses: 0 = без лимита. Иначе — ulimit -u (только если явно > 0).
         if (_options.MaxProcesses > 0)
         {
             sb.AppendLine($"ulimit -u {_options.MaxProcesses} 2>/dev/null");
         }
+
         sb.AppendLine("exec \"$@\"");
         File.WriteAllText(_wrapperScriptPath, sb.ToString());
 
-        try { File.SetUnixFileMode(_wrapperScriptPath,
-            UnixFileMode.UserRead | UnixFileMode.UserWrite |
-            UnixFileMode.UserExecute | UnixFileMode.GroupExecute); }
-        catch { /* best effort */ }
+        try
+        {
+            File.SetUnixFileMode(_wrapperScriptPath,
+                UnixFileMode.UserRead |
+                UnixFileMode.UserWrite |
+                UnixFileMode.UserExecute |
+                UnixFileMode.GroupExecute);
+        }
+        catch
+        {
+            /* best effort */
+        }
 
         // Replace FileName/args with wrapper invocation
         psi.FileName = _wrapperScriptPath;
@@ -269,7 +299,10 @@ public sealed class DotnetFileBasedExecutor : ICodeExecutor
 
     private void EnsureWrapperScript()
     {
-        if (OperatingSystem.IsWindows()) return; // not used
+        if (OperatingSystem.IsWindows())
+        {
+            return; // not used
+        }
         // Wrapper will be created on first call to WrapWithUlimit.
     }
 
@@ -279,7 +312,7 @@ public sealed class DotnetFileBasedExecutor : ICodeExecutor
         {
             if (Directory.Exists(dir))
             {
-                Directory.Delete(dir, recursive: true);
+                Directory.Delete(dir, true);
             }
         }
         catch

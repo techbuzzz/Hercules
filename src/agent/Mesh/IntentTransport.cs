@@ -1,6 +1,4 @@
-using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Hercules.Mesh;
@@ -17,9 +15,6 @@ public sealed class IntentTransport : IDisposable
     private readonly HttpClient _http;
     private readonly CapabilityRegistry _registry;
     private readonly bool _weOwnClient;
-
-    /// <summary>Таймаут по умолчанию для inter-agent вызовов (мс).</summary>
-    public int DefaultTimeoutMs { get; set; } = 30_000;
 
     /// <summary>
     ///     Создать транспорт с собственным HttpClient (для CLI-режима без DI).
@@ -46,16 +41,8 @@ public sealed class IntentTransport : IDisposable
         _weOwnClient = false;
     }
 
-    /// <summary>
-    ///     Регистрация IntentTransport в DI с IHttpClientFactory.
-    /// </summary>
-    public static void RegisterWithHttpClient(IServiceCollection services, int defaultTimeoutMs = 30_000)
-    {
-        services.AddHttpClient<IntentTransport>(client =>
-        {
-            client.Timeout = TimeSpan.FromMilliseconds(defaultTimeoutMs);
-        });
-    }
+    /// <summary>Таймаут по умолчанию для inter-agent вызовов (мс).</summary>
+    public int DefaultTimeoutMs { get; set; } = 30_000;
 
     public void Dispose()
     {
@@ -63,6 +50,14 @@ public sealed class IntentTransport : IDisposable
         {
             _http.Dispose();
         }
+    }
+
+    /// <summary>
+    ///     Регистрация IntentTransport в DI с IHttpClientFactory.
+    /// </summary>
+    public static void RegisterWithHttpClient(IServiceCollection services, int defaultTimeoutMs = 30_000)
+    {
+        services.AddHttpClient<IntentTransport>(client => { client.Timeout = TimeSpan.FromMilliseconds(defaultTimeoutMs); });
     }
 
     /// <summary>
@@ -74,8 +69,7 @@ public sealed class IntentTransport : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(targetAgentId);
         ArgumentNullException.ThrowIfNull(envelope);
 
-        var peerManifest = _registry.Get(targetAgentId)
-            ?? throw new InvalidOperationException($"Peer-агент '{targetAgentId}' не найден в реестре.");
+        AgentManifest peerManifest = _registry.Get(targetAgentId) ?? throw new InvalidOperationException($"Peer-агент '{targetAgentId}' не найден в реестре.");
 
         if (string.IsNullOrWhiteSpace(peerManifest.Endpoint))
         {
@@ -84,7 +78,9 @@ public sealed class IntentTransport : IDisposable
         }
 
         var intentUrl = peerManifest.Endpoint.TrimEnd('/') + "/api/mesh/intent";
-        var timeoutMs = envelope.TimeoutMs > 0 ? envelope.TimeoutMs : DefaultTimeoutMs;
+        var timeoutMs = envelope.TimeoutMs > 0
+            ? envelope.TimeoutMs
+            : DefaultTimeoutMs;
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeoutMs);
@@ -93,7 +89,7 @@ public sealed class IntentTransport : IDisposable
         {
             using var httpReq = new HttpRequestMessage(HttpMethod.Post, intentUrl)
             {
-                Content = new StringContent(envelope.ToJson(), Encoding.UTF8, "application/json"),
+                Content = new StringContent(envelope.ToJson(), Encoding.UTF8, "application/json")
             };
 
             if (peerManifest.Auth.Type == "apikey" && !string.IsNullOrEmpty(peerManifest.Auth.Header))
@@ -101,7 +97,7 @@ public sealed class IntentTransport : IDisposable
                 httpReq.Headers.TryAddWithoutValidation(peerManifest.Auth.Header, "mesh-key");
             }
 
-            using var resp = await _http.SendAsync(httpReq, cts.Token);
+            using HttpResponseMessage resp = await _http.SendAsync(httpReq, cts.Token);
             var body = await resp.Content.ReadAsStringAsync(cts.Token);
 
             if (!resp.IsSuccessStatusCode)
@@ -110,9 +106,9 @@ public sealed class IntentTransport : IDisposable
                     $"HTTP {(int)resp.StatusCode}: {body}", envelope.TraceId);
             }
 
-            return IntentResponse.FromJson(body)
-                ?? IntentResponse.Failed(envelope.RequestId, targetAgentId,
-                    $"Невалидный JSON в ответе: {body}", envelope.TraceId);
+            return IntentResponse.FromJson(body) ??
+                   IntentResponse.Failed(envelope.RequestId, targetAgentId,
+                       $"Невалидный JSON в ответе: {body}", envelope.TraceId);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {

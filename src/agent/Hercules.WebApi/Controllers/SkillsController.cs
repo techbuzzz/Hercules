@@ -5,8 +5,8 @@ using Hercules.Storage;
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
-/// Эндпоинты навыков: список, создание, чтение, обновление, улучшение, экспорт, импорт.
-/// Делегируют в SkillManager через WebApiAdapter.
+///     Эндпоинты навыков: список, создание, чтение, обновление, улучшение, экспорт, импорт.
+///     Делегируют в SkillManager через WebApiAdapter.
 /// </summary>
 public static class SkillsController
 {
@@ -14,14 +14,16 @@ public static class SkillsController
     {
         // GET /api/skills — список навыков
         app.MapGet("/api/skills", (WebApiAdapter adapter) =>
-            Results.Ok(adapter.ListSkills()))
+                Results.Ok(adapter.ListSkills()))
             .WithName("ListSkills");
 
         // GET /api/skills/{id} — получить навык
         app.MapGet("/api/skills/{id}", (string id, WebApiAdapter adapter) =>
         {
             var s = adapter.GetSkill(id);
-            return s is null ? Results.NotFound(new { error = "Навык не найден." }) : Results.Ok(s);
+            return s is null
+                ? Results.NotFound(new { error = "Навык не найден." })
+                : Results.Ok(s);
         }).WithName("GetSkill");
 
         // POST /api/skills — создать навык.
@@ -35,8 +37,8 @@ public static class SkillsController
                 if (ai == true)
                 {
                     var t = !string.IsNullOrWhiteSpace(topic) ? topic
-                          : !string.IsNullOrWhiteSpace(req.Name) ? req.Name
-                          : req.Trigger ?? "";
+                        : !string.IsNullOrWhiteSpace(req.Name) ? req.Name
+                        : req.Trigger ?? "";
                     if (string.IsNullOrWhiteSpace(t))
                     {
                         return Results.BadRequest(new { error = "Для AI-генерации укажите topic/name." });
@@ -59,14 +61,18 @@ public static class SkillsController
         app.MapPut("/api/skills/{id}", (string id, UpdateSkillRequest req, WebApiAdapter adapter) =>
         {
             var updated = adapter.UpdateSkill(id, req);
-            return updated is null ? Results.NotFound(new { error = "Навык не найден." }) : Results.Ok(updated);
+            return updated is null
+                ? Results.NotFound(new { error = "Навык не найден." })
+                : Results.Ok(updated);
         }).WithName("UpdateSkill");
 
         // POST /api/skills/{id}/improve — улучшить навык через LLM
         app.MapPost("/api/skills/{id}/improve", async (string id, WebApiAdapter adapter, CancellationToken ct) =>
         {
             var improved = await adapter.ImproveSkillAsync(id, ct);
-            return improved is null ? Results.NotFound(new { error = "Навык не найден." }) : Results.Ok(improved);
+            return improved is null
+                ? Results.NotFound(new { error = "Навык не найден." })
+                : Results.Ok(improved);
         }).WithName("ImproveSkill");
 
         // GET /api/skills/{id}/export — экспортировать навык в .skillpkg (ZIP)
@@ -98,7 +104,7 @@ public static class SkillsController
             }
 
             var conflictStr = form["conflict"].ToString();
-            var conflict = Enum.TryParse<ConflictResolution>(conflictStr, ignoreCase: true, out var cr)
+            var conflict = Enum.TryParse<ConflictResolution>(conflictStr, true, out var cr)
                 ? cr
                 : ConflictResolution.Rename;
 
@@ -127,12 +133,25 @@ public static class SkillsController
             }
             finally
             {
-                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { /* best effort */ }
+                try
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
+                }
+                catch
+                {
+                    /* best effort */
+                }
             }
         }).WithName("ImportSkill").DisableAntiforgery();
     }
 
-    private static SkillDto ToDto(Skill s) => new(
-        s.Meta.Id, s.Meta.Name, s.Meta.Description, s.Meta.PhraseReceivers,
-        s.Meta.Version, s.Meta.SuccessRate, s.Meta.TotalUses, s.Meta.CreatedAt);
+    private static SkillDto ToDto(Skill s)
+    {
+        return new SkillDto(
+            s.Meta.Id, s.Meta.Name, s.Meta.Description, s.Meta.PhraseReceivers,
+            s.Meta.Version, s.Meta.SuccessRate, s.Meta.TotalUses, s.Meta.CreatedAt);
+    }
 }

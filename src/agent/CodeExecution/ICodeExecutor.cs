@@ -38,17 +38,25 @@ public sealed record ExecutionResult(
 {
     public bool IsSuccess => Status == "ok" && ExitCode == 0;
 
-    public static ExecutionResult Rejected(IReadOnlyList<string> patterns) =>
-        new(0, "", "Blocked by DangerousCodeScanner", 0, "rejected", patterns);
+    public static ExecutionResult Rejected(IReadOnlyList<string> patterns)
+    {
+        return new ExecutionResult(0, "", "Blocked by DangerousCodeScanner", 0, "rejected", patterns);
+    }
 
-    public static ExecutionResult Failed(string stderr, int exitCode = -1) =>
-        new(exitCode, "", stderr, 0, "failed", Array.Empty<string>());
+    public static ExecutionResult Failed(string stderr, int exitCode = -1)
+    {
+        return new ExecutionResult(exitCode, "", stderr, 0, "failed", Array.Empty<string>());
+    }
 
-    public static ExecutionResult TimedOut(long durationMs) =>
-        new(-1, "", $"Killed after {durationMs}ms timeout", durationMs, "timeout", Array.Empty<string>());
+    public static ExecutionResult TimedOut(long durationMs)
+    {
+        return new ExecutionResult(-1, "", $"Killed after {durationMs}ms timeout", durationMs, "timeout", Array.Empty<string>());
+    }
 
-    public static ExecutionResult Killed(string reason) =>
-        new(-1, "", reason, 0, "killed", Array.Empty<string>());
+    public static ExecutionResult Killed(string reason)
+    {
+        return new ExecutionResult(-1, "", reason, 0, "killed", Array.Empty<string>());
+    }
 }
 
 /// <summary>

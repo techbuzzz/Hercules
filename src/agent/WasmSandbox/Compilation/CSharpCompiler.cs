@@ -1,13 +1,11 @@
-using System.Diagnostics;
-
 namespace Hercules.WasmSandbox.Compilation;
 
 /// <summary>
 ///     Компилирует C# код в WASM через `dotnet workload install wasm-tools` + `dotnet publish`.
 ///     Требует:
-///       • .NET 10 SDK
-///       • `dotnet workload install wasm-tools` (должно быть установлено заранее)
-///       • `dotnet workload install wasi-experimental` (для wasi-wasm RID)
+///     • .NET 10 SDK
+///     • `dotnet workload install wasm-tools` (должно быть установлено заранее)
+///     • `dotnet workload install wasi-experimental` (для wasi-wasm RID)
 ///     В v3.1 — STUB. Реальная компиляция требует отдельного temp .csproj с RID=wasi-wasm,
 ///     publish, и извлечения .wasm. Помечено как stub для последующей реализации в V3.2.
 /// </summary>
@@ -30,11 +28,11 @@ public sealed class CSharpCompiler : IWasmCompiler
 /// <summary>
 ///     Компилирует Python в WASM через RustPython.wasm.
 ///     Требует:
-///       • Скачать rustpython.wasm (~10 MB) в ~/.hercules/wasm/rustpython.wasm
-///       • Python скрипт упаковывается как init-секция custom section в wasm
+///     • Скачать rustpython.wasm (~10 MB) в ~/.hercules/wasm/rustpython.wasm
+///     • Python скрипт упаковывается как init-секция custom section в wasm
 ///     V3.1: STUB. V3.2: реализовать через:
-///       1) `wasi_snapshot_preview1.args_get` для получения скрипта из argv
-///       2) либо через embedding скрипта как custom section (name="python_src")
+///     1) `wasi_snapshot_preview1.args_get` для получения скрипта из argv
+///     2) либо через embedding скрипта как custom section (name="python_src")
 ///     Для прототипирования — используйте готовый RustPython.wasm + его WASI CLI интерфейс.
 /// </summary>
 public sealed class PythonCompiler : IWasmCompiler

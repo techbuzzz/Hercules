@@ -1,3 +1,6 @@
+using System.Text;
+using Hercules.Config;
+
 namespace Hercules.Tools;
 
 /// <summary>
@@ -16,36 +19,44 @@ public sealed class ToolRegistry
         Register(tools);
     }
 
+    /// <summary>Все зарегистрированные tool'ы (для итерации/диагностики).</summary>
+    public IReadOnlyCollection<ITool> All => _tools.Values;
+
+    /// <summary>Список имён (lowercase).</summary>
+    public IReadOnlyCollection<string> Names => _tools.Keys;
+
     /// <summary>
     ///     Перезагрузить список инструментов при runtime-изменении конфигурации.
     ///     Некоторые инструменты (MCP, HTTP) зависят от конфигурации и должны быть
     ///     пересозданы с новыми настройками.
     /// </summary>
-    public void Reload(Hercules.Config.AppConfig cfg)
+    public void Reload(AppConfig cfg)
     {
         _tools.Clear();
-        var fresh = _toolsFactory().Select(t => t switch
+        IEnumerable<ITool> fresh = _toolsFactory().Select(t => t switch
         {
-            Hercules.Tools.HttpTool => new Hercules.Tools.HttpTool(cfg.Http),
-            Hercules.Tools.A2AClient => new Hercules.Tools.A2AClient(cfg.A2A),
-            _ => t,
+            HttpTool => new HttpTool(cfg.Http),
+            A2AClient => new A2AClient(cfg.A2A),
+            _ => t
         });
         Register(fresh);
     }
 
     private void Register(IEnumerable<ITool> tools)
     {
-        foreach (var t in tools)
+        foreach (ITool t in tools)
         {
             if (string.IsNullOrWhiteSpace(t.Name))
             {
                 throw new InvalidOperationException("Tool name cannot be empty");
             }
+
             if (_tools.ContainsKey(t.Name))
             {
                 throw new InvalidOperationException(
                     $"Duplicate tool name: '{t.Name}' (existing: {_tools[t.Name].GetType().Name}, new: {t.GetType().Name})");
             }
+
             _tools[t.Name] = t;
         }
     }
@@ -53,14 +64,10 @@ public sealed class ToolRegistry
     /// <summary>Получить tool по имени (case-insensitive). Null если не найден.</summary>
     public ITool? Get(string name)
     {
-        return _tools.TryGetValue(name, out var t) ? t : null;
+        return _tools.TryGetValue(name, out ITool? t)
+            ? t
+            : null;
     }
-
-    /// <summary>Все зарегистрированные tool'ы (для итерации/диагностики).</summary>
-    public IReadOnlyCollection<ITool> All => _tools.Values;
-
-    /// <summary>Список имён (lowercase).</summary>
-    public IReadOnlyCollection<string> Names => _tools.Keys;
 
     /// <summary>
     ///     Сгенерировать markdown-секцию "Available Tools" для system prompt.
@@ -73,7 +80,7 @@ public sealed class ToolRegistry
             return "(no tools available)";
         }
 
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         sb.AppendLine("## Available Tools");
         sb.AppendLine();
         sb.AppendLine("Ты можешь вызвать инструмент, вернув JSON в формате:");
@@ -81,7 +88,7 @@ public sealed class ToolRegistry
         sb.AppendLine("{\"action\": \"tool_name\", \"arguments\": {...}}");
         sb.AppendLine("```");
         sb.AppendLine();
-        foreach (var t in _tools.Values)
+        foreach (ITool t in _tools.Values)
         {
             sb.AppendLine($"### {t.Name}");
             sb.AppendLine($"{t.Description}");
@@ -93,8 +100,10 @@ public sealed class ToolRegistry
                 sb.AppendLine(t.ParametersSchema);
                 sb.AppendLine("```");
             }
+
             sb.AppendLine();
         }
+
         return sb.ToString();
     }
 }

@@ -16,32 +16,32 @@
 
   <ItemGroup>
     <!-- AI-абстракции: единый интерфейс IChatClient для всех LLM-провайдеров -->
-    <PackageReference Include="Microsoft.Extensions.AI" Version="10.7.0" />
-    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.7.0" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.8.3" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />
     <!-- OpenAI-совместимый SDK (используется для YandexGPT и Ollama) -->
-    <PackageReference Include="OpenAI" Version="2.11.0" />
+    <PackageReference Include="OpenAI" Version="2.13.0" />
 
     <!-- Хостинг, DI, конфигурация -->
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
 
     <!-- SQLite для логов сессий и метрик -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.3" />
-    <PackageReference Include="Wasmtime" Version="14.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <PackageReference Include="Wasmtime" Version="44.0.0" />
 
     <!-- Парсинг метаданных навыков (YAML front-matter) -->
-    <PackageReference Include="YamlDotNet" Version="18.0.0" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
 
     <!-- Улучшенный CLI-интерфейс -->
-    <PackageReference Include="Spectre.Console" Version="0.57.0" />
+    <PackageReference Include="Spectre.Console" Version="0.57.2" />
 
     <!-- Telegram-бот (вторичный интерфейс) -->
-    <PackageReference Include="Telegram.Bot" Version="22.10.1" />
+    <PackageReference Include="Telegram.Bot" Version="22.10.2.1" />
 
     <!-- Model Context Protocol (MCP) — Stage 3, tool ecosystem -->
-    <PackageReference Include="ModelContextProtocol" Version="0.3.0-preview.1" />
+    <PackageReference Include="ModelContextProtocol" Version="2.1.0" />
   </ItemGroup>
 
   <ItemGroup>

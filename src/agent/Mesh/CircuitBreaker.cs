@@ -23,10 +23,10 @@ public enum CircuitState
 /// </summary>
 internal sealed class CircuitStateRecord
 {
-    private int _state = (int)CircuitState.Closed;
     private int _consecutiveFailures;
-    private long _openedAtTicks;
     private long _lastFailureAtTicks;
+    private long _openedAtTicks;
+    private int _state = (int)CircuitState.Closed;
 
     public CircuitState State
     {
@@ -42,13 +42,13 @@ internal sealed class CircuitStateRecord
 
     public DateTimeOffset LastFailureAt
     {
-        get => new DateTimeOffset(Interlocked.Read(ref _lastFailureAtTicks), TimeSpan.Zero);
+        get => new(Interlocked.Read(ref _lastFailureAtTicks), TimeSpan.Zero);
         set => Interlocked.Exchange(ref _lastFailureAtTicks, value.UtcTicks);
     }
 
     public DateTimeOffset OpenedAt
     {
-        get => new DateTimeOffset(Interlocked.Read(ref _openedAtTicks), TimeSpan.Zero);
+        get => new(Interlocked.Read(ref _openedAtTicks), TimeSpan.Zero);
         set => Interlocked.Exchange(ref _openedAtTicks, value.UtcTicks);
     }
 
@@ -97,12 +97,12 @@ public sealed class CircuitBreaker
     /// </summary>
     public bool CanSend(string agentId)
     {
-        if (!_circuits.TryGetValue(agentId, out var record))
+        if (!_circuits.TryGetValue(agentId, out CircuitStateRecord? record))
         {
             return true; // Новый peer — цепь замкнута
         }
 
-        var state = record.State;
+        CircuitState state = record.State;
         switch (state)
         {
             case CircuitState.Closed:
@@ -112,6 +112,7 @@ public sealed class CircuitBreaker
                 {
                     return record.TryTransitionOpenToHalfOpen();
                 }
+
                 return false;
             case CircuitState.HalfOpen:
                 return true;
@@ -123,7 +124,7 @@ public sealed class CircuitBreaker
     /// <summary>Зафиксировать успешный вызов peer'а — сбрасывает счётчик неудач и замыкает цепь.</summary>
     public void RecordSuccess(string agentId)
     {
-        if (_circuits.TryGetValue(agentId, out var record))
+        if (_circuits.TryGetValue(agentId, out CircuitStateRecord? record))
         {
             record.State = CircuitState.Closed;
             record.ConsecutiveFailures = 0;
@@ -137,7 +138,7 @@ public sealed class CircuitBreaker
     /// </summary>
     public void RecordFailure(string agentId)
     {
-        var record = _circuits.GetOrAdd(agentId, _ => new CircuitStateRecord());
+        CircuitStateRecord record = _circuits.GetOrAdd(agentId, _ => new CircuitStateRecord());
         record.ConsecutiveFailures++;
         record.LastFailureAt = DateTimeOffset.UtcNow;
 
@@ -158,17 +159,18 @@ public sealed class CircuitBreaker
     /// <summary>Получить текущее состояние цепи для peer'а (для диагностики и API).</summary>
     public CircuitState GetState(string agentId)
     {
-        if (!_circuits.TryGetValue(agentId, out var record))
+        if (!_circuits.TryGetValue(agentId, out CircuitStateRecord? record))
         {
             return CircuitState.Closed;
         }
+
         return record.State;
     }
 
     /// <summary>Сбросить circuit breaker для peer'а (принудительно замкнуть цепь).</summary>
     public void Reset(string agentId)
     {
-        if (_circuits.TryGetValue(agentId, out var record))
+        if (_circuits.TryGetValue(agentId, out CircuitStateRecord? record))
         {
             record.State = CircuitState.Closed;
             record.ConsecutiveFailures = 0;
@@ -179,10 +181,11 @@ public sealed class CircuitBreaker
     public IReadOnlyDictionary<string, CircuitState> GetAllStates()
     {
         var result = new Dictionary<string, CircuitState>(StringComparer.OrdinalIgnoreCase);
-        foreach (var kvp in _circuits)
+        foreach (KeyValuePair<string, CircuitStateRecord> kvp in _circuits)
         {
             result[kvp.Key] = kvp.Value.State;
         }
+
         return result;
     }
 }
@@ -210,7 +213,11 @@ public sealed class RetryPolicy
     /// </summary>
     public TimeSpan GetDelay(int attempt)
     {
-        if (attempt <= 0) return TimeSpan.Zero;
+        if (attempt <= 0)
+        {
+            return TimeSpan.Zero;
+        }
+
         var delayMs = BaseDelay.TotalMilliseconds * Math.Pow(BackoffMultiplier, attempt - 1);
         var clamped = Math.Min(delayMs, MaxDelay.TotalMilliseconds);
         return TimeSpan.FromMilliseconds(clamped);
@@ -224,7 +231,11 @@ public sealed class RetryPolicy
     /// </summary>
     public bool ShouldRetry(IntentResponse response, int attempt)
     {
-        if (attempt >= MaxAttempts - 1) return false;
+        if (attempt >= MaxAttempts - 1)
+        {
+            return false;
+        }
+
         return response.Status is "timeout" or "error";
     }
 }

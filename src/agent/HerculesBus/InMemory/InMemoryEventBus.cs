@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 using HerculesBus.Core;
-using SysChannel = System.Threading.Channels.Channel;
-using SysChannelReader = System.Threading.Channels;
 
 namespace HerculesBus.InMemory;
 
@@ -14,9 +13,9 @@ namespace HerculesBus.InMemory;
 /// </summary>
 public sealed class InMemoryEventBus : IEventBus
 {
-    private readonly ConcurrentDictionary<string, List<System.Threading.Channels.Channel<AgentMessage>>> _channelSubs = new();
-    private readonly List<System.Threading.Channels.Channel<AgentMessage>> _allSubs = new();
     private readonly object _allLock = new();
+    private readonly List<Channel<AgentMessage>> _allSubs = new();
+    private readonly ConcurrentDictionary<string, List<Channel<AgentMessage>>> _channelSubs = new();
 
     public ValueTask PublishAsync(AgentMessage message, CancellationToken ct = default)
     {
@@ -32,8 +31,12 @@ public sealed class InMemoryEventBus : IEventBus
         }
 
         // 2. Глобальные подписчики (admin/observability)
-        System.Threading.Channels.Channel<AgentMessage>[] allSnapshot;
-        lock (_allLock) { allSnapshot = _allSubs.ToArray(); }
+        Channel<AgentMessage>[] allSnapshot;
+        lock (_allLock)
+        {
+            allSnapshot = _allSubs.ToArray();
+        }
+
         foreach (var ch in allSnapshot)
         {
             ch.Writer.TryWrite(message);
@@ -47,14 +50,17 @@ public sealed class InMemoryEventBus : IEventBus
         ArgumentException.ThrowIfNullOrWhiteSpace(channel);
         ArgumentNullException.ThrowIfNull(handler);
 
-        var ch = System.Threading.Channels.Channel.CreateUnbounded<AgentMessage>(new System.Threading.Channels.UnboundedChannelOptions
+        var ch = Channel.CreateUnbounded<AgentMessage>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
         });
 
-        var subs = _channelSubs.GetOrAdd(channel, _ => new List<System.Threading.Channels.Channel<AgentMessage>>());
-        lock (subs) { subs.Add(ch); }
+        var subs = _channelSubs.GetOrAdd(channel, _ => new List<Channel<AgentMessage>>());
+        lock (subs)
+        {
+            subs.Add(ch);
+        }
 
         _ = Task.Run(async () =>
         {
@@ -66,14 +72,20 @@ public sealed class InMemoryEventBus : IEventBus
                     {
                         await handler(msg, ct);
                     }
-                    catch (OperationCanceledException) { throw; }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
                     catch (Exception ex)
                     {
                         Console.Error.WriteLine($"[HerculesBus] handler error in channel '{channel}': {ex.GetType().Name}: {ex.Message}");
                     }
                 }
             }
-            catch (OperationCanceledException) { /* shutdown */ }
+            catch (OperationCanceledException)
+            {
+                /* shutdown */
+            }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[HerculesBus] subscriber died for '{channel}': {ex.GetType().Name}: {ex.Message}");
@@ -83,7 +95,10 @@ public sealed class InMemoryEventBus : IEventBus
                 ch.Writer.TryComplete();
                 if (_channelSubs.TryGetValue(channel, out var currentSubs))
                 {
-                    lock (currentSubs) { currentSubs.Remove(ch); }
+                    lock (currentSubs)
+                    {
+                        currentSubs.Remove(ch);
+                    }
                 }
             }
         }, ct);
@@ -95,13 +110,16 @@ public sealed class InMemoryEventBus : IEventBus
     {
         ArgumentNullException.ThrowIfNull(handler);
 
-        var ch = System.Threading.Channels.Channel.CreateUnbounded<AgentMessage>(new System.Threading.Channels.UnboundedChannelOptions
+        var ch = Channel.CreateUnbounded<AgentMessage>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
         });
 
-        lock (_allLock) { _allSubs.Add(ch); }
+        lock (_allLock)
+        {
+            _allSubs.Add(ch);
+        }
 
         _ = Task.Run(async () =>
         {
@@ -113,14 +131,19 @@ public sealed class InMemoryEventBus : IEventBus
                     {
                         await handler(msg, ct);
                     }
-                    catch (OperationCanceledException) { throw; }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
                     catch (Exception ex)
                     {
                         Console.Error.WriteLine($"[HerculesBus] global handler error: {ex.GetType().Name}: {ex.Message}");
                     }
                 }
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException)
+            {
+            }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[HerculesBus] global subscriber died: {ex.GetType().Name}: {ex.Message}");
@@ -128,35 +151,46 @@ public sealed class InMemoryEventBus : IEventBus
             finally
             {
                 ch.Writer.TryComplete();
-                lock (_allLock) { _allSubs.Remove(ch); }
+                lock (_allLock)
+                {
+                    _allSubs.Remove(ch);
+                }
             }
         }, ct);
 
         return new GlobalSubscriptionToken(this, ch);
     }
 
-    private void Unsubscribe(string channel, System.Threading.Channels.Channel<AgentMessage> ch)
+    private void Unsubscribe(string channel, Channel<AgentMessage> ch)
     {
         if (_channelSubs.TryGetValue(channel, out var subs))
         {
-            lock (subs) { subs.Remove(ch); }
+            lock (subs)
+            {
+                subs.Remove(ch);
+            }
         }
+
         ch.Writer.TryComplete();
     }
 
-    private void UnsubscribeGlobal(System.Threading.Channels.Channel<AgentMessage> ch)
+    private void UnsubscribeGlobal(Channel<AgentMessage> ch)
     {
-        lock (_allLock) { _allSubs.Remove(ch); }
+        lock (_allLock)
+        {
+            _allSubs.Remove(ch);
+        }
+
         ch.Writer.TryComplete();
     }
 
     private sealed class SubscriptionToken : IAsyncDisposable
     {
         private readonly InMemoryEventBus _bus;
+        private readonly Channel<AgentMessage> _ch;
         private readonly string _channel;
-        private readonly System.Threading.Channels.Channel<AgentMessage> _ch;
 
-        public SubscriptionToken(InMemoryEventBus bus, string channel, System.Threading.Channels.Channel<AgentMessage> ch)
+        public SubscriptionToken(InMemoryEventBus bus, string channel, Channel<AgentMessage> ch)
         {
             _bus = bus;
             _channel = channel;
@@ -173,9 +207,9 @@ public sealed class InMemoryEventBus : IEventBus
     private sealed class GlobalSubscriptionToken : IAsyncDisposable
     {
         private readonly InMemoryEventBus _bus;
-        private readonly System.Threading.Channels.Channel<AgentMessage> _ch;
+        private readonly Channel<AgentMessage> _ch;
 
-        public GlobalSubscriptionToken(InMemoryEventBus bus, System.Threading.Channels.Channel<AgentMessage> ch)
+        public GlobalSubscriptionToken(InMemoryEventBus bus, Channel<AgentMessage> ch)
         {
             _bus = bus;
             _ch = ch;

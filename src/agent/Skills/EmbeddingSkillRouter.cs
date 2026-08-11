@@ -1,5 +1,4 @@
 using Hercules.Agent;
-using Hercules.LLM;
 using Hercules.Storage;
 
 namespace Hercules.Skills;
@@ -21,21 +20,21 @@ public readonly record struct SemanticRouteResult(Skill? MatchedSkill, double Sc
 public sealed class EmbeddingSkillRouter
 {
     private readonly IEmbeddingProvider _embedder;
-    private readonly SkillManager _skills;
     private readonly Dictionary<string, float[]> _skillEmbeddings = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SkillManager _skills;
     private List<string>? _cachedSkillIds;
-
-    /// <summary>Минимальный порог cosine-similarity для семантического матча (0..1).</summary>
-    public double SimilarityThreshold { get; set; } = 0.35;
-
-    /// <summary>Использовать keyword-matching как fallback, если embedding < порога.</summary>
-    public bool UseKeywordFallback { get; set; } = true;
 
     public EmbeddingSkillRouter(IEmbeddingProvider embedder, SkillManager skills)
     {
         _embedder = embedder ?? throw new ArgumentNullException(nameof(embedder));
         _skills = skills ?? throw new ArgumentNullException(nameof(skills));
     }
+
+    /// <summary>Минимальный порог cosine-similarity для семантического матча (0..1).</summary>
+    public double SimilarityThreshold { get; set; } = 0.35;
+
+    /// <summary>Использовать keyword-matching как fallback, если embedding < порога.</summary>
+    public bool UseKeywordFallback { get; set; } = true;
 
     /// <summary>
     ///     Маршрутизировать запрос: найти подходящий навык по embedding-сходству.
@@ -58,13 +57,13 @@ public sealed class EmbeddingSkillRouter
         }
 
         // Загружаем навыки и строим кэш embeddings (если изменился список навыков)
-        var allSkills = _skills.All();
+        List<Skill> allSkills = _skills.All();
         RefreshCacheIfNeeded(allSkills);
 
         // Ранжируем по cosine-similarity
         Skill? best = null;
         var bestScore = 0.0;
-        foreach (var skill in allSkills)
+        foreach (Skill skill in allSkills)
         {
             if (!_skillEmbeddings.TryGetValue(skill.Meta.Id, out var skillEmb))
             {
@@ -87,7 +86,7 @@ public sealed class EmbeddingSkillRouter
         // Fallback на keyword-matching
         if (UseKeywordFallback)
         {
-            var kwResult = KeywordFallback(input);
+            SemanticRouteResult kwResult = KeywordFallback(input);
             if (kwResult.IsSkill)
             {
                 return new SemanticRouteResult(kwResult.MatchedSkill, kwResult.Score, "keyword");
@@ -113,19 +112,20 @@ public sealed class EmbeddingSkillRouter
         }
 
         _skillEmbeddings.Clear();
-        foreach (var skill in skills)
+        foreach (Skill skill in skills)
         {
             // Embedding навыка = конкатенация имени, описания и фраз-приёмников
             var skillText = $"{skill.Meta.Name} {skill.Meta.Description} {string.Join(" ", skill.Meta.PhraseReceivers)}";
             var emb = _embedder.EmbedAsync(skillText).GetAwaiter().GetResult();
             _skillEmbeddings[skill.Meta.Id] = emb;
         }
+
         _cachedSkillIds = currentIds;
     }
 
     private SemanticRouteResult KeywordFallback(string input)
     {
-        var normalized = Hercules.Agent.SkillRouter.Normalize(input);
+        var normalized = SkillRouter.Normalize(input);
         Skill? best = null;
         var bestScore = 0;
 
@@ -133,7 +133,7 @@ public sealed class EmbeddingSkillRouter
         {
             var score = skill.Meta.PhraseReceivers.Count(receiver =>
                 !string.IsNullOrWhiteSpace(receiver) &&
-                normalized.Contains(Hercules.Agent.SkillRouter.Normalize(receiver), StringComparison.Ordinal));
+                normalized.Contains(SkillRouter.Normalize(receiver), StringComparison.Ordinal));
 
             if (score > bestScore)
             {
@@ -149,10 +149,13 @@ public sealed class EmbeddingSkillRouter
 
     private static double CosineSimilarity(float[] a, float[] b)
     {
-        if (a.Length != b.Length || a.Length == 0) return 0;
+        if (a.Length != b.Length || a.Length == 0)
+        {
+            return 0;
+        }
 
         double dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < a.Length; i++)
+        for (var i = 0; i < a.Length; i++)
         {
             dot += a[i] * b[i];
             normA += a[i] * a[i];
@@ -160,15 +163,21 @@ public sealed class EmbeddingSkillRouter
         }
 
         var denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 0 ? dot / denom : 0;
+        return denom > 0
+            ? dot / denom
+            : 0;
     }
 
     private static bool IsZeroVector(float[] v)
     {
         foreach (var x in v)
         {
-            if (x != 0) return false;
+            if (x != 0)
+            {
+                return false;
+            }
         }
+
         return true;
     }
 }

@@ -35,6 +35,7 @@ public sealed class SkillMeta
             {
                 return;
             }
+
             if (PhraseReceivers.Count == 0)
             {
                 PhraseReceivers = value

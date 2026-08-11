@@ -12,6 +12,16 @@ namespace Hercules.Agent;
 public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, AgentConfig cfg) : IConfigReload
 {
     private AgentConfig _cfg = cfg;
+
+    /// <summary>
+    ///     Применить новую конфигурацию агента без перезагрузки.
+    ///     Пороги оценки и улучшения навыков обновляются сразу.
+    /// </summary>
+    public void Reload(AppConfig config)
+    {
+        _cfg = config.Agent;
+    }
+
     public List<Skill> All()
     {
         return repo.LoadAll();
@@ -124,7 +134,7 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
         string? description = null,
         IEnumerable<string>? triggers = null)
     {
-        var receiverList = NormalizeReceivers(phraseReceivers, triggers);
+        List<string> receiverList = NormalizeReceivers(phraseReceivers, triggers);
         if (receiverList.Count == 0)
         {
             throw new ArgumentException(
@@ -176,7 +186,7 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
 
         if (phraseReceivers is not null || triggers is not null)
         {
-            var list = NormalizeReceivers(phraseReceivers, triggers);
+            List<string> list = NormalizeReceivers(phraseReceivers, triggers);
             if (list.Count > 0)
             {
                 skill.Meta.PhraseReceivers = list;
@@ -214,10 +224,11 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
         }
 
         return triggers?
-            .Select(t => t.Trim().ToLowerInvariant())
-            .Where(t => t.Length > 0)
-            .Distinct()
-            .ToList() ?? [];
+                   .Select(t => t.Trim().ToLowerInvariant())
+                   .Where(t => t.Length > 0)
+                   .Distinct()
+                   .ToList() ??
+               [];
     }
 
     /// <summary>Навыки, которые стоит улучшить (success_rate ниже порога при достаточном числе использований).</summary>
@@ -226,15 +237,6 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
         return repo.LoadAll()
             .Where(s => s.Meta.TotalUses >= _cfg.SkillEvaluationWindow && s.Meta.SuccessRate < _cfg.SkillImprovementThreshold)
             .ToList();
-    }
-
-    /// <summary>
-    ///     Применить новую конфигурацию агента без перезагрузки.
-    ///     Пороги оценки и улучшения навыков обновляются сразу.
-    /// </summary>
-    public void Reload(AppConfig config)
-    {
-        _cfg = config.Agent;
     }
 
     // ---- Парсинг JSON-ответов LLM (с защитой от лишнего текста) ----
@@ -262,7 +264,7 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
                 : "";
 
             // Приоритет: phrase_receivers (новое имя). Fallback: triggers (legacy).
-            List<string> receivers = ReadReceivers(root, out var legacyTriggers);
+            List<string> receivers = ReadReceivers(root, out List<string> legacyTriggers);
             if (receivers.Count == 0 && legacyTriggers.Count > 0)
             {
                 receivers = legacyTriggers;

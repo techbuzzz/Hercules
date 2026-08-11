@@ -9,6 +9,18 @@ namespace Hercules.Tools;
 /// </summary>
 public sealed class CodeExecutionTool : ITool
 {
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    private readonly ICodeExecutor _executor;
+
+    public CodeExecutionTool(ICodeExecutor executor)
+    {
+        _executor = executor;
+    }
+
     public string Name => "execute_code";
 
     public string Description =>
@@ -17,23 +29,16 @@ public sealed class CodeExecutionTool : ITool
         "Process.Start/File.Delete блокируются. Для data processing / вычислений.";
 
     public string? ParametersSchema => """
-        {
-          "type": "object",
-          "properties": {
-            "code": { "type": "string", "description": "Полный C# код (top-level statements)" },
-            "args": { "type": "array", "items": { "type": "string" }, "description": "CLI args (опц.)" },
-            "timeoutMs": { "type": "integer", "description": "Timeout в мс (опц., default 30000)" }
-          },
-          "required": ["code"]
-        }
-        """;
-
-    private readonly ICodeExecutor _executor;
-
-    public CodeExecutionTool(ICodeExecutor executor)
-    {
-        _executor = executor;
-    }
+                                       {
+                                         "type": "object",
+                                         "properties": {
+                                           "code": { "type": "string", "description": "Полный C# код (top-level statements)" },
+                                           "args": { "type": "array", "items": { "type": "string" }, "description": "CLI args (опц.)" },
+                                           "timeoutMs": { "type": "integer", "description": "Timeout в мс (опц., default 30000)" }
+                                         },
+                                         "required": ["code"]
+                                       }
+                                       """;
 
     public async Task<ToolResult> ExecuteAsync(string argumentsJson, CancellationToken ct = default)
     {
@@ -55,17 +60,17 @@ public sealed class CodeExecutionTool : ITool
         try
         {
             var execReq = new ExecutionRequest(
-                Code: req.Code,
-                Language: "csharp",
-                Args: req.Args?.ToArray(),
-                TimeoutMs: req.TimeoutMs);
-            var result = await _executor.ExecuteAsync(execReq, ct);
+                req.Code,
+                "csharp",
+                req.Args?.ToArray(),
+                req.TimeoutMs);
+            ExecutionResult result = await _executor.ExecuteAsync(execReq, ct);
 
             var meta = new Dictionary<string, object>
             {
                 ["status"] = result.Status,
                 ["exit_code"] = result.ExitCode,
-                ["duration_ms"] = result.DurationMs,
+                ["duration_ms"] = result.DurationMs
             };
             if (result.BlockedPatterns.Count > 0)
             {
@@ -79,15 +84,16 @@ public sealed class CodeExecutionTool : ITool
                 {
                     output += $"\nstderr:\n{result.Stderr}";
                 }
+
                 return ToolResult.Ok(output, meta);
             }
-            else
-            {
-                return ToolResult.Fail(
-                    $"❌ {result.Status} (exit={result.ExitCode}, {result.DurationMs}ms)\n" +
-                    (string.IsNullOrEmpty(result.Stderr) ? result.Stdout : result.Stderr),
-                    meta);
-            }
+
+            return ToolResult.Fail(
+                $"❌ {result.Status} (exit={result.ExitCode}, {result.DurationMs}ms)\n" +
+                (string.IsNullOrEmpty(result.Stderr)
+                    ? result.Stdout
+                    : result.Stderr),
+                meta);
         }
         catch (Exception ex)
         {
@@ -101,9 +107,4 @@ public sealed class CodeExecutionTool : ITool
         public List<string>? Args { get; set; }
         public int? TimeoutMs { get; set; }
     }
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
 }

@@ -22,25 +22,65 @@ namespace HerculesBus.Http;
 /// </summary>
 public sealed class HerculesBusHttpServer : IAsyncDisposable
 {
-    private readonly Bus _bus;
-    private readonly HttpListener _listener;
-    private readonly CancellationTokenSource _cts = new();
-    private readonly HashSet<string> _validTokens = new(StringComparer.Ordinal);
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = false
+    };
+
     private readonly Dictionary<string, IAsyncDisposable> _activeSubscriptions = new();
+    private readonly Bus _bus;
+    private readonly CancellationTokenSource _cts = new();
+    private readonly HttpListener _listener;
+    private readonly string _prefix;
     private readonly object _subLock = new();
+    private readonly HashSet<string> _validTokens = new(StringComparer.Ordinal);
     private Task? _acceptLoop;
     private bool _started;
-
-    public string BaseUrl => $"http://{_prefix}/";
-    private readonly string _prefix;
 
     public HerculesBusHttpServer(Bus bus, string prefix = "http://localhost:9876/")
     {
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
-        if (!prefix.EndsWith("/")) prefix += "/";
+        if (!prefix.EndsWith("/"))
+        {
+            prefix += "/";
+        }
+
         _prefix = prefix;
         _listener = new HttpListener();
         _listener.Prefixes.Add(_prefix);
+    }
+
+    public string BaseUrl => $"http://{_prefix}/";
+
+    /// <summary>Максимальный размер тела запроса в байтах. 0 = без лимита.</summary>
+    public int MaxRequestBodyBytes { get; set; } = 1_048_576; // 1 MB
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        try
+        {
+            _listener.Stop();
+            _listener.Close();
+        }
+        catch
+        {
+        }
+
+        if (_acceptLoop != null)
+        {
+            try
+            {
+                await _acceptLoop;
+            }
+            catch
+            {
+            }
+        }
+
+        _cts.Dispose();
     }
 
     /// <summary>Зарегистрировать допустимые токены для аутентификации.</summary>
@@ -52,7 +92,11 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
 
     public async Task StartAsync(CancellationToken ct = default)
     {
-        if (_started) return;
+        if (_started)
+        {
+            return;
+        }
+
         _started = true;
         _listener.Start();
         _acceptLoop = Task.Run(() => AcceptLoopAsync(_cts.Token), ct);
@@ -64,9 +108,18 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
         while (!ct.IsCancellationRequested && _listener.IsListening)
         {
             HttpListenerContext ctx;
-            try { ctx = await _listener.GetContextAsync(); }
-            catch (HttpListenerException) { break; }
-            catch (ObjectDisposedException) { break; }
+            try
+            {
+                ctx = await _listener.GetContextAsync();
+            }
+            catch (HttpListenerException)
+            {
+                break;
+            }
+            catch (ObjectDisposedException)
+            {
+                break;
+            }
 
             _ = Task.Run(() => HandleRequestAsync(ctx, ct), ct);
         }
@@ -86,14 +139,14 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
                 return;
             }
 
-            switch ((method, path))
+            switch (method, path)
             {
                 case ("GET", "/healthz"):
                     await WriteJson(ctx, 200, new { status = "ok", time = DateTimeOffset.UtcNow });
                     return;
 
                 case ("GET", "/agents"):
-                    var agents = await _bus.ListAgentsAsync(includeOffline: true, ct);
+                    var agents = await _bus.ListAgentsAsync(true, ct);
                     await WriteJson(ctx, 200, agents);
                     return;
 
@@ -136,7 +189,11 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
                             if (subPath.StartsWith("recent", StringComparison.OrdinalIgnoreCase) && method == "GET")
                             {
                                 int.TryParse(ctx.Request.QueryString["limit"], out var limit);
-                                if (limit <= 0) limit = 50;
+                                if (limit <= 0)
+                                {
+                                    limit = 50;
+                                }
+
                                 var recent = await _bus.GetRecentAsync(channel, limit, ct);
                                 await WriteJson(ctx, 200, recent);
                                 return;
@@ -172,16 +229,29 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[HerculesBus] HTTP handler error: {ex.GetType().Name}: {ex.Message}");
-            try { await WriteJson(ctx, 500, new { error = ex.Message }); } catch { }
+            try
+            {
+                await WriteJson(ctx, 500, new { error = ex.Message });
+            }
+            catch
+            {
+            }
         }
     }
 
     private bool Authenticate(HttpListenerContext ctx)
     {
-        if (_validTokens.Count == 0) return true; // dev mode: open
+        if (_validTokens.Count == 0)
+        {
+            return true; // dev mode: open
+        }
 
         var token = ctx.Request.Headers["X-Hercules-Token"];
-        if (string.IsNullOrEmpty(token)) return false;
+        if (string.IsNullOrEmpty(token))
+        {
+            return false;
+        }
+
         return _validTokens.Contains(token);
     }
 
@@ -201,7 +271,7 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
             try
             {
                 var json = JsonSerializer.Serialize(msg, JsonOpts);
-                await writer.WriteAsync($"event: message\n");
+                await writer.WriteAsync("event: message\n");
                 await writer.WriteAsync($"data: {json}\n\n");
                 await writer.FlushAsync();
             }
@@ -216,32 +286,34 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
         {
             while (!ct.IsCancellationRequested && ctx.Response.OutputStream.CanWrite)
             {
-                if ((DateTime.UtcNow - lastHeartbeat) >= heartbeatInterval)
+                if (DateTime.UtcNow - lastHeartbeat >= heartbeatInterval)
                 {
                     await writer.WriteAsync(": heartbeat\n\n");
                     await writer.FlushAsync();
                     lastHeartbeat = DateTime.UtcNow;
                 }
+
                 await Task.Delay(1000, ct);
             }
         }
-        catch (OperationCanceledException) { }
-        catch (HttpListenerException) { /* client disconnected */ }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (HttpListenerException)
+        {
+            /* client disconnected */
+        }
         finally
         {
-            try { ctx.Response.OutputStream.Close(); } catch { }
+            try
+            {
+                ctx.Response.OutputStream.Close();
+            }
+            catch
+            {
+            }
         }
     }
-
-    /// <summary>Максимальный размер тела запроса в байтах. 0 = без лимита.</summary>
-    public int MaxRequestBodyBytes { get; set; } = 1_048_576; // 1 MB
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        WriteIndented = false
-    };
 
     private static async Task WriteJson(HttpListenerContext ctx, int status, object body)
     {
@@ -259,18 +331,15 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
         {
             throw new InvalidOperationException($"Request body exceeds {MaxRequestBodyBytes} bytes limit");
         }
+
         using var reader = new StreamReader(ctx.Request.InputStream, Encoding.UTF8);
         var text = await reader.ReadToEndAsync();
-        if (string.IsNullOrEmpty(text)) return default!;
-        return JsonSerializer.Deserialize<T>(text, JsonOpts) ?? throw new InvalidOperationException("Empty body");
-    }
+        if (string.IsNullOrEmpty(text))
+        {
+            return default!;
+        }
 
-    public async ValueTask DisposeAsync()
-    {
-        _cts.Cancel();
-        try { _listener.Stop(); _listener.Close(); } catch { }
-        if (_acceptLoop != null) { try { await _acceptLoop; } catch { } }
-        _cts.Dispose();
+        return JsonSerializer.Deserialize<T>(text, JsonOpts) ?? throw new InvalidOperationException("Empty body");
     }
 
     // ===== DTOs =====
@@ -282,7 +351,10 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
         string Token,
         string[]? SubscribedChannels = null)
     {
-        public AgentIdentity ToIdentity() => new(AgentId, DisplayName, Roles, Token, SubscribedChannels);
+        public AgentIdentity ToIdentity()
+        {
+            return new AgentIdentity(AgentId, DisplayName, Roles, Token, SubscribedChannels);
+        }
     }
 
     private sealed record CreateChannelDto(string Name, string? Description, bool IsPrivate, string? CreatedBy);
@@ -308,16 +380,16 @@ public sealed class HerculesBusHttpServer : IAsyncDisposable
                 .Select(a => new MessageAttachment(a.Name, a.MimeType, a.Url, a.SizeBytes))
                 .ToList();
             return new AgentMessage(
-                Id: Id ?? "",
-                Channel: Channel,
-                SenderAgentId: SenderAgentId,
-                SenderName: SenderName,
-                Kind: Kind,
-                Body: Body,
-                ReplyTo: ReplyTo,
-                Mentions: mentions,
-                Attachments: attachments,
-                Timestamp: Timestamp);
+                Id ?? "",
+                Channel,
+                SenderAgentId,
+                SenderName,
+                Kind,
+                Body,
+                ReplyTo,
+                mentions,
+                attachments,
+                Timestamp);
         }
     }
 

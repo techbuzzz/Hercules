@@ -10,10 +10,10 @@ namespace Hercules.LLM;
 /// </summary>
 public sealed class ResilientLLMClient : ILLMClient
 {
-    private volatile List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
+    private readonly LlmClientFactory _factory;
     private readonly RoleRouter _roleRouter;
     private volatile LlmConfig _cfg;
-    private readonly LlmClientFactory _factory;
+    private volatile List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
 
     public ResilientLLMClient(LlmConfig cfg, LlmClientFactory factory, RoleRouter roleRouter)
     {
@@ -24,6 +24,46 @@ public sealed class ResilientLLMClient : ILLMClient
         ProviderName = "";
         ModelName = "";
         RebuildChain(cfg);
+    }
+
+    /// <summary>Имя последнего успешно ответившего провайдера.</summary>
+    public string ProviderName { get; private set; }
+
+    public string ModelName { get; private set; }
+
+    public Task<LlmResponse> CompleteAsync(string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+    {
+        // main → fallback chain (как раньше)
+        if (string.IsNullOrEmpty(role) || role == Roles.Main)
+        {
+            return CompleteMainAsync(messages, ct);
+        }
+
+        // Другая роль → RoleRouter → конкретный клиент (single-shot, без fallback).
+        // Если роль не сконфигурирована — fallback на main.
+        ILLMClient client = _roleRouter.Resolve(role);
+        return InvokeRoleAsync(client, role, messages, ct);
+    }
+
+    public Task<LlmResponse> CompleteAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+    {
+        return CompleteAsync(Roles.Main, messages, ct);
+    }
+
+    public IAsyncEnumerable<string> StreamAsync(string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(role) || role == Roles.Main)
+        {
+            return StreamMainAsync(messages, ct);
+        }
+
+        ILLMClient client = _roleRouter.Resolve(role);
+        return StreamSingleAsync(client, role, messages, ct);
+    }
+
+    public IAsyncEnumerable<string> StreamAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
+    {
+        return StreamAsync(Roles.Main, messages, ct);
     }
 
     /// <summary>
@@ -53,28 +93,6 @@ public sealed class ResilientLLMClient : ILLMClient
         ProviderName = cfg.Provider;
         ModelName = "";
     }
-
-    /// <summary>Имя последнего успешно ответившего провайдера.</summary>
-    public string ProviderName { get; private set; }
-
-    public string ModelName { get; private set; }
-
-    public Task<LlmResponse> CompleteAsync(string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
-    {
-        // main → fallback chain (как раньше)
-        if (string.IsNullOrEmpty(role) || role == Roles.Main)
-        {
-            return CompleteMainAsync(messages, ct);
-        }
-
-        // Другая роль → RoleRouter → конкретный клиент (single-shot, без fallback).
-        // Если роль не сконфигурирована — fallback на main.
-        ILLMClient client = _roleRouter.Resolve(role);
-        return InvokeRoleAsync(client, role, messages, ct);
-    }
-
-    public Task<LlmResponse> CompleteAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
-        => CompleteAsync(Roles.Main, messages, ct);
 
     private async Task<LlmResponse> CompleteMainAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct)
     {
@@ -124,20 +142,6 @@ public sealed class ResilientLLMClient : ILLMClient
             return await CompleteMainAsync(messages, ct);
         }
     }
-
-    public IAsyncEnumerable<string> StreamAsync(string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
-    {
-        if (string.IsNullOrEmpty(role) || role == Roles.Main)
-        {
-            return StreamMainAsync(messages, ct);
-        }
-
-        ILLMClient client = _roleRouter.Resolve(role);
-        return StreamSingleAsync(client, role, messages, ct);
-    }
-
-    public IAsyncEnumerable<string> StreamAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
-        => StreamAsync(Roles.Main, messages, ct);
 
     private async IAsyncEnumerable<string> StreamMainAsync(
         IReadOnlyList<ChatTurn> messages,
@@ -200,7 +204,7 @@ public sealed class ResilientLLMClient : ILLMClient
         IReadOnlyList<ChatTurn> messages,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await using var enumerator = client.StreamAsync(messages, ct).GetAsyncEnumerator(ct);
+        await using IAsyncEnumerator<string> enumerator = client.StreamAsync(messages, ct).GetAsyncEnumerator(ct);
         var started = await enumerator.MoveNextAsync();
         ProviderName = client.ProviderName;
         ModelName = client.ModelName;

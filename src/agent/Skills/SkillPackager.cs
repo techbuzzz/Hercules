@@ -1,6 +1,6 @@
 using System.IO.Compression;
+using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Hercules.Storage;
 
 namespace Hercules.Skills;
@@ -9,12 +9,12 @@ namespace Hercules.Skills;
 ///     Экспорт/импорт пакетов навыков. Пакет — это ZIP-архив (.skillpkg) или папка
 ///     с фиксированным набором файлов:
 ///     <list type="bullet">
-///       <item>skill.package.json — манифест пакета (обязательный)</item>
-///       <item>skill.description.md — описание навыка</item>
-///       <item>skill.prompt.md — system prompt</item>
-///       <item>skill.tests.json — тесты (опционально)</item>
-///       <item>skill.usage.json — история использования (опционально, для анализа)</item>
-///       <item>tool.schema.json — декларация инструментов (опционально)</item>
+///         <item>skill.package.json — манифест пакета (обязательный)</item>
+///         <item>skill.description.md — описание навыка</item>
+///         <item>skill.prompt.md — system prompt</item>
+///         <item>skill.tests.json — тесты (опционально)</item>
+///         <item>skill.usage.json — история использования (опционально, для анализа)</item>
+///         <item>tool.schema.json — декларация инструментов (опционально)</item>
 ///     </list>
 ///     Экспорт сохраняет навык в переносимый формат; импорт разворачивает пакет
 ///     в data/Skills/ с возможностью conflict-разрешения (replace | skip | rename).
@@ -26,7 +26,7 @@ public sealed class SkillPackager
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         PropertyNameCaseInsensitive = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
     private readonly FileSkillRepository _repo;
@@ -37,8 +37,10 @@ public sealed class SkillPackager
     }
 
     /// <summary>Имя файла-пакета по умолчанию: {id}-v{version}.skillpkg.</summary>
-    public static string PackageFileName(string skillId, int version) =>
-        $"{skillId}-v{version}.skillpkg";
+    public static string PackageFileName(string skillId, int version)
+    {
+        return $"{skillId}-v{version}.skillpkg";
+    }
 
     /// <summary>
     ///     Экспортировать навык в ZIP-пакет (.skillpkg).
@@ -46,7 +48,10 @@ public sealed class SkillPackager
     /// </summary>
     /// <param name="skillId">ID навыка для экспорта.</param>
     /// <param name="outputDir">Директория для сохранения пакета. Если null — используется data/Skills/exports/.</param>
-    /// <param name="includeUsage">Включить историю использования (для анализа). По умолчанию false — пакеты для распространения не содержат usage.</param>
+    /// <param name="includeUsage">
+    ///     Включить историю использования (для анализа). По умолчанию false — пакеты для
+    ///     распространения не содержат usage.
+    /// </param>
     public string Export(string skillId, string? outputDir = null, bool includeUsage = false)
     {
         Skill? skill = _repo.Load(skillId);
@@ -61,7 +66,7 @@ public sealed class SkillPackager
         var fileName = PackageFileName(skill.Meta.Id, skill.Meta.Version);
         var packagePath = Path.Combine(outDir, fileName);
 
-        using var archiveStream = File.Create(packagePath);
+        using FileStream archiveStream = File.Create(packagePath);
         using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create);
 
         // 1. Манифест пакета
@@ -75,9 +80,9 @@ public sealed class SkillPackager
                 Description = skill.Meta.Description,
                 PhraseReceivers = skill.Meta.PhraseReceivers,
                 Version = skill.Meta.Version,
-                CreatedAt = skill.Meta.CreatedAt,
+                CreatedAt = skill.Meta.CreatedAt
             },
-            CreatedAt = DateTime.UtcNow.ToString("o"),
+            CreatedAt = DateTime.UtcNow.ToString("o")
         };
         WriteEntry(archive, "skill.package.json", JsonSerializer.Serialize(manifest, JsonOpts));
 
@@ -90,7 +95,7 @@ public sealed class SkillPackager
         // 4. История использования (опционально)
         if (includeUsage)
         {
-            var usages = _repo.LoadUsages(skillId);
+            List<SkillUsage> usages = _repo.LoadUsages(skillId);
             if (usages.Count > 0)
             {
                 WriteEntry(archive, "skill.usage.json", JsonSerializer.Serialize(usages, JsonOpts));
@@ -137,7 +142,7 @@ public sealed class SkillPackager
 
         // Разрешение конфликта ID
         var skillId = manifest.Skill.Id;
-        var existing = _repo.Load(skillId);
+        Skill? existing = _repo.Load(skillId);
         if (existing is not null)
         {
             switch (conflictResolution)
@@ -162,10 +167,10 @@ public sealed class SkillPackager
                 Description = manifest.Skill.Description,
                 PhraseReceivers = manifest.Skill.PhraseReceivers,
                 Version = manifest.Skill.Version,
-                CreatedAt = manifest.Skill.CreatedAt,
+                CreatedAt = manifest.Skill.CreatedAt
             },
             Description = description,
-            Prompt = prompt,
+            Prompt = prompt
         };
         _repo.Save(skill);
         return skill;
@@ -202,18 +207,22 @@ public sealed class SkillPackager
             {
                 errors.Add("Манифест: skill.id пуст.");
             }
+
             if (string.IsNullOrWhiteSpace(manifest.Skill.Name))
             {
                 errors.Add("Манифест: skill.name пуст.");
             }
+
             if (manifest.Skill.PhraseReceivers.Count == 0)
             {
                 errors.Add("Манифест: phrase_receivers пуст — навык не сможет маршрутизироваться.");
             }
+
             if (string.IsNullOrWhiteSpace(description))
             {
                 errors.Add("skill.description.md пуст или отсутствует.");
             }
+
             if (string.IsNullOrWhiteSpace(prompt))
             {
                 errors.Add("skill.prompt.md пуст или отсутствует.");
@@ -229,7 +238,7 @@ public sealed class SkillPackager
 
     private static (SkillPackageManifest, string, string, SkillTestSuite?, List<ToolDeclaration>?) ReadFromZip(string zipPath)
     {
-        using var archiveStream = File.OpenRead(zipPath);
+        using FileStream archiveStream = File.OpenRead(zipPath);
         using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read);
         return ReadEntries(
             ReadEntry(archive, "skill.package.json"),
@@ -245,20 +254,23 @@ public sealed class SkillPackager
             File.ReadAllText(Path.Combine(dir, "skill.package.json")),
             File.ReadAllText(Path.Combine(dir, "skill.description.md")),
             File.ReadAllText(Path.Combine(dir, "skill.prompt.md")),
-            File.Exists(Path.Combine(dir, "skill.tests.json")) ? File.ReadAllText(Path.Combine(dir, "skill.tests.json")) : null,
-            File.Exists(Path.Combine(dir, "tool.schema.json")) ? File.ReadAllText(Path.Combine(dir, "tool.schema.json")) : null);
+            File.Exists(Path.Combine(dir, "skill.tests.json"))
+                ? File.ReadAllText(Path.Combine(dir, "skill.tests.json"))
+                : null,
+            File.Exists(Path.Combine(dir, "tool.schema.json"))
+                ? File.ReadAllText(Path.Combine(dir, "tool.schema.json"))
+                : null);
     }
 
     private static (SkillPackageManifest, string, string, SkillTestSuite?, List<ToolDeclaration>?) ReadEntries(
         string manifestJson, string description, string prompt,
         string? testsJson, string? toolsJson)
     {
-        var manifest = JsonSerializer.Deserialize<SkillPackageManifest>(manifestJson, JsonOpts)
-            ?? throw new InvalidOperationException("Не удалось десериализовать skill.package.json");
-        var tests = testsJson is not null
+        SkillPackageManifest manifest = JsonSerializer.Deserialize<SkillPackageManifest>(manifestJson, JsonOpts) ?? throw new InvalidOperationException("Не удалось десериализовать skill.package.json");
+        SkillTestSuite? tests = testsJson is not null
             ? JsonSerializer.Deserialize<SkillTestSuite>(testsJson, JsonOpts)
             : null;
-        var tools = toolsJson is not null
+        List<ToolDeclaration>? tools = toolsJson is not null
             ? JsonSerializer.Deserialize<List<ToolDeclaration>>(toolsJson, JsonOpts)
             : null;
         return (manifest, description, prompt, tests, tools);
@@ -266,23 +278,26 @@ public sealed class SkillPackager
 
     private static string ReadEntry(ZipArchive archive, string entryName)
     {
-        var entry = archive.GetEntry(entryName)
-            ?? throw new InvalidOperationException($"Обязательный файл отсутствует в пакете: {entryName}");
+        ZipArchiveEntry entry = archive.GetEntry(entryName) ?? throw new InvalidOperationException($"Обязательный файл отсутствует в пакете: {entryName}");
         using var reader = new StreamReader(entry.Open());
         return reader.ReadToEnd();
     }
 
     private static string? ReadEntryOptional(ZipArchive archive, string entryName)
     {
-        var entry = archive.GetEntry(entryName);
-        if (entry is null) return null;
+        ZipArchiveEntry? entry = archive.GetEntry(entryName);
+        if (entry is null)
+        {
+            return null;
+        }
+
         using var reader = new StreamReader(entry.Open());
         return reader.ReadToEnd();
     }
 
     private static void WriteEntry(ZipArchive archive, string entryName, string content)
     {
-        var entry = archive.CreateEntry(entryName);
+        ZipArchiveEntry entry = archive.CreateEntry(entryName);
         using var writer = new StreamWriter(entry.Open());
         writer.Write(content);
     }
@@ -296,6 +311,7 @@ public sealed class SkillPackager
             suffix = Random.Shared.Next(1000, 9999).ToString();
             newId = $"{baseId}-{suffix}";
         }
+
         return newId;
     }
 }
@@ -310,5 +326,5 @@ public enum ConflictResolution
     Skip,
 
     /// <summary>Сгенерировать новый ID (добавить суффикс) и импортировать как новый навык.</summary>
-    Rename,
+    Rename
 }

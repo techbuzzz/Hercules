@@ -33,6 +33,7 @@ public sealed class RateLimitMiddleware(RequestDelegate next, WebApiConfig cfg, 
                 {
                     return new RateLimitEntry { Count = 1, WindowStart = now };
                 }
+
                 existing.Count++;
                 return existing;
             });
@@ -57,8 +58,12 @@ public sealed class RateLimitMiddleware(RequestDelegate next, WebApiConfig cfg, 
         if (!string.IsNullOrEmpty(forwarded))
         {
             var ip = forwarded.Split(',', StringSplitOptions.TrimEntries)[0];
-            if (!string.IsNullOrEmpty(ip)) return ip;
+            if (!string.IsNullOrEmpty(ip))
+            {
+                return ip;
+            }
         }
+
         return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 

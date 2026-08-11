@@ -23,52 +23,50 @@ public sealed class FileSkillRepository
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
-    private readonly string _dir;
-
     public FileSkillRepository(StorageConfig cfg)
     {
-        _dir = Path.Combine(cfg.DataRoot, cfg.SkillsDir);
-        Directory.CreateDirectory(_dir);
+        SkillsDirectory = Path.Combine(cfg.DataRoot, cfg.SkillsDir);
+        Directory.CreateDirectory(SkillsDirectory);
     }
 
     /// <summary>Путь к папке навыков (для SkillPackager и marketplace).</summary>
-    public string SkillsDirectory => _dir;
+    public string SkillsDirectory { get; }
 
     private string MetaPath(string id)
     {
-        return Path.Combine(_dir, $"skill.{id}.meta.json");
+        return Path.Combine(SkillsDirectory, $"skill.{id}.meta.json");
     }
 
     private string DescPath(string id)
     {
-        return Path.Combine(_dir, $"skill.{id}.md");
+        return Path.Combine(SkillsDirectory, $"skill.{id}.md");
     }
 
     private string PromptPath(string id)
     {
-        return Path.Combine(_dir, $"skill.{id}.prompt.md");
+        return Path.Combine(SkillsDirectory, $"skill.{id}.prompt.md");
     }
 
     private string UsagePath(string id)
     {
-        return Path.Combine(_dir, $"skill.{id}.usage.json");
+        return Path.Combine(SkillsDirectory, $"skill.{id}.usage.json");
     }
 
     private string VersionPath(string id, int v)
     {
-        return Path.Combine(_dir, $"skill.{id}.v{v}.md");
+        return Path.Combine(SkillsDirectory, $"skill.{id}.v{v}.md");
     }
 
     /// <summary>Загрузить все навыки из папки.</summary>
     public List<Skill> LoadAll()
     {
         var skills = new List<Skill>();
-        if (!Directory.Exists(_dir))
+        if (!Directory.Exists(SkillsDirectory))
         {
             return skills;
         }
 
-        foreach (var metaFile in Directory.EnumerateFiles(_dir, "skill.*.meta.json"))
+        foreach (var metaFile in Directory.EnumerateFiles(SkillsDirectory, "skill.*.meta.json"))
         {
             try
             {
@@ -175,7 +173,7 @@ public sealed class FileSkillRepository
     /// <summary>Сохранить произвольный markdown-файл в папку Skills (например, отчёт рефлексии).</summary>
     public void SaveRawMarkdown(string fileName, string content)
     {
-        File.WriteAllText(Path.Combine(_dir, fileName), content);
+        File.WriteAllText(Path.Combine(SkillsDirectory, fileName), content);
     }
 
     private static string ReadIfExists(string path)

@@ -26,8 +26,8 @@ public sealed class ReflectionEngine(
         List<Skill> needImprove = skills.SkillsNeedingImprovement();
 
         // Stage 4: sandbox traces
-        var sandboxFails = sessions.GetRecentSandboxFailureRate(5);
-        var sandboxRecent = sessions.GetRecentSandboxExecutions(5);
+        var sandboxFails = sessions.GetRecentSandboxFailureRate();
+        List<SandboxExecutionLog> sandboxRecent = sessions.GetRecentSandboxExecutions(5);
 
         var lowConfText = lowConf.Count == 0
             ? "Ответов с низкой уверенностью не было."
@@ -37,30 +37,32 @@ public sealed class ReflectionEngine(
             ? "Выполнений в sandbox не было."
             : string.Join("\n", sandboxRecent.Select(s =>
                 $"- {s.CreatedAt:HH:mm:ss} status={s.Status} exit={s.ExitCode} dur={s.DurationMs}ms " +
-                (string.IsNullOrEmpty(s.BlockedPatterns) ? "" : $"blocked=[{s.BlockedPatterns}]")));
+                (string.IsNullOrEmpty(s.BlockedPatterns)
+                    ? ""
+                    : $"blocked=[{s.BlockedPatterns}]")));
 
         var prompt = $"""
-                       Проведи самоанализ работы ассистента за сессию. Ответь на русском, кратко,
-                       строго по структуре с заголовками:
+                      Проведи самоанализ работы ассистента за сессию. Ответь на русском, кратко,
+                      строго по структуре с заголовками:
 
-                       ## Что получилось хорошо
-                       ## Что получилось плохо
-                       ## Что улучшить
-                       ## Рекомендации по навыкам
+                      ## Что получилось хорошо
+                      ## Что получилось плохо
+                      ## Что улучшить
+                      ## Рекомендации по навыкам
 
-                       Статистика сессии:
-                       - Ответов через навыки: {skillCount}
-                       - Прямых ответов (direct): {directCount}
-                       - Ответы с низкой уверенностью:
-                       {lowConfText}
-                       - Навыки, требующие улучшения: {(needImprove.Count == 0 ? "нет" : string.Join(", ", needImprove.Select(s => s.Meta.Name)))}
+                      Статистика сессии:
+                      - Ответов через навыки: {skillCount}
+                      - Прямых ответов (direct): {directCount}
+                      - Ответы с низкой уверенностью:
+                      {lowConfText}
+                      - Навыки, требующие улучшения: {(needImprove.Count == 0 ? "нет" : string.Join(", ", needImprove.Select(s => s.Meta.Name)))}
 
-                       Sandbox (Stage 4):
-                       - Failure rate за последние 5 выполнений: {sandboxFails:P0}
-                       - Последние выполнения:
-                       {sandboxText}
-                       {(sandboxFails > 0.5 ? "\n⚠️ Высокий failure rate — предложи обновить скилл code-execution (skill.code-execution.v1.md) или ужесточить scanner." : "")}
-                       """;
+                      Sandbox (Stage 4):
+                      - Failure rate за последние 5 выполнений: {sandboxFails:P0}
+                      - Последние выполнения:
+                      {sandboxText}
+                      {(sandboxFails > 0.5 ? "\n⚠️ Высокий failure rate — предложи обновить скилл code-execution (skill.code-execution.v1.md) или ужесточить scanner." : "")}
+                      """;
 
         string analysis;
         try

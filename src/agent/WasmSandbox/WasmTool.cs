@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using Hercules.WasmSandbox.Compilation;
 
 namespace Hercules.WasmSandbox;
@@ -56,12 +59,10 @@ public enum ApprovalDecision
 /// </summary>
 public sealed class WasmTool
 {
-    public string Name => "execute_wasm";
-    public string Description => "Execute code in a WebAssembly sandbox with capability-based isolation.";
+    private readonly ICodeApprovalGate _approval;
+    private readonly CompilerRegistry _compilers;
 
     private readonly IWasmSandbox _sandbox;
-    private readonly CompilerRegistry _compilers;
-    private readonly ICodeApprovalGate _approval;
     private readonly Dictionary<string, byte[]> _wasmCache = new(StringComparer.OrdinalIgnoreCase);
 
     public WasmTool(IWasmSandbox sandbox, CompilerRegistry compilers, ICodeApprovalGate? approval = null)
@@ -71,23 +72,26 @@ public sealed class WasmTool
         _approval = approval ?? new AutoApproveGate();
     }
 
+    public string Name => "execute_wasm";
+    public string Description => "Execute code in a WebAssembly sandbox with capability-based isolation.";
+
     public async Task<WasmToolResult> ExecuteAsync(WasmToolRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var totalSw = System.Diagnostics.Stopwatch.StartNew();
-        var compileSw = new System.Diagnostics.Stopwatch();
+        var totalSw = Stopwatch.StartNew();
+        var compileSw = new Stopwatch();
 
         // 1. Human-in-the-loop approval
-        var decision = await _approval.RequestApprovalAsync(request, _wasmCache.Keys.ToList(), ct);
+        ApprovalDecision decision = await _approval.RequestApprovalAsync(request, _wasmCache.Keys.ToList(), ct);
         if (decision == ApprovalDecision.Rejected)
         {
             totalSw.Stop();
             return new WasmToolResult(
-                Compiled: false,
-                CompilationError: "User rejected execution",
-                Execution: WasmExecutionResult.Failed("Rejected by user"),
-                CompileDuration: TimeSpan.Zero,
-                TotalDuration: totalSw.Elapsed);
+                false,
+                "User rejected execution",
+                WasmExecutionResult.Failed("Rejected by user"),
+                TimeSpan.Zero,
+                totalSw.Elapsed);
         }
 
         // 2. Compile (если язык поддерживается) или passthrough (если уже wasm)
@@ -97,11 +101,11 @@ public sealed class WasmTool
         {
             totalSw.Stop();
             return new WasmToolResult(
-                Compiled: false,
-                CompilationError: $"Unsupported language '{request.Language}'. Supported: {string.Join(", ", _compilers.Languages)}",
-                Execution: WasmExecutionResult.Failed("Unsupported language"),
-                CompileDuration: TimeSpan.Zero,
-                TotalDuration: totalSw.Elapsed);
+                false,
+                $"Unsupported language '{request.Language}'. Supported: {string.Join(", ", _compilers.Languages)}",
+                WasmExecutionResult.Failed("Unsupported language"),
+                TimeSpan.Zero,
+                totalSw.Elapsed);
         }
 
         byte[] wasmBytes;
@@ -120,32 +124,33 @@ public sealed class WasmTool
             totalSw.Stop();
             compileSw.Stop();
             return new WasmToolResult(
-                Compiled: false,
-                CompilationError: ex.Message,
-                Execution: WasmExecutionResult.Failed($"Compilation failed: {ex.Message}"),
-                CompileDuration: compileSw.Elapsed,
-                TotalDuration: totalSw.Elapsed);
+                false,
+                ex.Message,
+                WasmExecutionResult.Failed($"Compilation failed: {ex.Message}"),
+                compileSw.Elapsed,
+                totalSw.Elapsed);
         }
+
         compileSw.Stop();
 
         // 3. Execute in sandbox
-        var execResult = await _sandbox.ExecuteAsync(
+        WasmExecutionResult execResult = await _sandbox.ExecuteAsync(
             new WasmExecutionRequest(wasmBytes, Args: request.Args, Limits: request.Limits),
             ct);
 
         totalSw.Stop();
         return new WasmToolResult(
-            Compiled: true,
-            CompilationError: null,
-            Execution: execResult,
-            CompileDuration: compileSw.Elapsed,
-            TotalDuration: totalSw.Elapsed);
+            true,
+            null,
+            execResult,
+            compileSw.Elapsed,
+            totalSw.Elapsed);
     }
 
     private static string ComputeSourceHash(string source)
     {
-        var bytes = System.Text.Encoding.UTF8.GetBytes(source);
-        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        var bytes = Encoding.UTF8.GetBytes(source);
+        var hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash)[..16];
     }
 

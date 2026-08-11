@@ -1,4 +1,6 @@
+using System.Data;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using HerculesBus.Core;
 using Microsoft.Data.Sqlite;
 
@@ -12,22 +14,26 @@ namespace HerculesBus.Sqlite;
 /// </summary>
 public sealed class SqliteChannelStore : IChannelStore, IAsyncDisposable
 {
-    private readonly SqliteConnection _conn;
-    private readonly bool _weOwnConn;
     private static readonly JsonSerializerOptions _jsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
+    private readonly SqliteConnection _conn;
+    private readonly bool _weOwnConn;
+
     /// <summary>
-    ///     Создать store с собственным connection. <paramref name="connectionString"/>
+    ///     Создать store с собственным connection. <paramref name="connectionString" />
     ///     должен быть валидным SQLite connection string (e.g. "Data Source=hercules-bus.db").
     /// </summary>
     public SqliteChannelStore(string connectionString)
     {
         if (string.IsNullOrWhiteSpace(connectionString))
+        {
             throw new ArgumentException("Connection string required", nameof(connectionString));
+        }
+
         _conn = new SqliteConnection(connectionString);
         _conn.Open();
         _weOwnConn = true;
@@ -42,8 +48,29 @@ public sealed class SqliteChannelStore : IChannelStore, IAsyncDisposable
     {
         _conn = sharedConnection ?? throw new ArgumentNullException(nameof(sharedConnection));
         _weOwnConn = false;
-        if (_conn.State != System.Data.ConnectionState.Open) _conn.Open();
+        if (_conn.State != ConnectionState.Open)
+        {
+            _conn.Open();
+        }
+
         SqliteSchema.EnsureCreated(_conn);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        if (_weOwnConn)
+        {
+            try
+            {
+                _conn.Close();
+                _conn.Dispose();
+            }
+            catch
+            {
+            }
+        }
+
+        return ValueTask.CompletedTask;
     }
 
     public async Task<BusChannel> EnsureChannelAsync(string name, string description, bool isPrivate, string createdBy, CancellationToken ct = default)
@@ -59,11 +86,11 @@ public sealed class SqliteChannelStore : IChannelStore, IAsyncDisposable
             if (await reader.ReadAsync(ct))
             {
                 return new BusChannel(
-                    Name: reader.GetString(0),
-                    Description: reader.GetString(1),
-                    IsPrivate: reader.GetInt32(2) != 0,
-                    CreatedAt: DateTimeOffset.Parse(reader.GetString(3)),
-                    CreatedBy: reader.GetString(4));
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetInt32(2) != 0,
+                    DateTimeOffset.Parse(reader.GetString(3)),
+                    reader.GetString(4));
             }
         }
 
@@ -76,7 +103,9 @@ INSERT OR IGNORE INTO bus_channels (name, description, is_private, created_at, c
 VALUES ($name, $description, $is_private, $created_at, $created_by)";
         insert.Parameters.AddWithValue("$name", channel.Name);
         insert.Parameters.AddWithValue("$description", channel.Description);
-        insert.Parameters.AddWithValue("$is_private", channel.IsPrivate ? 1 : 0);
+        insert.Parameters.AddWithValue("$is_private", channel.IsPrivate
+            ? 1
+            : 0);
         insert.Parameters.AddWithValue("$created_at", channel.CreatedAt.ToString("O"));
         insert.Parameters.AddWithValue("$created_by", channel.CreatedBy);
         await insert.ExecuteNonQueryAsync(ct);
@@ -93,12 +122,13 @@ VALUES ($name, $description, $is_private, $created_at, $created_by)";
         if (await reader.ReadAsync(ct))
         {
             return new BusChannel(
-                Name: reader.GetString(0),
-                Description: reader.GetString(1),
-                IsPrivate: reader.GetInt32(2) != 0,
-                CreatedAt: DateTimeOffset.Parse(reader.GetString(3)),
-                CreatedBy: reader.GetString(4));
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetInt32(2) != 0,
+                DateTimeOffset.Parse(reader.GetString(3)),
+                reader.GetString(4));
         }
+
         return null;
     }
 
@@ -111,12 +141,13 @@ VALUES ($name, $description, $is_private, $created_at, $created_by)";
         while (await reader.ReadAsync(ct))
         {
             result.Add(new BusChannel(
-                Name: reader.GetString(0),
-                Description: reader.GetString(1),
-                IsPrivate: reader.GetInt32(2) != 0,
-                CreatedAt: DateTimeOffset.Parse(reader.GetString(3)),
-                CreatedBy: reader.GetString(4)));
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetInt32(2) != 0,
+                DateTimeOffset.Parse(reader.GetString(3)),
+                reader.GetString(4)));
         }
+
         return result;
     }
 
@@ -124,7 +155,9 @@ VALUES ($name, $description, $is_private, $created_at, $created_by)";
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        var id = string.IsNullOrEmpty(message.Id) ? Ulid.NewId() : message.Id;
+        var id = string.IsNullOrEmpty(message.Id)
+            ? Ulid.NewId()
+            : message.Id;
         var ts = message.Timestamp ?? DateTimeOffset.UtcNow;
         var withMeta = message with { Id = id, Timestamp = ts };
 
@@ -142,9 +175,13 @@ VALUES
         cmd.Parameters.AddWithValue("$body", withMeta.Body);
         cmd.Parameters.AddWithValue("$reply_to", (object?)withMeta.ReplyTo ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$mentions", (object?)(withMeta.Mentions is { Count: > 0 }
-            ? string.Join(",", withMeta.Mentions) : null) ?? DBNull.Value);
+                                                     ? string.Join(",", withMeta.Mentions)
+                                                     : null) ??
+                                                 DBNull.Value);
         cmd.Parameters.AddWithValue("$attachments_json", (object?)(withMeta.Attachments is { Count: > 0 }
-            ? JsonSerializer.Serialize(withMeta.Attachments, _jsonOpts) : null) ?? DBNull.Value);
+                                                             ? JsonSerializer.Serialize(withMeta.Attachments, _jsonOpts)
+                                                             : null) ??
+                                                         DBNull.Value);
         cmd.Parameters.AddWithValue("$timestamp", ts.ToString("O"));
 
         await cmd.ExecuteNonQueryAsync(ct);
@@ -154,7 +191,10 @@ VALUES
     public async Task<IReadOnlyList<AgentMessage>> GetRecentMessagesAsync(string channel, int limit = 50, string? beforeId = null, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(channel);
-        if (limit <= 0) limit = 50;
+        if (limit <= 0)
+        {
+            limit = 50;
+        }
 
         var result = new List<AgentMessage>();
         using var cmd = _conn.CreateCommand();
@@ -195,6 +235,7 @@ LIMIT $limit";
         {
             result.Add(ReadMessage(reader));
         }
+
         result.Reverse(); // chronological order
         return result;
     }
@@ -207,7 +248,11 @@ SELECT id, channel, sender_agent_id, sender_name, kind, body, reply_to, mentions
 FROM bus_messages WHERE id = $id";
         cmd.Parameters.AddWithValue("$id", id);
         using var reader = await cmd.ExecuteReaderAsync(ct);
-        if (await reader.ReadAsync(ct)) return ReadMessage(reader);
+        if (await reader.ReadAsync(ct))
+        {
+            return ReadMessage(reader);
+        }
+
         return null;
     }
 
@@ -226,36 +271,34 @@ ORDER BY timestamp ASC";
         {
             result.Add(ReadMessage(reader));
         }
+
         return result;
     }
 
     private static AgentMessage ReadMessage(SqliteDataReader r)
     {
-        var attachmentsJson = r.IsDBNull(8) ? null : r.GetString(8);
+        var attachmentsJson = r.IsDBNull(8)
+            ? null
+            : r.GetString(8);
         var attachments = attachmentsJson != null
             ? JsonSerializer.Deserialize<List<MessageAttachment>>(attachmentsJson, _jsonOpts)
             : null;
-        var mentions = r.IsDBNull(7) ? null : r.GetString(7)?.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        var mentions = r.IsDBNull(7)
+            ? null
+            : r.GetString(7)?.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
         return new AgentMessage(
-            Id: r.GetString(0),
-            Channel: r.GetString(1),
-            SenderAgentId: r.GetString(2),
-            SenderName: r.GetString(3),
-            Kind: r.GetString(4),
-            Body: r.GetString(5),
-            ReplyTo: r.IsDBNull(6) ? null : r.GetString(6),
-            Mentions: mentions,
-            Attachments: attachments,
-            Timestamp: DateTimeOffset.Parse(r.GetString(9)));
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        if (_weOwnConn)
-        {
-            try { _conn.Close(); _conn.Dispose(); } catch { }
-        }
-        return ValueTask.CompletedTask;
+            r.GetString(0),
+            r.GetString(1),
+            r.GetString(2),
+            r.GetString(3),
+            r.GetString(4),
+            r.GetString(5),
+            r.IsDBNull(6)
+                ? null
+                : r.GetString(6),
+            mentions,
+            attachments,
+            DateTimeOffset.Parse(r.GetString(9)));
     }
 }

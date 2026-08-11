@@ -39,7 +39,10 @@ public sealed record SkillDetailDto(
     string DescriptionMarkdown,
     string Prompt);
 
-/// <summary>Запрос на создание навыка (phrase_receivers + prompt). Поле Trigger/Triggers — legacy, для обратной совместимости.</summary>
+/// <summary>
+///     Запрос на создание навыка (phrase_receivers + prompt). Поле Trigger/Triggers — legacy, для обратной
+///     совместимости.
+/// </summary>
 public sealed record CreateSkillRequest(
     string? Name,
     List<string>? PhraseReceivers,
@@ -134,10 +137,12 @@ public sealed class WebApiAdapter(
 
         Skill skill = skills.CreateManual(
             req.Name ?? "",
-            phraseReceivers: receivers.Count > 0 ? receivers : null,
-            prompt: req.Prompt,
-            description: req.Description,
-            triggers: req.Triggers);
+            receivers.Count > 0
+                ? receivers
+                : null,
+            req.Prompt,
+            req.Description,
+            req.Triggers);
         return ToDto(skill);
     }
 
@@ -151,10 +156,10 @@ public sealed class WebApiAdapter(
     {
         Skill? skill = skills.UpdateManual(
             id,
-            phraseReceivers: req.PhraseReceivers,
-            prompt: req.Prompt,
-            description: req.Description,
-            triggers: req.Triggers);
+            req.PhraseReceivers,
+            req.Prompt,
+            req.Description,
+            req.Triggers);
         return skill is null
             ? null
             : ToDto(skill);

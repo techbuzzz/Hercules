@@ -1,5 +1,6 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using HerculesBus.Core;
 
 namespace Hercules.Mesh;
 
@@ -29,11 +30,16 @@ public sealed record IntentEnvelope(
     public DateTimeOffset TimestampOrUtc => Timestamp ?? DateTimeOffset.UtcNow;
 
     /// <summary>Сериализовать в JSON.</summary>
-    public string ToJson() => JsonSerializer.Serialize(this, IntentJsonOpts.Instance);
+    public string ToJson()
+    {
+        return JsonSerializer.Serialize(this, IntentJsonOpts.Instance);
+    }
 
     /// <summary>Десериализовать из JSON.</summary>
-    public static IntentEnvelope? FromJson(string json) =>
-        JsonSerializer.Deserialize<IntentEnvelope>(json, IntentJsonOpts.Instance);
+    public static IntentEnvelope? FromJson(string json)
+    {
+        return JsonSerializer.Deserialize<IntentEnvelope>(json, IntentJsonOpts.Instance);
+    }
 }
 
 /// <summary>
@@ -65,42 +71,59 @@ public sealed record IntentResponse(
 
     public bool IsSuccess => Status == "ok";
 
-    public string ToJson() => JsonSerializer.Serialize(this, IntentJsonOpts.Instance);
+    public string ToJson()
+    {
+        return JsonSerializer.Serialize(this, IntentJsonOpts.Instance);
+    }
 
-    public static IntentResponse? FromJson(string json) =>
-        JsonSerializer.Deserialize<IntentResponse>(json, IntentJsonOpts.Instance);
+    public static IntentResponse? FromJson(string json)
+    {
+        return JsonSerializer.Deserialize<IntentResponse>(json, IntentJsonOpts.Instance);
+    }
 
     public static IntentResponse Ok(string requestId, string agent, string result, string mode = "direct",
-        string? skill = null, double? confidence = null, string? traceId = null) => new(
-        RequestId: requestId,
-        Status: "ok",
-        Agent: agent,
-        Mode: mode,
-        Skill: skill,
-        Result: result,
-        Confidence: confidence,
-        TraceId: traceId);
+        string? skill = null, double? confidence = null, string? traceId = null)
+    {
+        return new IntentResponse(
+            requestId,
+            "ok",
+            agent,
+            mode,
+            skill,
+            result,
+            confidence,
+            TraceId: traceId);
+    }
 
-    public static IntentResponse Failed(string requestId, string agent, string error, string? traceId = null) => new(
-        RequestId: requestId,
-        Status: "error",
-        Agent: agent,
-        Error: error,
-        TraceId: traceId);
+    public static IntentResponse Failed(string requestId, string agent, string error, string? traceId = null)
+    {
+        return new IntentResponse(
+            requestId,
+            "error",
+            agent,
+            Error: error,
+            TraceId: traceId);
+    }
 
-    public static IntentResponse TimedOut(string requestId, string agent, string? traceId = null) => new(
-        RequestId: requestId,
-        Status: "timeout",
-        Agent: agent,
-        Error: "Request timed out",
-        TraceId: traceId);
+    public static IntentResponse TimedOut(string requestId, string agent, string? traceId = null)
+    {
+        return new IntentResponse(
+            requestId,
+            "timeout",
+            agent,
+            Error: "Request timed out",
+            TraceId: traceId);
+    }
 
-    public static IntentResponse Rejected(string requestId, string agent, string reason, string? traceId = null) => new(
-        RequestId: requestId,
-        Status: "rejected",
-        Agent: agent,
-        Error: reason,
-        TraceId: traceId);
+    public static IntentResponse Rejected(string requestId, string agent, string reason, string? traceId = null)
+    {
+        return new IntentResponse(
+            requestId,
+            "rejected",
+            agent,
+            Error: reason,
+            TraceId: traceId);
+    }
 }
 
 /// <summary>
@@ -109,7 +132,10 @@ public sealed record IntentResponse(
 /// </summary>
 public static class IntentIds
 {
-    public static string NewRequestId() => HerculesBus.Core.Ulid.NewId();
+    public static string NewRequestId()
+    {
+        return Ulid.NewId();
+    }
 }
 
 internal static class IntentJsonOpts
@@ -118,6 +144,6 @@ internal static class IntentJsonOpts
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 }

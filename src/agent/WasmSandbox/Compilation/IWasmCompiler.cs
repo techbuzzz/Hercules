@@ -25,11 +25,11 @@ public interface IWasmCompiler
 /// </summary>
 public sealed class CompilationException : Exception
 {
-    public string Language { get; }
-
     public CompilationException(string language, string message, Exception? inner = null)
         : base($"[{language}] {message}", inner)
     {
         Language = language;
     }
+
+    public string Language { get; }
 }

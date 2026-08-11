@@ -41,7 +41,10 @@ public static class MeshController
             try
             {
                 if (string.IsNullOrWhiteSpace(manifest.AgentId))
+                {
                     return Results.BadRequest(new { error = "agentId обязателен." });
+                }
+
                 registry.Register(manifest);
                 return Results.Ok(new { status = "registered", agentId = manifest.AgentId });
             }
@@ -64,7 +67,10 @@ public static class MeshController
         app.MapGet("/api/mesh/capabilities", (string? agentId, CapabilityRegistry registry) =>
         {
             if (!string.IsNullOrWhiteSpace(agentId))
+            {
                 return Results.Ok(registry.ListCapabilities(agentId));
+            }
+
             return Results.Ok(registry.ListAgents());
         }).WithName("ListMeshCapabilities");
 
@@ -76,7 +82,10 @@ public static class MeshController
         app.MapGet("/api/mesh/capabilities/search", (string phrase, CapabilityRegistry registry) =>
         {
             if (string.IsNullOrWhiteSpace(phrase))
+            {
                 return Results.BadRequest(new { error = "Параметр 'phrase' обязателен." });
+            }
+
             return Results.Ok(registry.FindByPhrase(phrase));
         }).WithName("SearchMeshByPhrase");
 
@@ -90,7 +99,7 @@ public static class MeshController
             }
             catch (Exception ex)
             {
-                return Results.Problem(detail: ex.Message, statusCode: 500, title: "Intent routing error");
+                return Results.Problem(ex.Message, statusCode: 500, title: "Intent routing error");
             }
         }).WithName("SendMeshIntent");
 
@@ -106,7 +115,7 @@ public static class MeshController
             }
             catch (Exception ex)
             {
-                return Results.Problem(detail: ex.Message, statusCode: 500, title: "Fan-out error");
+                return Results.Problem(ex.Message, statusCode: 500, title: "Fan-out error");
             }
         }).WithName("MeshFanOut");
 
@@ -143,7 +152,10 @@ public static class MeshController
             SharedMemorySync sync, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(req.Category) || string.IsNullOrWhiteSpace(req.Content))
+            {
                 return Results.BadRequest(new { error = "category и content обязательны." });
+            }
+
             var fact = await sync.PublishFactAsync(req.Category, req.Content, req.AllowedAgents, ct);
             return Results.Created($"/api/mesh/shared-memory/{fact.Id}", fact);
         }).WithName("PublishSharedMemory");

@@ -1,6 +1,6 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Hercules.Mesh;
 
 namespace Hercules.Mesh;
 
@@ -10,8 +10,7 @@ namespace Hercules.Mesh;
 /// </summary>
 public sealed class SharedMemoryFact
 {
-    [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
+    [JsonPropertyName("id")] public string Id { get; set; } = "";
 
     /// <summary>Категория: "profile" | "entities" | "preferences" | "custom".</summary>
     [JsonPropertyName("category")]
@@ -46,10 +45,17 @@ public sealed class SharedMemoryFact
 /// </summary>
 public sealed class SharedMemorySync : IDisposable
 {
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    private readonly AgentManifestService _manifestService;
     private readonly CapabilityRegistry _registry;
     private readonly IntentTransport _transport;
-    private readonly AgentManifestService _manifestService;
-    private readonly string _sharedMemoryPath;
 
     public SharedMemorySync(
         string dataRoot,
@@ -63,13 +69,15 @@ public sealed class SharedMemorySync : IDisposable
 
         var sharedDir = Path.Combine(dataRoot, "Memory", "shared");
         Directory.CreateDirectory(sharedDir);
-        _sharedMemoryPath = Path.Combine(sharedDir, "shared_facts.json");
+        SharedMemoryPath = Path.Combine(sharedDir, "shared_facts.json");
     }
 
-    public void Dispose() { }
-
     /// <summary>Путь к файлу локальных shared-фактов.</summary>
-    public string SharedMemoryPath => _sharedMemoryPath;
+    public string SharedMemoryPath { get; }
+
+    public void Dispose()
+    {
+    }
 
     /// <summary>
     ///     Опубликовать факт памяти для синхронизации с доверенными агентами.
@@ -87,12 +95,12 @@ public sealed class SharedMemorySync : IDisposable
             Category = category,
             Content = content,
             SourceAgent = _manifestService.Current.AgentId,
-            AllowedAgents = allowedAgents ?? new(),
-            UpdatedAt = DateTimeOffset.UtcNow.ToString("o"),
+            AllowedAgents = allowedAgents ?? new List<string>(),
+            UpdatedAt = DateTimeOffset.UtcNow.ToString("o")
         };
 
         // Сохраняем локально
-        var facts = LoadLocalFacts();
+        Dictionary<string, SharedMemoryFact> facts = LoadLocalFacts();
         facts[fact.Id] = fact;
         SaveLocalFacts(facts);
 
@@ -110,8 +118,8 @@ public sealed class SharedMemorySync : IDisposable
     {
         ArgumentNullException.ThrowIfNull(incoming);
 
-        var facts = LoadLocalFacts();
-        if (facts.TryGetValue(incoming.Id, out var existing))
+        Dictionary<string, SharedMemoryFact> facts = LoadLocalFacts();
+        if (facts.TryGetValue(incoming.Id, out SharedMemoryFact? existing))
         {
             if (incoming.Version <= existing.Version)
             {
@@ -146,12 +154,13 @@ public sealed class SharedMemorySync : IDisposable
     /// </summary>
     public bool RemoveFact(string factId)
     {
-        var facts = LoadLocalFacts();
+        Dictionary<string, SharedMemoryFact> facts = LoadLocalFacts();
         var removed = facts.Remove(factId);
         if (removed)
         {
             SaveLocalFacts(facts);
         }
+
         return removed;
     }
 
@@ -166,28 +175,31 @@ public sealed class SharedMemorySync : IDisposable
             .ToList();
 
         var received = 0;
-        foreach (var peer in peers)
+        foreach (RegistryAgentEntry peer in peers)
         {
             try
             {
                 // Отправляем запрос на получение shared-фактов
                 var envelope = new IntentEnvelope(
-                    RequestId: IntentIds.NewRequestId(),
-                    Sender: ownAgentId,
-                    Intent: "shared-memory-fetch",
-                    Payload: JsonSerializer.Serialize(new { requesterAgentId = ownAgentId }),
+                    IntentIds.NewRequestId(),
+                    ownAgentId,
+                    "shared-memory-fetch",
+                    JsonSerializer.Serialize(new { requesterAgentId = ownAgentId }),
                     TimeoutMs: 10_000);
 
-                var response = await _transport.SendToAsync(peer.AgentId, envelope, ct);
+                IntentResponse response = await _transport.SendToAsync(peer.AgentId, envelope, ct);
                 if (response.IsSuccess && !string.IsNullOrEmpty(response.Result))
                 {
-                    var peerFacts = JsonSerializer.Deserialize<List<SharedMemoryFact>>(response.Result);
+                    List<SharedMemoryFact>? peerFacts = JsonSerializer.Deserialize<List<SharedMemoryFact>>(response.Result);
                     if (peerFacts is not null)
                     {
-                        foreach (var fact in peerFacts)
+                        foreach (SharedMemoryFact fact in peerFacts)
                         {
-                            var accepted = ReceiveFact(fact);
-                            if (accepted is not null) received++;
+                            SharedMemoryFact? accepted = ReceiveFact(fact);
+                            if (accepted is not null)
+                            {
+                                received++;
+                            }
                         }
                     }
                 }
@@ -212,29 +224,35 @@ public sealed class SharedMemorySync : IDisposable
             .ToList();
 
         var envelope = new IntentEnvelope(
-            RequestId: IntentIds.NewRequestId(),
-            Sender: ownAgentId,
-            Intent: "shared-memory-push",
-            Payload: JsonSerializer.Serialize(fact));
+            IntentIds.NewRequestId(),
+            ownAgentId,
+            "shared-memory-push",
+            JsonSerializer.Serialize(fact));
 
-        foreach (var peer in peers)
+        foreach (RegistryAgentEntry peer in peers)
         {
-            try { await _transport.SendToAsync(peer.AgentId, envelope, ct); }
-            catch { /* best effort */ }
+            try
+            {
+                await _transport.SendToAsync(peer.AgentId, envelope, ct);
+            }
+            catch
+            {
+                /* best effort */
+            }
         }
     }
 
     private Dictionary<string, SharedMemoryFact> LoadLocalFacts()
     {
-        if (!File.Exists(_sharedMemoryPath))
+        if (!File.Exists(SharedMemoryPath))
         {
             return new Dictionary<string, SharedMemoryFact>(StringComparer.OrdinalIgnoreCase);
         }
 
         try
         {
-            var json = File.ReadAllText(_sharedMemoryPath);
-            var list = JsonSerializer.Deserialize<List<SharedMemoryFact>>(json) ?? new();
+            var json = File.ReadAllText(SharedMemoryPath);
+            List<SharedMemoryFact> list = JsonSerializer.Deserialize<List<SharedMemoryFact>>(json) ?? new List<SharedMemoryFact>();
             return list.ToDictionary(f => f.Id, StringComparer.OrdinalIgnoreCase);
         }
         catch
@@ -246,16 +264,8 @@ public sealed class SharedMemorySync : IDisposable
     private void SaveLocalFacts(Dictionary<string, SharedMemoryFact> facts)
     {
         var json = JsonSerializer.Serialize(facts.Values.ToList(), JsonOpts);
-        var temp = _sharedMemoryPath + ".tmp";
+        var temp = SharedMemoryPath + ".tmp";
         File.WriteAllText(temp, json);
-        File.Move(temp, _sharedMemoryPath, overwrite: true);
+        File.Move(temp, SharedMemoryPath, true);
     }
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
 }

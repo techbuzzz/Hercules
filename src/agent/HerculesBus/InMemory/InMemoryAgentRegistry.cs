@@ -19,13 +19,15 @@ public sealed class InMemoryAgentRegistry : IAgentRegistry
         var now = DateTimeOffset.UtcNow;
 
         var info = new AgentInfo(
-            AgentId: identity.AgentId,
-            DisplayName: identity.DisplayName,
-            Roles: identity.Roles,
-            Status: AgentStatus.Online,
-            RegisteredAt: isNew ? now : (_agents[identity.AgentId].RegisteredAt),
-            LastSeen: now,
-            SubscribedChannels: identity.SubscribedChannels);
+            identity.AgentId,
+            identity.DisplayName,
+            identity.Roles,
+            AgentStatus.Online,
+            isNew
+                ? now
+                : _agents[identity.AgentId].RegisteredAt,
+            now,
+            identity.SubscribedChannels);
 
         _agents[identity.AgentId] = info;
 
@@ -35,7 +37,9 @@ public sealed class InMemoryAgentRegistry : IAgentRegistry
     public Task HeartbeatAsync(string agentId, AgentStatus status, CancellationToken ct = default)
     {
         if (!_agents.TryGetValue(agentId, out var existing))
+        {
             return Task.CompletedTask; // unknown agent — ignore
+        }
 
         _agents[agentId] = existing with
         {
@@ -50,7 +54,10 @@ public sealed class InMemoryAgentRegistry : IAgentRegistry
     {
         var all = _agents.Values.AsEnumerable();
         if (!includeOffline)
+        {
             all = all.Where(a => a.IsOnline);
+        }
+
         return Task.FromResult<IReadOnlyList<AgentInfo>>(all.OrderBy(a => a.AgentId).ToList());
     }
 

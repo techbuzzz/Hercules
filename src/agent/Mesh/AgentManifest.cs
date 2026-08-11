@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -92,9 +93,15 @@ public sealed class ManifestModels
 /// </summary>
 public sealed class AgentManifestService
 {
-    private readonly AgentManifest _manifest;
-    private readonly string _manifestPath;
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private readonly Func<List<ManifestCapability>> _capabilitiesProvider;
+    private readonly AgentManifest _manifest;
 
     /// <summary>
     ///     Создать сервис манифеста.
@@ -133,11 +140,11 @@ public sealed class AgentManifestService
             Models = new ManifestModels
             {
                 Primary = primaryModel,
-                Fallback = fallbackModels ?? new(),
+                Fallback = fallbackModels ?? new List<string>()
             },
-            Health = healthEndpoint,
+            Health = healthEndpoint
         };
-        _manifestPath = Path.Combine(manifestDir, "agent.manifest.json");
+        ManifestPath = Path.Combine(manifestDir, "agent.manifest.json");
         Directory.CreateDirectory(manifestDir);
         _capabilitiesProvider = capabilitiesProvider ?? throw new ArgumentNullException(nameof(capabilitiesProvider));
     }
@@ -153,25 +160,27 @@ public sealed class AgentManifestService
         }
     }
 
+    /// <summary>Путь к файлу манифеста.</summary>
+    public string ManifestPath { get; }
+
     /// <summary>Сгенерировать и сохранить манифест в файл agent.manifest.json.</summary>
     public AgentManifest Save()
     {
-        var manifest = Current;
+        AgentManifest manifest = Current;
         var json = JsonSerializer.Serialize(manifest, JsonOpts);
-        var temp = _manifestPath + ".tmp";
+        var temp = ManifestPath + ".tmp";
         File.WriteAllText(temp, json);
-        File.Move(temp, _manifestPath, overwrite: true);
+        File.Move(temp, ManifestPath, true);
         return manifest;
     }
-
-    /// <summary>Путь к файлу манифеста.</summary>
-    public string ManifestPath => _manifestPath;
 
     /// <summary>Обновить endpoint агента (например, при смене URL).</summary>
     public void UpdateEndpoint(string endpoint)
     {
         _manifest.Endpoint = endpoint;
-        _manifest.Health = string.IsNullOrEmpty(endpoint) ? "" : endpoint.TrimEnd('/') + "/api/health";
+        _manifest.Health = string.IsNullOrEmpty(endpoint)
+            ? ""
+            : endpoint.TrimEnd('/') + "/api/health";
     }
 
     /// <summary>Валидировать манифест. Возвращает список ошибок (пустой = OK).</summary>
@@ -182,27 +191,38 @@ public sealed class AgentManifestService
 
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(_manifest.AgentId))
+        {
             errors.Add("agentId пуст.");
+        }
+
         if (string.IsNullOrWhiteSpace(_manifest.DisplayName))
+        {
             errors.Add("displayName пуст.");
+        }
+
         if (string.IsNullOrWhiteSpace(_manifest.Endpoint))
+        {
             errors.Add("endpoint пуст — другие агенты не смогут вызывать этот.");
+        }
+
         if (_manifest.Capabilities.Count == 0)
+        {
             errors.Add("Capabilities пуст — агент не декларирует ни одной capability.");
-        foreach (var cap in _manifest.Capabilities)
+        }
+
+        foreach (ManifestCapability cap in _manifest.Capabilities)
         {
             if (string.IsNullOrWhiteSpace(cap.Name))
+            {
                 errors.Add($"Capability без имени: {cap.Description}");
+            }
+
             if (cap.PhraseReceivers.Count == 0)
+            {
                 errors.Add($"Capability '{cap.Name}' не имеет phrase_receivers — не сможет маршрутизироваться.");
+            }
         }
+
         return errors;
     }
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
 }

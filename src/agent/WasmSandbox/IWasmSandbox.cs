@@ -46,10 +46,10 @@ public sealed record WasmResourceLimits(
     public static WasmResourceLimits Default { get; } = new();
 
     public static WasmResourceLimits Strict { get; } = new(
-        MaxFuel: 100_000_000,
-        MaxMemoryBytes: 32L * 1024 * 1024,
-        MaxWallClockMs: 5_000,
-        MaxOutputBytes: 100_000);
+        100_000_000,
+        32L * 1024 * 1024,
+        5_000,
+        100_000);
 }
 
 /// <summary>
@@ -73,14 +73,20 @@ public sealed record WasmExecutionResult(
 {
     public bool IsSuccess => Status == "ok" && ExitCode == 0;
 
-    public static WasmExecutionResult Failed(string stderr, int exitCode = -1) =>
-        new(exitCode, "", stderr, 0, "failed", 0, 0);
+    public static WasmExecutionResult Failed(string stderr, int exitCode = -1)
+    {
+        return new WasmExecutionResult(exitCode, "", stderr, 0, "failed", 0, 0);
+    }
 
-    public static WasmExecutionResult TimedOut(long durationMs, long fuel, long mem) =>
-        new(-1, "", $"Killed after {durationMs}ms (fuel={fuel}, mem={mem})", durationMs, "timeout", fuel, mem);
+    public static WasmExecutionResult TimedOut(long durationMs, long fuel, long mem)
+    {
+        return new WasmExecutionResult(-1, "", $"Killed after {durationMs}ms (fuel={fuel}, mem={mem})", durationMs, "timeout", fuel, mem);
+    }
 
-    public static WasmExecutionResult Killed(string reason) =>
-        new(-1, "", reason, 0, "killed", 0, 0);
+    public static WasmExecutionResult Killed(string reason)
+    {
+        return new WasmExecutionResult(-1, "", reason, 0, "killed", 0, 0);
+    }
 }
 
 /// <summary>

@@ -6,12 +6,10 @@ namespace Hercules.Tools;
 ///     MCP (Model Context Protocol) клиент (Stage 3).
 ///     Подключается к MCP-серверам из конфига (stdio / http транспорт)
 ///     и auto-регистрирует их tools в <see cref="ToolRegistry" />.
-///
 ///     ВНИМАНИЕ: v0.3.0-preview NuGet пакета ModelContextProtocol предоставляет
 ///     только server-side API. Client-side SDK ещё не выпущен (ETA Q1-Q2 2026).
 ///     Этот класс — интерфейсная обёртка, готовая к подключению SDK сразу после релиза.
 ///     Сейчас McpClient отслеживает серверы из конфига, но не может реально с ними общаться.
-///
 ///     TODO: заменить заглушку на реальный SDK-вызов когда выйдет client API.
 /// </summary>
 public sealed class McpClient
@@ -34,7 +32,11 @@ public sealed class McpClient
     /// </summary>
     public async Task InitializeAsync(CancellationToken ct = default)
     {
-        if (_initialized) return;
+        if (_initialized)
+        {
+            return;
+        }
+
         _initialized = true;
 
         if (_cfg.Servers.Count == 0)
@@ -42,7 +44,7 @@ public sealed class McpClient
             return;
         }
 
-        foreach (var serverCfg in _cfg.Servers)
+        foreach (McpServerConfig serverCfg in _cfg.Servers)
         {
             if (string.IsNullOrWhiteSpace(serverCfg.Name))
             {
@@ -54,7 +56,7 @@ public sealed class McpClient
             // var client = await McpClient.CreateAsync(new StdioClientTransport(...));
             // var tools = await client.ListToolsAsync();
             // foreach (var tool in tools) registry.Add(new McpToolAdapter(serverCfg.Name, tool));
-            var conn = new McpServerConnection(serverCfg.Name, serverCfg.Transport, isStub: true);
+            var conn = new McpServerConnection(serverCfg.Name, serverCfg.Transport, true);
             _servers.Add(conn);
             await Console.Error.WriteLineAsync(
                 $"[MCP] Registered server '{conn.Name}' (transport: {conn.Transport}). " +
@@ -65,10 +67,18 @@ public sealed class McpClient
     /// <summary>Отключиться от всех серверов.</summary>
     public async Task ShutdownAsync()
     {
-        foreach (var s in _servers)
+        foreach (McpServerConnection s in _servers)
         {
-            try { await s.DisposeAsync(); } catch { /* best effort */ }
+            try
+            {
+                await s.DisposeAsync();
+            }
+            catch
+            {
+                /* best effort */
+            }
         }
+
         _servers.Clear();
     }
 }
@@ -78,10 +88,6 @@ public sealed class McpClient
 /// </summary>
 public sealed class McpServerConnection : IAsyncDisposable
 {
-    public string Name { get; }
-    public string Transport { get; }
-    public bool IsStub { get; }
-
     public McpServerConnection(string name, string transport, bool isStub)
     {
         Name = name;
@@ -89,5 +95,12 @@ public sealed class McpServerConnection : IAsyncDisposable
         IsStub = isStub;
     }
 
-    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    public string Name { get; }
+    public string Transport { get; }
+    public bool IsStub { get; }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
 }

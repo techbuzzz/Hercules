@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.Data.Sqlite;
 
 namespace HerculesBus.Sqlite;
@@ -14,9 +15,12 @@ public static class SqliteSchema
     public static void EnsureCreated(SqliteConnection conn)
     {
         ArgumentNullException.ThrowIfNull(conn);
-        if (conn.State != System.Data.ConnectionState.Open) conn.Open();
+        if (conn.State != ConnectionState.Open)
+        {
+            conn.Open();
+        }
 
-        using var pragma = conn.CreateCommand();
+        using SqliteCommand pragma = conn.CreateCommand();
         pragma.CommandText = @"
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
@@ -24,7 +28,7 @@ PRAGMA foreign_keys = ON;
 ";
         pragma.ExecuteNonQuery();
 
-        using var cmd = conn.CreateCommand();
+        using SqliteCommand cmd = conn.CreateCommand();
         cmd.CommandText = $@"
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY

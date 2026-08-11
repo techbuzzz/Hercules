@@ -9,11 +9,11 @@ namespace Hercules.LLM;
 /// </summary>
 public sealed class RoleRouter
 {
-    private readonly LlmClientFactory _factory;
-    private Dictionary<string, RoleConfig> _roles;
-    private string _defaultProvider;
     private readonly Dictionary<string, ILLMClient> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly LlmClientFactory _factory;
+    private string _defaultProvider;
     private ILLMClient? _mainFallback;
+    private Dictionary<string, RoleConfig> _roles;
 
     public RoleRouter(AppConfig appConfig, LlmClientFactory factory)
     {
@@ -21,6 +21,9 @@ public sealed class RoleRouter
         _roles = appConfig.Roles ?? new Dictionary<string, RoleConfig>(StringComparer.OrdinalIgnoreCase);
         _defaultProvider = appConfig.Llm.Provider;
     }
+
+    /// <summary>Список сконфигурированных ролей (для диагностики / API).</summary>
+    public IReadOnlyCollection<string> ConfiguredRoles => _roles.Keys;
 
     /// <summary>
     ///     Перезагрузить карту ролей и провайдер по умолчанию. Очищает кэш клиентов,
@@ -45,17 +48,17 @@ public sealed class RoleRouter
             return GetOrCreateMain();
         }
 
-        if (_cache.TryGetValue(role, out var cached))
+        if (_cache.TryGetValue(role, out ILLMClient? cached))
         {
             return cached;
         }
 
-        if (_roles.TryGetValue(role, out var roleCfg))
+        if (_roles.TryGetValue(role, out RoleConfig? roleCfg))
         {
             var provider = string.IsNullOrWhiteSpace(roleCfg.Provider)
                 ? _defaultProvider
                 : roleCfg.Provider;
-            var client = _factory.Create(provider);
+            ILLMClient client = _factory.Create(provider);
             _cache[role] = client;
             return client;
         }
@@ -69,7 +72,4 @@ public sealed class RoleRouter
     {
         return _mainFallback ??= _factory.Create(_defaultProvider);
     }
-
-    /// <summary>Список сконфигурированных ролей (для диагностики / API).</summary>
-    public IReadOnlyCollection<string> ConfiguredRoles => _roles.Keys;
 }

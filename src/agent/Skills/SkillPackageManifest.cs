@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Hercules.Skills;
@@ -92,8 +91,7 @@ public sealed class SkillPackageSkillMeta
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
 
-    [JsonPropertyName("phrase_receivers")]
-    public List<string> PhraseReceivers { get; set; } = new();
+    [JsonPropertyName("phrase_receivers")] public List<string> PhraseReceivers { get; set; } = new();
 
     public int Version { get; set; } = 1;
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd");

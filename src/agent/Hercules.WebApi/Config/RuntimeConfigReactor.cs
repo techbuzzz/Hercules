@@ -1,4 +1,3 @@
-using Hercules.Agent;
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.Tools;
@@ -12,12 +11,12 @@ namespace Hercules.WebApi.Config;
 /// </summary>
 public sealed class RuntimeConfigReactor
 {
-    private readonly RuntimeConfigStore _store;
     private readonly LlmClientFactory _factory;
+    private readonly IEnumerable<IConfigReload> _reloadConsumers;
     private readonly ResilientLLMClient _resilient;
     private readonly RoleRouter _roleRouter;
+    private readonly RuntimeConfigStore _store;
     private readonly ToolRegistry _tools;
-    private readonly IEnumerable<IConfigReload> _reloadConsumers;
 
     public RuntimeConfigReactor(
         RuntimeConfigStore store,

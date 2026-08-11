@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -13,24 +12,10 @@ namespace Hercules.Tools;
 /// </summary>
 public sealed class HttpTool : ITool
 {
-    public string Name => "http";
-
-    public string Description =>
-        "Безопасные HTTP-запросы. GET/POST/PUT/DELETE. Allow-list доменов, rate limit, timeout. " +
-        "Возвращает body и HTTP status. Для больших ответов — truncated.";
-
-    public string? ParametersSchema => """
-        {
-          "type": "object",
-          "properties": {
-            "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE"] },
-            "url": { "type": "string", "description": "Полный URL (только из allow-list)" },
-            "headers": { "type": "object", "description": "Доп. HTTP headers (опц.)" },
-            "body": { "type": "string", "description": "Body для POST/PUT (опц.)" }
-          },
-          "required": ["method", "url"]
-        }
-        """;
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     private readonly HttpConfig _cfg;
     private readonly HttpClient _http;
@@ -41,11 +26,30 @@ public sealed class HttpTool : ITool
         _cfg = cfg;
         _http = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(cfg.TimeoutSeconds),
+            Timeout = TimeSpan.FromSeconds(cfg.TimeoutSeconds)
         };
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Hercules", "2.0"));
         _rateLimiter = new RateLimiter(cfg.RateLimitPerMinute);
     }
+
+    public string Name => "http";
+
+    public string Description =>
+        "Безопасные HTTP-запросы. GET/POST/PUT/DELETE. Allow-list доменов, rate limit, timeout. " +
+        "Возвращает body и HTTP status. Для больших ответов — truncated.";
+
+    public string? ParametersSchema => """
+                                       {
+                                         "type": "object",
+                                         "properties": {
+                                           "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE"] },
+                                           "url": { "type": "string", "description": "Полный URL (только из allow-list)" },
+                                           "headers": { "type": "object", "description": "Доп. HTTP headers (опц.)" },
+                                           "body": { "type": "string", "description": "Body для POST/PUT (опц.)" }
+                                         },
+                                         "required": ["method", "url"]
+                                       }
+                                       """;
 
     public async Task<ToolResult> ExecuteAsync(string argumentsJson, CancellationToken ct = default)
     {
@@ -83,30 +87,35 @@ public sealed class HttpTool : ITool
             using var httpReq = new HttpRequestMessage(new HttpMethod(req.Method.ToUpperInvariant()), req.Url);
             if (req.Headers is not null)
             {
-                foreach (var kv in req.Headers)
+                foreach (KeyValuePair<string, string> kv in req.Headers)
                 {
                     httpReq.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
                 }
             }
+
             if (!string.IsNullOrEmpty(req.Body))
             {
                 httpReq.Content = new StringContent(req.Body, Encoding.UTF8, "application/json");
             }
 
-            using var resp = await _http.SendAsync(httpReq, ct);
+            using HttpResponseMessage resp = await _http.SendAsync(httpReq, ct);
             var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
             var truncated = bytes.Length > _cfg.MaxResponseSizeKb * 1024;
-            var text = Encoding.UTF8.GetString(truncated ? bytes.AsSpan(0, _cfg.MaxResponseSizeKb * 1024) : bytes);
+            var text = Encoding.UTF8.GetString(truncated
+                ? bytes.AsSpan(0, _cfg.MaxResponseSizeKb * 1024)
+                : bytes);
 
             var meta = new Dictionary<string, object>
             {
                 ["status"] = (int)resp.StatusCode,
                 ["host"] = host,
                 ["bytes"] = bytes.Length,
-                ["truncated"] = truncated,
+                ["truncated"] = truncated
             };
 
-            var status = resp.IsSuccessStatusCode ? "ok" : "http_error";
+            var status = resp.IsSuccessStatusCode
+                ? "ok"
+                : "http_error";
             var output = $"HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}\n{text}";
 
             await Console.Error.WriteLineAsync(
@@ -130,10 +139,11 @@ public sealed class HttpTool : ITool
     private bool IsDomainAllowed(string url, out string host)
     {
         host = "";
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uri))
         {
             return false;
         }
+
         host = uri.Host;
 
         // HTTPS-only по умолчанию
@@ -144,14 +154,23 @@ public sealed class HttpTool : ITool
 
         foreach (var pattern in _cfg.AllowedDomains)
         {
-            if (pattern == "*") return true;
-            if (string.Equals(pattern, host, StringComparison.OrdinalIgnoreCase)) return true;
+            if (pattern == "*")
+            {
+                return true;
+            }
+
+            if (string.Equals(pattern, host, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
             // Wildcard subdomain match: "*.example.com" matches "api.example.com"
             if (pattern.StartsWith("*.") && host.EndsWith(pattern[1..], StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
         }
+
         return false;
     }
 
@@ -162,11 +181,6 @@ public sealed class HttpTool : ITool
         public Dictionary<string, string>? Headers { get; set; }
         public string? Body { get; set; }
     }
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNameCaseInsensitive = true,
-    };
 }
 
 /// <summary>
@@ -175,9 +189,9 @@ public sealed class HttpTool : ITool
 /// </summary>
 internal sealed class RateLimiter
 {
-    private readonly int _maxPerMinute;
     private readonly Queue<DateTime> _hits = new();
     private readonly object _lock = new();
+    private readonly int _maxPerMinute;
 
     public RateLimiter(int maxPerMinute)
     {
@@ -186,19 +200,25 @@ internal sealed class RateLimiter
 
     public bool TryAcquire()
     {
-        if (_maxPerMinute <= 0) return true; // unlimited
+        if (_maxPerMinute <= 0)
+        {
+            return true; // unlimited
+        }
+
         lock (_lock)
         {
-            var now = DateTime.UtcNow;
-            var windowStart = now.AddMinutes(-1);
+            DateTime now = DateTime.UtcNow;
+            DateTime windowStart = now.AddMinutes(-1);
             while (_hits.Count > 0 && _hits.Peek() < windowStart)
             {
                 _hits.Dequeue();
             }
+
             if (_hits.Count >= _maxPerMinute)
             {
                 return false;
             }
+
             _hits.Enqueue(now);
             return true;
         }

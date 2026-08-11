@@ -9,6 +9,13 @@ namespace Hercules.Config;
 /// </summary>
 public sealed class RuntimeConfigStore
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly string _filePath;
     private readonly object _lock = new();
     private volatile AppConfig _snapshot;
@@ -72,7 +79,7 @@ public sealed class RuntimeConfigStore
             var json = JsonSerializer.Serialize(_snapshot, JsonOptions);
             var temp = _filePath + ".tmp";
             File.WriteAllText(temp, json);
-            File.Move(temp, _filePath, overwrite: true);
+            File.Move(temp, _filePath, true);
         }
         catch (Exception ex)
         {
@@ -86,8 +93,7 @@ public sealed class RuntimeConfigStore
         // затем десериализуем обратно в AppConfig. Просто, надёжно и не требует ручного кода.
         var currentJson = JsonSerializer.SerializeToElement(current, JsonOptions);
         var merged = MergeJson(currentJson, patch);
-        return merged.Deserialize<AppConfig>(JsonOptions)
-               ?? throw new InvalidOperationException("Patch produced null configuration");
+        return merged.Deserialize<AppConfig>(JsonOptions) ?? throw new InvalidOperationException("Patch produced null configuration");
     }
 
     private static JsonElement MergeJson(JsonElement current, JsonElement patch)
@@ -97,7 +103,7 @@ public sealed class RuntimeConfigStore
             return patch.Clone();
         }
 
-        var stream = new System.IO.MemoryStream();
+        var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
         writer.WriteStartObject();
         MergeObject(current, patch, writer);
@@ -148,11 +154,4 @@ public sealed class RuntimeConfigStore
             }
         }
     }
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-        PropertyNameCaseInsensitive = true,
-    };
 }

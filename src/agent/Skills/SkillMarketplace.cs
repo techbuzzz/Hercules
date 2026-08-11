@@ -15,21 +15,20 @@ public sealed class SkillMarketplace
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true,
+        PropertyNameCaseInsensitive = true
     };
 
-    private readonly string _marketplaceDir;
     private readonly SkillPackager _packager;
 
     public SkillMarketplace(StorageConfig cfg, SkillPackager packager)
     {
-        _marketplaceDir = Path.Combine(cfg.DataRoot, cfg.SkillsDir, cfg.Phase2?.MarketplaceDir ?? "marketplace");
-        Directory.CreateDirectory(_marketplaceDir);
+        DirectoryPath = Path.Combine(cfg.DataRoot, cfg.SkillsDir, cfg.Phase2?.MarketplaceDir ?? "marketplace");
+        Directory.CreateDirectory(DirectoryPath);
         _packager = packager ?? throw new ArgumentNullException(nameof(packager));
     }
 
     /// <summary>Каталог маркетплейса (data/Skills/marketplace/).</summary>
-    public string DirectoryPath => _marketplaceDir;
+    public string DirectoryPath { get; }
 
     /// <summary>
     ///     Список пакетов в маркетплейсе. Сканирует .skillpkg-файлы и возвращает метаданные.
@@ -37,26 +36,27 @@ public sealed class SkillMarketplace
     public List<MarketplaceEntry> List()
     {
         var entries = new List<MarketplaceEntry>();
-        foreach (var file in Directory.EnumerateFiles(_marketplaceDir, "*.skillpkg"))
+        foreach (var file in Directory.EnumerateFiles(DirectoryPath, "*.skillpkg"))
         {
             try
             {
-                var manifest = ReadManifestFromZip(file);
+                SkillPackageManifest manifest = ReadManifestFromZip(file);
                 entries.Add(new MarketplaceEntry(
-                    FileName: Path.GetFileName(file),
-                    SkillId: manifest.Skill.Id,
-                    Name: manifest.Skill.Name,
-                    Description: manifest.Skill.Description,
-                    Version: manifest.Skill.Version,
-                    PhraseReceivers: manifest.Skill.PhraseReceivers,
-                    FilePath: file,
-                    CreatedAt: manifest.CreatedAt));
+                    Path.GetFileName(file),
+                    manifest.Skill.Id,
+                    manifest.Skill.Name,
+                    manifest.Skill.Description,
+                    manifest.Skill.Version,
+                    manifest.Skill.PhraseReceivers,
+                    file,
+                    manifest.CreatedAt));
             }
             catch
             {
                 // Пропускаем невалидные пакеты
             }
         }
+
         return entries;
     }
 
@@ -66,11 +66,12 @@ public sealed class SkillMarketplace
     /// </summary>
     public Skill Install(string fileName, ConflictResolution conflict = ConflictResolution.Rename)
     {
-        var path = Path.Combine(_marketplaceDir, fileName);
+        var path = Path.Combine(DirectoryPath, fileName);
         if (!File.Exists(path))
         {
             throw new FileNotFoundException($"Пакет '{fileName}' не найден в маркетплейсе.");
         }
+
         return _packager.Import(path, conflict);
     }
 
@@ -84,9 +85,10 @@ public sealed class SkillMarketplace
         {
             throw new FileNotFoundException($"Пакет не найден: {packagePath}");
         }
+
         var fileName = Path.GetFileName(packagePath);
-        var destPath = Path.Combine(_marketplaceDir, fileName);
-        File.Copy(packagePath, destPath, overwrite: true);
+        var destPath = Path.Combine(DirectoryPath, fileName);
+        File.Copy(packagePath, destPath, true);
         return destPath;
     }
 
@@ -95,8 +97,12 @@ public sealed class SkillMarketplace
     /// </summary>
     public bool Remove(string fileName)
     {
-        var path = Path.Combine(_marketplaceDir, fileName);
-        if (!File.Exists(path)) return false;
+        var path = Path.Combine(DirectoryPath, fileName);
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
         File.Delete(path);
         return true;
     }
@@ -106,7 +112,11 @@ public sealed class SkillMarketplace
     /// </summary>
     public List<MarketplaceEntry> Search(string query)
     {
-        if (string.IsNullOrWhiteSpace(query)) return List();
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return List();
+        }
+
         var q = query.Trim().ToLowerInvariant();
         return List().Where(e =>
             e.Name.ToLowerInvariant().Contains(q) ||
@@ -116,14 +126,12 @@ public sealed class SkillMarketplace
 
     private static SkillPackageManifest ReadManifestFromZip(string zipPath)
     {
-        using var stream = File.OpenRead(zipPath);
+        using FileStream stream = File.OpenRead(zipPath);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-        var entry = archive.GetEntry("skill.package.json")
-            ?? throw new InvalidOperationException("skill.package.json не найден в пакете");
+        ZipArchiveEntry entry = archive.GetEntry("skill.package.json") ?? throw new InvalidOperationException("skill.package.json не найден в пакете");
         using var reader = new StreamReader(entry.Open());
         var json = reader.ReadToEnd();
-        return JsonSerializer.Deserialize<SkillPackageManifest>(json, JsonOpts)
-            ?? throw new InvalidOperationException("Не удалось десериализовать манифест");
+        return JsonSerializer.Deserialize<SkillPackageManifest>(json, JsonOpts) ?? throw new InvalidOperationException("Не удалось десериализовать манифест");
     }
 }
 

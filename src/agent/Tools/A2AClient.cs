@@ -8,28 +8,15 @@ namespace Hercules.Tools;
 ///     A2A (Agent-to-Agent) клиент (Stage 3).
 ///     Минимальный JSON-RPC 2.0 клиент для делегирования задач другим агентам.
 ///     Spec: https://a2a-protocol.org/latest/ (LF AI draft, breaking changes возможны).
-///
 ///     Pin версии через интерфейс — при изменении spec достаточно заменить реализацию.
 /// </summary>
 public sealed class A2AClient : ITool
 {
-    public string Name => "a2a";
-
-    public string Description =>
-        "Делегировать задачу другому агенту через A2A-протокол (JSON-RPC 2.0). " +
-        "Endpoints задаются в appsettings.json:A2A.Endpoints (имя → URL).";
-
-    public string? ParametersSchema => """
-        {
-          "type": "object",
-          "properties": {
-            "agent": { "type": "string", "description": "Имя агента из Endpoints" },
-            "task": { "type": "string", "description": "Текст задачи" },
-            "context": { "type": "string", "description": "Контекст (опц.)" }
-          },
-          "required": ["agent", "task"]
-        }
-        """;
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true
+    };
 
     private readonly A2AConfig _cfg;
     private readonly HttpClient _http;
@@ -39,9 +26,27 @@ public sealed class A2AClient : ITool
         _cfg = cfg;
         _http = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(cfg.TimeoutSeconds),
+            Timeout = TimeSpan.FromSeconds(cfg.TimeoutSeconds)
         };
     }
+
+    public string Name => "a2a";
+
+    public string Description =>
+        "Делегировать задачу другому агенту через A2A-протокол (JSON-RPC 2.0). " +
+        "Endpoints задаются в appsettings.json:A2A.Endpoints (имя → URL).";
+
+    public string? ParametersSchema => """
+                                       {
+                                         "type": "object",
+                                         "properties": {
+                                           "agent": { "type": "string", "description": "Имя агента из Endpoints" },
+                                           "task": { "type": "string", "description": "Текст задачи" },
+                                           "context": { "type": "string", "description": "Контекст (опц.)" }
+                                         },
+                                         "required": ["agent", "task"]
+                                       }
+                                       """;
 
     public async Task<ToolResult> ExecuteAsync(string argumentsJson, CancellationToken ct = default)
     {
@@ -77,17 +82,17 @@ public sealed class A2AClient : ITool
                 @params = new
                 {
                     task = req.Task,
-                    context = req.Context ?? "",
-                },
+                    context = req.Context ?? ""
+                }
             };
 
             var json = JsonSerializer.Serialize(rpc, JsonOpts);
             using var httpReq = new HttpRequestMessage(HttpMethod.Post, endpoint)
             {
-                Content = new StringContent(json, Encoding.UTF8, "application/json"),
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
 
-            using var resp = await _http.SendAsync(httpReq, ct);
+            using HttpResponseMessage resp = await _http.SendAsync(httpReq, ct);
             var body = await resp.Content.ReadAsStringAsync(ct);
 
             if (!resp.IsSuccessStatusCode)
@@ -101,14 +106,17 @@ public sealed class A2AClient : ITool
             try
             {
                 using var doc = JsonDocument.Parse(body);
-                var root = doc.RootElement;
-                if (root.TryGetProperty("error", out var err))
+                JsonElement root = doc.RootElement;
+                if (root.TryGetProperty("error", out JsonElement err))
                 {
                     return ToolResult.Fail(
                         $"A2A error: {err.GetRawText()}",
                         new Dictionary<string, object> { ["a2a_error"] = true });
                 }
-                var result = root.TryGetProperty("result", out var r) ? r.GetRawText() : body;
+
+                var result = root.TryGetProperty("result", out JsonElement r)
+                    ? r.GetRawText()
+                    : body;
                 return ToolResult.Ok(
                     $"A2A agent '{req.Agent}' response:\n{result}",
                     new Dictionary<string, object> { ["agent"] = req.Agent, ["endpoint"] = endpoint });
@@ -138,10 +146,4 @@ public sealed class A2AClient : ITool
         public string? Task { get; set; }
         public string? Context { get; set; }
     }
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-    };
 }

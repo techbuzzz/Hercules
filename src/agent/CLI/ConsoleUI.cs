@@ -19,15 +19,15 @@ public sealed class ConsoleUI(
     MemoryManager memory,
     ReflectionEngine reflection,
     SkillPackager packager,
-    Hercules.Skills.SkillMarketplace marketplace,
-    Hercules.Skills.AgentTemplateManager templates,
-    Hercules.Mesh.AgentManifestService manifestService,
-    Hercules.Mesh.CapabilityRegistry capabilityRegistry,
-    Hercules.Mesh.IntentRouter intentRouter,
-    Hercules.Mesh.MeshRouter meshRouter,
-    Hercules.Mesh.CircuitBreaker circuitBreaker,
-    Hercules.Mesh.DistributedReflection distributedReflection,
-    Hercules.Mesh.SharedMemorySync sharedMemorySync)
+    SkillMarketplace marketplace,
+    AgentTemplateManager templates,
+    AgentManifestService manifestService,
+    CapabilityRegistry capabilityRegistry,
+    IntentRouter intentRouter,
+    MeshRouter meshRouter,
+    CircuitBreaker circuitBreaker,
+    DistributedReflection distributedReflection,
+    SharedMemorySync sharedMemorySync)
 {
     public async Task RunAsync(CancellationToken ct = default)
     {
@@ -94,7 +94,7 @@ public sealed class ConsoleUI(
             AnsiConsole.MarkupLine("[yellow]Я заметил, что вы повторяете похожий запрос несколько раз.[/]");
             if (Confirm("Сохранить это как навык?"))
             {
-                Skill skill = await CreateSkillWithStatus(resp.ProposeSkillForInput, ct);
+                var skill = await CreateSkillWithStatus(resp.ProposeSkillForInput, ct);
                 agent.ResetRequestCounter(resp.ProposeSkillForInput);
                 AnsiConsole.MarkupLineInterpolated($"[green]✓ Навык создан:[/] {skill.Meta.Name} (id: {skill.Meta.Id})");
             }
@@ -110,7 +110,7 @@ public sealed class ConsoleUI(
             AnsiConsole.MarkupLineInterpolated($"[yellow]Я не очень хорошо справляюсь с навыком «{resp.ProposeImproveSkillName}».[/]");
             if (Confirm("Обновить навык (создать новую версию)?"))
             {
-                Skill? improved = await ImproveSkillWithStatus(resp.ProposeImproveSkillId, ct);
+                var improved = await ImproveSkillWithStatus(resp.ProposeImproveSkillId, ct);
                 if (improved is not null)
                 {
                     AnsiConsole.MarkupLineInterpolated($"[green]✓ Навык обновлён до версии v{improved.Meta.Version}.[/]");
@@ -147,12 +147,12 @@ public sealed class ConsoleUI(
                     var name = parts.Length >= 3
                         ? parts[2]
                         : AnsiConsole.Ask<string>("Название/тема навыка:");
-                    Skill skill = await CreateSkillWithStatus(name, ct);
+                    var skill = await CreateSkillWithStatus(name, ct);
                     AnsiConsole.MarkupLineInterpolated($"[green]✓ Навык создан:[/] {skill.Meta.Name} (id: {skill.Meta.Id})");
                 }
                 else if (parts.Length >= 3 && parts[1] == "improve")
                 {
-                    Skill? improved = await ImproveSkillWithStatus(parts[2], ct);
+                    var improved = await ImproveSkillWithStatus(parts[2], ct);
                     AnsiConsole.MarkupLine(improved is not null
                         ? $"[green]✓ Навык обновлён до версии v{improved.Meta.Version}.[/]"
                         : "[red]Навык с таким id не найден.[/]");
@@ -183,7 +183,7 @@ public sealed class ConsoleUI(
                 }
                 else // show
                 {
-                    Panel panel = new Panel(Markup.Escape(memory.ProfileMarkdown))
+                    var panel = new Panel(Markup.Escape(memory.ProfileMarkdown))
                         .Header("Профиль пользователя").Expand();
                     AnsiConsole.Write(panel);
                 }
@@ -253,14 +253,12 @@ public sealed class ConsoleUI(
                 {
                     AnsiConsole.MarkupLineInterpolated($"[red]Ошибка валидации:[/] {err}");
                 }
+
                 return;
             }
 
             Skill? skill = null;
-            await AnsiConsole.Status().StartAsync("Импортирую навык...", async _ =>
-            {
-                skill = await Task.Run(() => packager.Import(packagePath), ct);
-            });
+            await AnsiConsole.Status().StartAsync("Импортирую навык...", async _ => { skill = await Task.Run(() => packager.Import(packagePath), ct); });
             AnsiConsole.MarkupLineInterpolated($"[green]✓ Навык импортирован:[/] {skill!.Meta.Name} (id: {skill.Meta.Id}, v{skill.Meta.Version})");
         }
         catch (Exception ex)
@@ -288,21 +286,21 @@ public sealed class ConsoleUI(
 
     private void PrintSkills()
     {
-        List<Skill> skills1 = skills.All();
+        var skills1 = skills.All();
         if (skills1.Count == 0)
         {
             AnsiConsole.MarkupLine("[grey]Навыков пока нет. Они создаются автоматически или командой /skills create.[/]");
             return;
         }
 
-        Table table = new Table().Border(TableBorder.Rounded);
+        var table = new Table().Border(TableBorder.Rounded);
         table.AddColumn("id");
         table.AddColumn("Название");
         table.AddColumn("Фразы-приёмники");
         table.AddColumn("v");
         table.AddColumn("success");
         table.AddColumn("uses");
-        foreach (Skill s in skills1.OrderByDescending(s => s.Meta.TotalUses))
+        foreach (var s in skills1.OrderByDescending(s => s.Meta.TotalUses))
         {
             table.AddRow(
                 s.Meta.Id,
@@ -318,7 +316,9 @@ public sealed class ConsoleUI(
 
     private void HandleMarketplaceCommand(string[] parts)
     {
-        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "list";
+        var sub = parts.Length >= 2
+            ? parts[1].ToLowerInvariant()
+            : "list";
 
         switch (sub)
         {
@@ -329,6 +329,7 @@ public sealed class ConsoleUI(
                     AnsiConsole.MarkupLine("[grey]Маркетплейс пуст. Опубликуйте пакет: /skills export {id}, затем /marketplace publish {path}.[/]");
                     return;
                 }
+
                 var table = new Table().Border(TableBorder.Rounded).Title("Маркетплейс");
                 table.AddColumn("Файл");
                 table.AddColumn("Навык");
@@ -338,6 +339,7 @@ public sealed class ConsoleUI(
                 {
                     table.AddRow(Markup.Escape(e.FileName), Markup.Escape(e.Name), Markup.Escape(e.Description), e.Version.ToString());
                 }
+
                 AnsiConsole.Write(table);
                 break;
 
@@ -348,6 +350,7 @@ public sealed class ConsoleUI(
                     AnsiConsole.MarkupLine($"[grey]Ничего не найдено по запросу '{parts[2]}'.[/]");
                     return;
                 }
+
                 var searchTable = new Table().Border(TableBorder.Rounded);
                 searchTable.AddColumn("Навык");
                 searchTable.AddColumn("Описание");
@@ -355,6 +358,7 @@ public sealed class ConsoleUI(
                 {
                     searchTable.AddRow(Markup.Escape(e.Name), Markup.Escape(e.Description));
                 }
+
                 AnsiConsole.Write(searchTable);
                 break;
 
@@ -368,6 +372,7 @@ public sealed class ConsoleUI(
                 {
                     AnsiConsole.MarkupLineInterpolated($"[red]Ошибка установки:[/] {ex.Message}");
                 }
+
                 break;
 
             case "publish" when parts.Length >= 3:
@@ -380,6 +385,7 @@ public sealed class ConsoleUI(
                 {
                     AnsiConsole.MarkupLineInterpolated($"[red]Ошибка публикации:[/] {ex.Message}");
                 }
+
                 break;
 
             default:
@@ -390,7 +396,9 @@ public sealed class ConsoleUI(
 
     private void HandleTemplatesCommand(string[] parts)
     {
-        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "list";
+        var sub = parts.Length >= 2
+            ? parts[1].ToLowerInvariant()
+            : "list";
 
         switch (sub)
         {
@@ -401,6 +409,7 @@ public sealed class ConsoleUI(
                     AnsiConsole.MarkupLine("[grey]Шаблонов нет. Шаблоны — это bundles навыков + памяти + инструментов для вертикальных сценариев.[/]");
                     return;
                 }
+
                 var table = new Table().Border(TableBorder.Rounded).Title("Шаблоны агентов");
                 table.AddColumn("Файл");
                 table.AddColumn("Название");
@@ -410,6 +419,7 @@ public sealed class ConsoleUI(
                 {
                     table.AddRow(Markup.Escape(t.FileName), Markup.Escape(t.Name), Markup.Escape(t.Description), t.SkillCount.ToString());
                 }
+
                 AnsiConsole.Write(table);
                 break;
 
@@ -419,21 +429,33 @@ public sealed class ConsoleUI(
                     var result = templates.Apply(parts[2]);
                     AnsiConsole.MarkupLineInterpolated($"[green]✓ Шаблон применён:[/] {result.TemplateName}");
                     if (result.InstalledSkills.Count > 0)
+                    {
                         AnsiConsole.MarkupLineInterpolated($"  Навыков установлено: {result.InstalledSkills.Count} ({string.Join(", ", result.InstalledSkills)})");
+                    }
+
                     if (result.InstalledMemoryFiles.Count > 0)
+                    {
                         AnsiConsole.MarkupLineInterpolated($"  Файлов памяти: {result.InstalledMemoryFiles.Count}");
+                    }
+
                     if (result.InstalledToolFiles.Count > 0)
+                    {
                         AnsiConsole.MarkupLineInterpolated($"  Инструментов: {result.InstalledToolFiles.Count}");
+                    }
+
                     if (result.HasErrors)
                     {
                         foreach (var err in result.Errors)
+                        {
                             AnsiConsole.MarkupLineInterpolated($"[red]  Ошибка:[/] {err}");
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
                     AnsiConsole.MarkupLineInterpolated($"[red]Ошибка применения шаблона:[/] {ex.Message}");
                 }
+
                 break;
 
             default:
@@ -444,7 +466,9 @@ public sealed class ConsoleUI(
 
     private async Task HandleMeshCommand(string[] parts, CancellationToken ct)
     {
-        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "status";
+        var sub = parts.Length >= 2
+            ? parts[1].ToLowerInvariant()
+            : "status";
 
         switch (sub)
         {
@@ -469,6 +493,7 @@ public sealed class ConsoleUI(
                     AnsiConsole.MarkupLine("[grey]Реестр пуст. Зарегистрируйте peer'ов: /mesh publish-self, /mesh register {json}.[/]");
                     return;
                 }
+
                 var table = new Table().Border(TableBorder.Rounded).Title("Capability Registry");
                 table.AddColumn("Agent ID");
                 table.AddColumn("Имя");
@@ -478,6 +503,7 @@ public sealed class ConsoleUI(
                 {
                     table.AddRow(Markup.Escape(a.AgentId), Markup.Escape(a.DisplayName), Markup.Escape(a.Endpoint), a.LastSeen);
                 }
+
                 AnsiConsole.Write(table);
                 break;
 
@@ -494,21 +520,23 @@ public sealed class ConsoleUI(
                     AnsiConsole.MarkupLine($"[grey]Агенты с capability '{parts[2]}' не найдены.[/]");
                     return;
                 }
+
                 foreach (var f in found)
                 {
                     AnsiConsole.MarkupLineInterpolated($"  [blue]{f.AgentId}[/] ({f.DisplayName}) → {f.Endpoint}");
                 }
+
                 break;
 
             case "send" when parts.Length >= 4:
                 // /mesh send {targetAgentId} {message...}
                 var targetId = parts[2];
                 var messageText = string.Join(" ", parts.Skip(3));
-                var envelope = new Hercules.Mesh.IntentEnvelope(
-                    RequestId: Hercules.Mesh.IntentIds.NewRequestId(),
-                    Sender: manifestService.Current.AgentId,
-                    Intent: messageText,
-                    Payload: messageText,
+                var envelope = new IntentEnvelope(
+                    IntentIds.NewRequestId(),
+                    manifestService.Current.AgentId,
+                    messageText,
+                    messageText,
                     TraceId: Guid.NewGuid().ToString("N")[..8]);
                 try
                 {
@@ -527,6 +555,7 @@ public sealed class ConsoleUI(
                 {
                     AnsiConsole.MarkupLineInterpolated($"[red]Ошибка:[/] {ex.Message}");
                 }
+
                 break;
 
             // === Phase 4: Fan-out + Circuit Breaker + Reflection + Shared Memory ===
@@ -534,11 +563,11 @@ public sealed class ConsoleUI(
             case "fanout" when parts.Length >= 3:
                 // /mesh fanout {message...} — fan-out нескольким peer'ам + выбор лучшего
                 var fanOutMessage = string.Join(" ", parts.Skip(2));
-                var fanOutEnvelope = new Hercules.Mesh.IntentEnvelope(
-                    RequestId: Hercules.Mesh.IntentIds.NewRequestId(),
-                    Sender: manifestService.Current.AgentId,
-                    Intent: fanOutMessage,
-                    Payload: fanOutMessage,
+                var fanOutEnvelope = new IntentEnvelope(
+                    IntentIds.NewRequestId(),
+                    manifestService.Current.AgentId,
+                    fanOutMessage,
+                    fanOutMessage,
                     TraceId: Guid.NewGuid().ToString("N")[..8]);
                 try
                 {
@@ -550,6 +579,7 @@ public sealed class ConsoleUI(
                         {
                             AnsiConsole.MarkupLineInterpolated($"[grey]Judge:[/] {result.JudgeRationale}");
                         }
+
                         AnsiConsole.WriteLine(result.Winner.Result ?? "");
                     }
                     else
@@ -565,6 +595,7 @@ public sealed class ConsoleUI(
                 {
                     AnsiConsole.MarkupLineInterpolated($"[red]Fan-out error:[/] {ex.Message}");
                 }
+
                 break;
 
             case "circuits":
@@ -575,6 +606,7 @@ public sealed class ConsoleUI(
                     AnsiConsole.MarkupLine("[grey]Circuit breakers: нет отслеживаемых peer'ов.[/]");
                     break;
                 }
+
                 var cbTable = new Table().Border(TableBorder.Rounded).Title("Circuit Breakers");
                 cbTable.AddColumn("Agent ID");
                 cbTable.AddColumn("State");
@@ -582,13 +614,14 @@ public sealed class ConsoleUI(
                 {
                     var color = kvp.Value switch
                     {
-                        Hercules.Mesh.CircuitState.Closed => "green",
-                        Hercules.Mesh.CircuitState.Open => "red",
-                        Hercules.Mesh.CircuitState.HalfOpen => "yellow",
+                        CircuitState.Closed => "green",
+                        CircuitState.Open => "red",
+                        CircuitState.HalfOpen => "yellow",
                         _ => "grey"
                     };
                     cbTable.AddRow(Markup.Escape(kvp.Key), $"[{color}]{kvp.Value}[/]");
                 }
+
                 AnsiConsole.Write(cbTable);
                 break;
 
@@ -597,10 +630,7 @@ public sealed class ConsoleUI(
                 try
                 {
                     DistributedReflectionResult? reflResult = null;
-                    await AnsiConsole.Status().StartAsync("Distributed reflection...", async _ =>
-                    {
-                        reflResult = await distributedReflection.ReflectAsync(ct);
-                    });
+                    await AnsiConsole.Status().StartAsync("Distributed reflection...", async _ => { reflResult = await distributedReflection.ReflectAsync(ct); });
                     AnsiConsole.Write(new Panel(Markup.Escape(reflResult!.Markdown))
                         .Header("Distributed Reflection").Expand());
                     AnsiConsole.MarkupLineInterpolated($"[grey]Peers: {reflResult.PeerCount} | Open circuits: {reflResult.OpenCircuitCount} | Total capabilities: {reflResult.TotalCapabilities}[/]");
@@ -609,6 +639,7 @@ public sealed class ConsoleUI(
                 {
                     AnsiConsole.MarkupLineInterpolated($"[red]Reflection error:[/] {ex.Message}");
                 }
+
                 break;
 
             case "recommendations":
@@ -625,6 +656,7 @@ public sealed class ConsoleUI(
                         AnsiConsole.MarkupLineInterpolated($"[yellow]⚠ {rec}[/]");
                     }
                 }
+
                 break;
 
             case "memory-sync":
@@ -632,16 +664,14 @@ public sealed class ConsoleUI(
                 try
                 {
                     var received = 0;
-                    await AnsiConsole.Status().StartAsync("Syncing shared memory...", async _ =>
-                    {
-                        received = await sharedMemorySync.SyncFromPeersAsync(ct);
-                    });
+                    await AnsiConsole.Status().StartAsync("Syncing shared memory...", async _ => { received = await sharedMemorySync.SyncFromPeersAsync(ct); });
                     AnsiConsole.MarkupLineInterpolated($"[green]✓ Синхронизировано фактов:[/] {received}");
                 }
                 catch (Exception ex)
                 {
                     AnsiConsole.MarkupLineInterpolated($"[red]Sync error:[/] {ex.Message}");
                 }
+
                 break;
 
             case "shared":
@@ -652,6 +682,7 @@ public sealed class ConsoleUI(
                     AnsiConsole.MarkupLine("[grey]Shared-фактов нет. Опубликуйте через Web API: POST /api/mesh/shared-memory.[/]");
                     break;
                 }
+
                 var fTable = new Table().Border(TableBorder.Rounded).Title("Shared Memory Facts");
                 fTable.AddColumn("ID");
                 fTable.AddColumn("Category");
@@ -661,13 +692,14 @@ public sealed class ConsoleUI(
                 {
                     fTable.AddRow(f.Id, f.Category, f.SourceAgent, f.UpdatedAt);
                 }
+
                 AnsiConsole.Write(fTable);
                 break;
 
             default:
                 AnsiConsole.MarkupLine("[grey]Команды:[/] /mesh status | manifest | agents | publish-self | " +
-                    "find {cap} | send {id} {msg} | fanout {msg} | circuits | reflect-mesh | recommendations | " +
-                    "memory-sync | shared");
+                                       "find {cap} | send {id} {msg} | fanout {msg} | circuits | reflect-mesh | recommendations | " +
+                                       "memory-sync | shared");
                 break;
         }
     }
@@ -681,7 +713,7 @@ public sealed class ConsoleUI(
 
     private static void PrintHelp()
     {
-        Table table = new Table().Border(TableBorder.Rounded).Title("Команды");
+        var table = new Table().Border(TableBorder.Rounded).Title("Команды");
         table.AddColumn("Команда");
         table.AddColumn("Описание");
         table.AddRow("> текст", "Прямой запрос к LLM с контекстом профиля");
@@ -737,7 +769,6 @@ public sealed class ConsoleUI(
 
         AnsiConsole.MarkupLineInterpolated($"[grey]{question} (авто-да в неинтерактивном режиме)[/]");
         return true;
-
     }
 
     /// <summary>Разбор команды с поддержкой кавычек: /skills create "Поиск вакансий".</summary>

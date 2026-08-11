@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Hercules.Config;
 
 /// <summary>
@@ -310,6 +312,5 @@ public sealed class ManifestCapabilityConfig
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
 
-    [System.Text.Json.Serialization.JsonPropertyName("phrase_receivers")]
-    public List<string> PhraseReceivers { get; set; } = new();
+    [JsonPropertyName("phrase_receivers")] public List<string> PhraseReceivers { get; set; } = new();
 }

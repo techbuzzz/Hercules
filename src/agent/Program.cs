@@ -1,9 +1,11 @@
 using System.Text;
 using Hercules.Agent;
 using Hercules.CLI;
+using Hercules.CodeExecution;
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.Mesh;
+using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Telegram;
 using Hercules.Tools;
@@ -58,10 +60,10 @@ services.AddSingleton<ResilientLLMClient>(sp =>
 services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
 
 // Code execution (Stage 2, v2)
-services.AddSingleton<Hercules.CodeExecution.SandboxOptions>(sp =>
+services.AddSingleton<SandboxOptions>(sp =>
 {
-    var cfg = sp.GetRequiredService<CodeExecutionConfig>();
-    var opts = new Hercules.CodeExecution.SandboxOptions
+    CodeExecutionConfig cfg = sp.GetRequiredService<CodeExecutionConfig>();
+    var opts = new SandboxOptions
     {
         CpuTimeoutSeconds = cfg.CpuTimeoutSeconds,
         MaxFileSizeMb = cfg.MaxFileSizeMb,
@@ -70,22 +72,23 @@ services.AddSingleton<Hercules.CodeExecution.SandboxOptions>(sp =>
         MaxVirtualMemoryMb = cfg.MaxVirtualMemoryMb,
         AllowNetwork = cfg.AllowNetwork,
         MaxCodeSizeKb = cfg.MaxCodeSizeKb,
-        SessionTtlSeconds = cfg.SessionTtlSeconds,
+        SessionTtlSeconds = cfg.SessionTtlSeconds
     };
     if (!string.IsNullOrWhiteSpace(cfg.TempRoot))
     {
         opts.TempRoot = cfg.TempRoot;
     }
+
     return opts;
 });
-services.AddSingleton<Hercules.CodeExecution.ICodeExecutor, Hercules.CodeExecution.DotnetFileBasedExecutor>();
+services.AddSingleton<ICodeExecutor, DotnetFileBasedExecutor>();
 
 // Tool ecosystem (Stage 3, v2)
-services.AddSingleton<Hercules.Tools.ITool, Hercules.Tools.HttpTool>();
-services.AddSingleton<Hercules.Tools.ITool, Hercules.Tools.A2AClient>();
-services.AddSingleton<Hercules.Tools.ITool, Hercules.Tools.CodeExecutionTool>();
-services.AddSingleton<Hercules.Tools.ToolRegistry>();
-services.AddSingleton<Hercules.Tools.McpClient>();
+services.AddSingleton<ITool, HttpTool>();
+services.AddSingleton<ITool, A2AClient>();
+services.AddSingleton<ITool, CodeExecutionTool>();
+services.AddSingleton<ToolRegistry>();
+services.AddSingleton<McpClient>();
 
 // WASM sandbox (v3) — Wasmtime-based code execution с capability-based isolation.
 // Регистрируем IWasmSandbox, CompilerRegistry (с PassthroughCompiler для готовых .wasm),
@@ -98,7 +101,7 @@ services.AddSingleton<CompilerRegistry>(sp =>
     return registry;
 });
 services.AddSingleton<WasmTool>();
-services.AddSingleton<Hercules.Tools.ITool, WasmToolAdapter>();
+services.AddSingleton<ITool, WasmToolAdapter>();
 
 // HerculesBus (v3.1) — мессенджер для ИИ агентов. In-process pub/sub + registry + channel store.
 // В v3.1 используется in-memory реализация; v3.2 добавит SQLite и HTTP transport.
@@ -116,16 +119,16 @@ services.AddSingleton<MemoryStore>();
 services.AddSingleton<SqliteSessionStore>();
 
 // Phase 2: Skill packager (export/import .skillpkg)
-services.AddSingleton<Hercules.Skills.SkillPackager>();
+services.AddSingleton<SkillPackager>();
 
 // Phase 2: Semantic routing (embedding-based). Stub provider — offline, без внешних зависимостей.
 // В проде заменяется на YandexEmbeddingProvider или OllamaEmbeddingProvider.
-services.AddSingleton<Hercules.Skills.IEmbeddingProvider, Hercules.Skills.StubEmbeddingProvider>();
-services.AddSingleton<Hercules.Skills.EmbeddingSkillRouter>();
+services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();
+services.AddSingleton<EmbeddingSkillRouter>();
 
 // Phase 2: Skill marketplace + agent templates
-services.AddSingleton<Hercules.Skills.SkillMarketplace>();
-services.AddSingleton<Hercules.Skills.AgentTemplateManager>();
+services.AddSingleton<SkillMarketplace>();
+services.AddSingleton<AgentTemplateManager>();
 
 // Агент
 services.AddSingleton<SkillManager>();

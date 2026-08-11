@@ -3,7 +3,7 @@ namespace HerculesBus.Core;
 /// <summary>
 ///     Канал в HerculesBus — аналог Slack channel. Может быть public (любой агент может subscribe)
 ///     или private (только по invite). История хранится в IChannelStore.
-///     Названо <see cref="BusChannel"/> чтобы не конфликтовать с System.Threading.Channels.Channel.
+///     Названо <see cref="BusChannel" /> чтобы не конфликтовать с System.Threading.Channels.Channel.
 /// </summary>
 public sealed record BusChannel(
     string Name,

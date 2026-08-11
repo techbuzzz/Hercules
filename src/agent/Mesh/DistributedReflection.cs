@@ -1,7 +1,5 @@
 using System.Text;
-using Hercules.Agent;
 using Hercules.LLM;
-using Hercules.Mesh;
 
 namespace Hercules.Mesh;
 
@@ -13,10 +11,10 @@ namespace Hercules.Mesh;
 /// </summary>
 public sealed class DistributedReflection
 {
-    private readonly ILLMClient _llm;
-    private readonly CapabilityRegistry _registry;
     private readonly CircuitBreaker _breaker;
+    private readonly ILLMClient _llm;
     private readonly AgentManifestService _manifestService;
+    private readonly CapabilityRegistry _registry;
 
     public DistributedReflection(
         ILLMClient llm,
@@ -41,7 +39,7 @@ public sealed class DistributedReflection
             .Where(a => !a.AgentId.Equals(ownAgentId, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        var circuitStates = _breaker.GetAllStates();
+        IReadOnlyDictionary<string, CircuitState> circuitStates = _breaker.GetAllStates();
         var openCircuits = circuitStates
             .Where(kvp => kvp.Value == CircuitState.Open)
             .Select(kvp => kvp.Key)
@@ -49,10 +47,10 @@ public sealed class DistributedReflection
 
         // Собираем capabilities всех peer'ов для анализа покрытия
         var allCapabilities = new List<(string AgentId, string Capability, string Description)>();
-        foreach (var agent in agents)
+        foreach (RegistryAgentEntry agent in agents)
         {
-            var caps = _registry.ListCapabilities(agent.AgentId);
-            foreach (var cap in caps)
+            List<RegistryCapabilityEntry> caps = _registry.ListCapabilities(agent.AgentId);
+            foreach (RegistryCapabilityEntry cap in caps)
             {
                 allCapabilities.Add((agent.AgentId, cap.Name, cap.Description));
             }
@@ -74,33 +72,33 @@ public sealed class DistributedReflection
                 .Select(g => $"- {g.Key}: {string.Join(", ", g.Select(c => c.AgentId))}"));
 
         var prompt = $"""
-            Проведи distributed reflection mesh-узла Hercules. Ответь на русском, кратко,
-            строго по структуре с заголовками:
+                      Проведи distributed reflection mesh-узла Hercules. Ответь на русском, кратко,
+                      строго по структуре с заголовками:
 
-            ## Состояние peer-агентов
-            ## Circuit Breakers
-            ## Покрытие capabilities
-            ## Рекомендации
+                      ## Состояние peer-агентов
+                      ## Circuit Breakers
+                      ## Покрытие capabilities
+                      ## Рекомендации
 
-            Данные mesh:
-            - Мой agentId: {ownAgentId}
-            - Всего peer-агентов: {agents.Count}
-            - Circuit breakers разомкнуто: {openCircuits.Count}
+                      Данные mesh:
+                      - Мой agentId: {ownAgentId}
+                      - Всего peer-агентов: {agents.Count}
+                      - Circuit breakers разомкнуто: {openCircuits.Count}
 
-            Peer-агенты:
-            {agentsSummary}
+                      Peer-агенты:
+                      {agentsSummary}
 
-            Circuit breakers:
-            {circuitsSummary}
+                      Circuit breakers:
+                      {circuitsSummary}
 
-            Распределение capabilities:
-            {capabilitiesSummary}
+                      Распределение capabilities:
+                      {capabilitiesSummary}
 
-            В разделе "Рекомендации" предложи:
-            1. Какие новые связи с peer'ами стоит установить (если есть gap в coverage).
-            2. Какие новые навыки стоит создать локально, чтобы не зависеть от peer'ов.
-            3. Какие упавшие peer'ы требуют внимания (circuit open).
-            """;
+                      В разделе "Рекомендации" предложи:
+                      1. Какие новые связи с peer'ами стоит установить (если есть gap в coverage).
+                      2. Какие новые навыки стоит создать локально, чтобы не зависеть от peer'ов.
+                      3. Какие упавшие peer'ы требуют внимания (circuit open).
+                      """;
 
         string analysis;
         try
@@ -134,7 +132,7 @@ public sealed class DistributedReflection
             OpenCircuitCount = openCircuits.Count,
             TotalCapabilities = allCapabilities.Count,
             OpenCircuits = openCircuits,
-            PeerAgents = agents,
+            PeerAgents = agents
         };
     }
 
@@ -153,8 +151,8 @@ public sealed class DistributedReflection
 
         foreach (var agentId in openCircuits)
         {
-            var caps = _registry.ListCapabilities(agentId);
-            foreach (var cap in caps)
+            List<RegistryCapabilityEntry> caps = _registry.ListCapabilities(agentId);
+            foreach (RegistryCapabilityEntry cap in caps)
             {
                 recommendations.Add(
                     $"Создать локальный навык '{cap.Name}' — peer '{agentId}' недоступен (circuit open), " +
