@@ -1,0 +1,9 @@
+{
+  "name": "Cold Chain Monitor",
+  "description": "Agent for cold chain logistics: temperature monitoring, excursion alerts, route tracking, compliance reporting.",
+  "version": 1,
+  "scenario": "coldchain",
+  "skills": [],
+  "memory_files": ["user_profile.md"],
+  "tool_files": []
+}

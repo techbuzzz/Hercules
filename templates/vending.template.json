@@ -1,0 +1,9 @@
+{
+  "name": "Vending Operations Agent",
+  "description": "Agent for vending machine fleet management: inventory levels, cash reconciliation, maintenance scheduling, restock routing.",
+  "version": 1,
+  "scenario": "vending",
+  "skills": [],
+  "memory_files": ["user_profile.md"],
+  "tool_files": []
+}

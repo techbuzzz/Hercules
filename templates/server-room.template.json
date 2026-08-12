@@ -1,0 +1,9 @@
+{
+  "name": "Server Room Guardian",
+  "description": "Agent for server room operations: rack temperature, power consumption, UPS status, hardware failure prediction.",
+  "version": 1,
+  "scenario": "server-room",
+  "skills": [],
+  "memory_files": ["user_profile.md"],
+  "tool_files": []
+}
