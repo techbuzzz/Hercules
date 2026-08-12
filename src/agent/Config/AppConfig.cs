@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Hercules.Tools.Policy;
 
 namespace Hercules.Config;
 
@@ -49,6 +50,53 @@ public sealed class AppConfig
     ///     Конфигурация Phase 3: inter-agent протокол, capability registry, discovery.
     /// </summary>
     public MeshConfig Mesh { get; set; } = new();
+
+    /// <summary>Конфигурация tool policy engine (task_009).</summary>
+    public ToolPolicyConfig ToolPolicy { get; set; } = new();
+}
+
+/// <summary>
+///     Конфигурация tool policy engine (task_009).
+///     Side-effect level, permissions, deny rules, approval thresholds.
+/// </summary>
+public sealed class ToolPolicyConfig
+{
+    /// <summary>
+    ///     Режим dry-run: политика только логирует, но не блокирует.
+    ///     Полезно для initial rollout и отладки.
+    /// </summary>
+    public bool DryRun { get; set; } = false;
+
+    /// <summary>
+    ///     Разрешить выполнение tool'ов, не зарегистрированных в policy registry.
+    ///     false = unknown tools всегда denied.
+    /// </summary>
+    public bool AllowUnknownTools { get; set; } = false;
+
+    /// <summary>
+    ///     Minimal side-effect level, начиная с которого tool требует approval.
+    ///     None=0, Read=1, Local=2, External=3, Critical=4.
+    ///     Tool с уровнем >= этого значения требует human-in-the-loop подтверждения.
+    /// </summary>
+    public SideEffectLevel MinSideEffectLevelForApproval { get; set; } = SideEffectLevel.External;
+
+    /// <summary>
+    ///     Explicit deny list (glob patterns). ["*"] = deny all.
+    ///     Применяется до side-effect check.
+    /// </summary>
+    public List<string> DeniedTools { get; set; } = new();
+
+    /// <summary>
+    ///     Default permissions агента (comma-separated: Read|Write|Network|Memory).
+    ///     tools без явно объявленных permissions используют это значение.
+    /// </summary>
+    public string AgentPermissions { get; set; } = "Read|Write|Network|Memory";
+
+    /// <summary>
+    ///     Default timeout для tools без собственного timeout (секунды).
+    ///     0 = без ограничения.
+    /// </summary>
+    public int DefaultTimeoutSeconds { get; set; } = 30;
 }
 
 /// <summary>

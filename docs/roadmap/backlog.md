@@ -32,7 +32,7 @@
 | 6 | 6 | [Тесты и бенчмарки](tasks/task_006.md) | `tests-and-benchmarks` | pending |
 | 7 | — | [Типизированные контракты агента](tasks/task_007.md) | `typed-contracts` | pending |
 | 8 | — | [Ограниченный цикл исполнения](tasks/task_008.md) | `bounded-execution` | done |
-| 9 | — | [Граница инструментов и policy engine](tasks/task_009.md) | `tool-boundary-policy` | pending |
+| 9 | — | [Граница инструментов и policy engine](tasks/task_009.md) | `tool-boundary-policy` | done |
 | 10 | — | [Гейты подтверждения](tasks/task_010.md) | `approval-gates` | pending |
 | 11 | — | [Слоистая память](tasks/task_011.md) | `layered-memory` | pending |
 | 12 | — | [Бюджеты и guardrails](tasks/task_012.md) | `budget-guardrails` | pending |

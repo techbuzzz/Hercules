@@ -1,5 +1,6 @@
 using System.Text;
 using Hercules.Config;
+using Hercules.Tools.Policy;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.Tools;
@@ -14,11 +15,13 @@ public sealed class ToolRegistry
     private readonly Dictionary<string, ITool> _tools = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILoggerFactory _loggerFactory;
     private readonly Func<IEnumerable<ITool>> _toolsFactory;
+    private readonly ToolPolicyEngine? _policy;
 
-    public ToolRegistry(IEnumerable<ITool> tools, ILoggerFactory loggerFactory)
+    public ToolRegistry(IEnumerable<ITool> tools, ILoggerFactory loggerFactory, ToolPolicyEngine? policy = null)
     {
         _loggerFactory = loggerFactory;
         _toolsFactory = () => tools;
+        _policy = policy;
         Register(tools);
     }
 
@@ -61,6 +64,9 @@ public sealed class ToolRegistry
             }
 
             _tools[t.Name] = t;
+
+            // Register tool with policy engine
+            _policy?.Register(t);
         }
     }
 

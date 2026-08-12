@@ -9,6 +9,7 @@ using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Storage;
 using Hercules.Tools;
+using Hercules.Tools.Policy;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.Agent;
@@ -76,6 +77,7 @@ public sealed class AgentCore : IConfigReload
     private readonly SkillManager _skills;
     private readonly ToolRegistry? _tools;
     private readonly IJsonRepairService _jsonRepair;
+    private readonly ToolPolicyEngine? _policy;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
@@ -92,7 +94,8 @@ public sealed class AgentCore : IConfigReload
         AgentConfig cfg,
         ILogger<AgentCore> logger,
         IJsonRepairService jsonRepair,
-        ToolRegistry? tools = null)
+        ToolRegistry? tools = null,
+        ToolPolicyEngine? policy = null)
     {
         _llm = llm;
         _router = router;
@@ -103,6 +106,7 @@ public sealed class AgentCore : IConfigReload
         _logger = logger;
         _jsonRepair = jsonRepair;
         _tools = tools;
+        _policy = policy;
     }
 
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
@@ -276,6 +280,38 @@ public sealed class AgentCore : IConfigReload
                     $"[system] Tool '{toolName}' not found. Available tools: {string.Join(", ", _tools.Names)}. " +
                     "Provide a final answer (without 'action' JSON) or use a different tool."));
                 continue;
+            }
+
+            // [Policy] Check tool execution policy before running
+            if (_policy is not null)
+            {
+                var policyResult = _policy.Evaluate(new PolicyContext
+                {
+                    ToolName = toolName,
+                    ArgumentsJson = argsJson,
+                    SessionId = SessionId
+                });
+
+                if (policyResult.IsDenied)
+                {
+                    _logger.LogWarning("[Policy] Tool '{Name}' BLOCKED — {Reason}", toolName, policyResult.DeniedReason);
+                    messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
+                    messages.Add(new ChatTurn(ChatRole.System,
+                        $"[system] Tool '{toolName}' is blocked by policy: {policyResult.DeniedReason}. " +
+                        "Provide a final answer without using this tool."));
+                    continue;
+                }
+
+                if (policyResult.RequiresApproval)
+                {
+                    _logger.LogWarning("[Policy] Tool '{Name}' requires approval — {Reason}", toolName, policyResult.DeniedReason);
+                    messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
+                    messages.Add(new ChatTurn(ChatRole.System,
+                        $"[system] Tool '{toolName}' requires human approval: {policyResult.DeniedReason}. " +
+                        "Please confirm the action in the approval interface and retry. " +
+                        "For now, provide a final answer without this tool."));
+                    continue;
+                }
             }
 
             // Execute tool — log step

@@ -10,6 +10,7 @@ using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Telegram;
 using Hercules.Tools;
+using Hercules.Tools.Policy;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
 using HerculesBus;
@@ -53,6 +54,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton(appConfig.Mcp);
     services.AddSingleton(appConfig.A2A);
     services.AddSingleton(appConfig.Mesh);
+    services.AddSingleton(appConfig.ToolPolicy);
 
     // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
     services.AddSingleton<LlmClientFactory>();
@@ -96,6 +98,18 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<ITool, HttpTool>();
     services.AddSingleton<ITool, A2AClient>();
     services.AddSingleton<ITool, CodeExecutionTool>();
+    // Tool policy engine (task_009) — registered before ToolRegistry so it can be injected
+    services.AddSingleton(sp =>
+    {
+        var cfg = sp.GetRequiredService<ToolPolicyConfig>();
+        var perms = ToolPermissionExtensions.ParseFromString(cfg.AgentPermissions);
+        return new ToolPermissionSet(perms);
+    });
+    services.AddSingleton<ToolPolicyEngine>(sp =>
+        new ToolPolicyEngine(
+            sp.GetRequiredService<ToolPolicyConfig>(),
+            sp.GetRequiredService<ToolPermissionSet>(),
+            sp.GetRequiredService<ILogger<ToolPolicyEngine>>()));
     services.AddSingleton<ToolRegistry>();
     services.AddSingleton<McpClient>();
 

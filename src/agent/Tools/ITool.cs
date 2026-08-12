@@ -1,9 +1,11 @@
+using Hercules.Tools.Policy;
+
 namespace Hercules.Tools;
 
 /// <summary>
 ///     Базовый контракт tool'а, доступного агенту.
 ///     Реализации регистрируются в <see cref="ToolRegistry" /> по имени
-///     и могут быть вызваны LLM-агентом через специальный action-протокол (Stage 4).
+///     и могут быть вызваны LLM-агентом через специальный action-протокол.
 /// </summary>
 public interface ITool
 {
@@ -21,6 +23,16 @@ public interface ITool
 
     /// <summary>Выполнить вызов. Никогда не бросает — все ошибки в ToolResult.</summary>
     Task<ToolResult> ExecuteAsync(string argumentsJson, CancellationToken ct = default);
+}
+
+/// <summary>
+///     Опциональный extension для tool'ов, которые хотят объявить свой
+///     policy descriptor (side-effect level, permissions, timeout).
+///     Tool'ы без этого интерфейса получают default descriptor на основе имени.
+/// </summary>
+public interface IToolDescriptorProvider
+{
+    ToolDescriptor GetPolicyDescriptor();
 }
 
 /// <summary>

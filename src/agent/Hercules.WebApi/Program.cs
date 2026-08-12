@@ -9,6 +9,7 @@ using Hercules.Mesh;
 using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Tools;
+using Hercules.Tools.Policy;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
 using Hercules.WebApi.Auth;
@@ -62,6 +63,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Mcp);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.A2A);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Mesh);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ToolPolicy);
 builder.Services.AddSingleton(webCfg);
 
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
@@ -106,6 +108,18 @@ builder.Services.AddSingleton<ICodeExecutor, DotnetFileBasedExecutor>();
 builder.Services.AddSingleton<ITool, HttpTool>();
 builder.Services.AddSingleton<ITool, A2AClient>();
 builder.Services.AddSingleton<ITool, CodeExecutionTool>();
+// Tool policy engine (task_009)
+builder.Services.AddSingleton(sp =>
+{
+    var cfg = sp.GetRequiredService<ToolPolicyConfig>();
+    var perms = ToolPermissionExtensions.ParseFromString(cfg.AgentPermissions);
+    return new ToolPermissionSet(perms);
+});
+builder.Services.AddSingleton<ToolPolicyEngine>(sp =>
+    new ToolPolicyEngine(
+        sp.GetRequiredService<ToolPolicyConfig>(),
+        sp.GetRequiredService<ToolPermissionSet>(),
+        sp.GetRequiredService<ILogger<ToolPolicyEngine>>()));
 builder.Services.AddSingleton<ToolRegistry>();
 builder.Services.AddSingleton<McpClient>();
 
