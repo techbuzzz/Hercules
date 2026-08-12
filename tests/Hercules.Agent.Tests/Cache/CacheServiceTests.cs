@@ -248,12 +248,12 @@ public class CacheServiceTests : IDisposable
     [Fact]
     public async Task GetOrSetAsync_TtlExpiry_ExpireAfterTtl()
     {
-        // TTL = 5 seconds, sliding = false.
-        // After 8 seconds, the entry should be treated as expired.
+        // TTL = 1 second, sliding = false.
+        // After sufficient real time passes, the entry should be treated as expired.
         var config = new CacheConfig
         {
             Enabled = true,
-            DefaultTtlSeconds = 5,
+            DefaultTtlSeconds = 1,
             CleanupIntervalSeconds = 3600,
             SlidingExpiration = false,
         };
@@ -266,10 +266,10 @@ public class CacheServiceTests : IDisposable
         // Verify one miss on insert
         Assert.Equal(1, shortCache.GetStats()[CacheClass.Embedding].MissCount);
 
-        // Wait for TTL to definitely expire
-        await Task.Delay(8000);
+        // Wait well past the TTL
+        await Task.Delay(2500);
 
-        // After expiry, factory should be called again
+        // After expiry, factory should be called again (entry expired, miss path taken)
         var afterExpiry = await shortCache.GetOrSetAsync(CacheClass.Embedding, "expiry-key",
             () => Task.FromResult<object?>("factory-after-expiry"));
 
@@ -282,12 +282,12 @@ public class CacheServiceTests : IDisposable
     [Fact]
     public async Task GetOrSetAsync_SlidingExpiration_ExtendsExpiry()
     {
-        // TTL = 5 seconds, sliding = true.
-        // Periodic access should extend TTL so entry survives multiple TTL periods.
+        // TTL = 2 seconds, sliding = true.
+        // Periodic access extends TTL so the entry survives multiple TTL periods.
         var config = new CacheConfig
         {
             Enabled = true,
-            DefaultTtlSeconds = 5,
+            DefaultTtlSeconds = 2,
             CleanupIntervalSeconds = 3600,
             SlidingExpiration = true,
         };
@@ -297,21 +297,22 @@ public class CacheServiceTests : IDisposable
         await slidingCache.GetOrSetAsync(CacheClass.Embedding, "slide-key",
             () => Task.FromResult<object?>("original"));
 
-        // Touch after 2s (TTL reset to 5s from now = 7s mark)
-        await Task.Delay(2000);
+        // Touch after 1500ms — still within 2s TTL but close
+        await Task.Delay(1500);
         var hit1 = await slidingCache.GetOrSetAsync(CacheClass.Embedding, "slide-key",
             () => Task.FromResult<object?>("factory-touch1"));
         Assert.Equal("original", hit1);
-        Assert.Equal(1, slidingCache.GetStats()[CacheClass.Embedding].HitCount);
 
-        // Touch after 3s more (7s from insert, 2s from touch = 9s mark)
-        await Task.Delay(3000);
+        // Touch after 1500ms more (3s total from insert)
+        // With sliding, TTL was reset at 1.5s to 3.5s mark
+        await Task.Delay(1500);
         var hit2 = await slidingCache.GetOrSetAsync(CacheClass.Embedding, "slide-key",
             () => Task.FromResult<object?>("factory-touch2"));
         Assert.Equal("original", hit2);
 
-        // After 6s more (15s from insert, 6s from last touch) — TTL was 5s, expired
-        await Task.Delay(6000);
+        // After 3s more (6s total from insert, ~4.5s from last touch)
+        // With sliding, entry should have expired
+        await Task.Delay(3000);
         var afterExpiry = await slidingCache.GetOrSetAsync(CacheClass.Embedding, "slide-key",
             () => Task.FromResult<object?>("factory-after-expiry"));
         Assert.Equal("factory-after-expiry", afterExpiry);

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hercules.Agent.Loop;
+using Hercules.Context;
 using Hercules.Audit;
 using Hercules.Budget;
 using Hercules.Config;
@@ -90,6 +91,7 @@ public sealed class AgentCore : IConfigReload
     private readonly BudgetGuard? _budgetGuard;
     private readonly IOtelService? _otel;
     private readonly IAuditService? _auditService;
+    private readonly IContextBuilder? _contextBuilder;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
@@ -97,6 +99,7 @@ public sealed class AgentCore : IConfigReload
     private string _contextBlock = "";
     private string _lastInput = "";
     private Activity? _currentHandleActivity;
+    private readonly List<ToolTraceEntry> _currentToolTrace = new();
 
     public AgentCore(
         ILLMClient llm,
@@ -115,7 +118,8 @@ public sealed class AgentCore : IConfigReload
         IOtelService? otel = null,
         IAuditService? auditService = null,
         EmbeddingSkillRouter? embeddingRouter = null,
-        Phase2Config? phase2Config = null)
+        Phase2Config? phase2Config = null,
+        IContextBuilder? contextBuilder = null)
     {
         _llm = llm;
         _router = router;
@@ -134,6 +138,7 @@ public sealed class AgentCore : IConfigReload
         _budgetGuard = budgetGuard;
         _otel = otel;
         _auditService = auditService;
+        _contextBuilder = contextBuilder;
     }
 
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
@@ -208,6 +213,22 @@ public sealed class AgentCore : IConfigReload
         Stopwatch handleSw)
     {
         CommandCount++;
+        _currentToolTrace.Clear();
+
+        // [task_027] Build context using ContextBuilder (if available)
+        string contextBlock;
+        if (_contextBuilder is not null && _memory is not null)
+        {
+            var ctxAssembly = await _contextBuilder.BuildContextAsync(input, SessionId, null, externalCt);
+            contextBlock = ctxAssembly.ContextBlock;
+            _logger.LogDebug("[ContextBuilder] Built context: {ItemCount} items, {Tokens} tokens, truncated={Truncated}",
+                ctxAssembly.ItemCount, ctxAssembly.Budget.UsedTokens, ctxAssembly.Truncated);
+        }
+        else
+        {
+            // Legacy path: use _memory.BuildContextBlock() result
+            contextBlock = _contextBlock;
+        }
 
         // [task_013] Record handle call metric
         OtelMetrics.HandleCounter.Add(1);
@@ -270,7 +291,7 @@ public sealed class AgentCore : IConfigReload
         }
 
         _lastInput = input;
-        var systemPrompt = BuildSystemPrompt(route.MatchedSkill);
+        var systemPrompt = BuildSystemPrompt(route.MatchedSkill, contextBlock);
         routeSw.Stop();
 
         // [task_013] Record skill route activity and metric
@@ -340,6 +361,22 @@ public sealed class AgentCore : IConfigReload
             var tokensUsed = llmResp.InputTokens + llmResp.OutputTokens;
             var cost = EstimateCost(tokensUsed, llmResp.Provider);
             _guardrails.RecordLlmUsage(SessionId, llmResp.InputTokens, llmResp.OutputTokens, cost, llmResp.Provider);
+        }
+
+        // [task_027] Compress tool trace into episodic memory if threshold reached
+        if (_contextBuilder is not null && _currentToolTrace.Count > 0)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _contextBuilder.CompressTraceAsync(_currentToolTrace, SessionId, CancellationToken.None);
+                }
+                catch
+                {
+                    // Best-effort compression
+                }
+            }, CancellationToken.None);
         }
 
         // [Loop] Step 3 — Transcript update
@@ -528,6 +565,16 @@ public sealed class AgentCore : IConfigReload
             }
 
             toolSw.Stop();
+
+            // [task_027] Record tool trace entry for compression
+            _currentToolTrace.Add(new ToolTraceEntry(
+                toolName,
+                argsJson,
+                toolResult.Output,
+                toolSw.ElapsedMilliseconds,
+                DateTime.UtcNow,
+                toolResult.Success));
+
             OtelMetrics.ToolCallCounter.Add(1,
                 new KeyValuePair<string, object?>("tool", toolName),
                 new KeyValuePair<string, object?>("status", toolResult.Success ? "ok" : "fail"));
@@ -667,8 +714,20 @@ public sealed class AgentCore : IConfigReload
         _logger.LogDebug("[Eval] Evaluating skill '{Name}' with input: {Input}", skill.Meta.Name, input);
         CommandCount++;
 
+        // [task_027] Build context for eval
+        string ctxBlock;
+        if (_contextBuilder is not null && _memory is not null)
+        {
+            var assembly = await _contextBuilder.BuildContextAsync(input, SessionId, skill, ct);
+            ctxBlock = assembly.ContextBlock;
+        }
+        else
+        {
+            ctxBlock = _contextBlock;
+        }
+
         // Строим system prompt напрямую с навыком (минуя роутер)
-        var systemPrompt = BuildSystemPrompt(skill);
+        var systemPrompt = BuildSystemPrompt(skill, ctxBlock);
         var messages = BuildMessages(systemPrompt, input);
 
         LlmResponse llmResp;
@@ -741,12 +800,12 @@ public sealed class AgentCore : IConfigReload
 
     // ---- Вспомогательные методы ----
 
-    private string BuildSystemPrompt(Skill? skill)
+    private string BuildSystemPrompt(Skill? skill, string contextBlock)
     {
         var sb = new StringBuilder();
         sb.AppendLine(_cfg.SystemPrompt);
         sb.AppendLine();
-        sb.AppendLine(_contextBlock);
+        sb.AppendLine(contextBlock);
         if (skill is not null)
         {
             sb.AppendLine();
