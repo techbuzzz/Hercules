@@ -1,5 +1,6 @@
 using System.Text;
 using Hercules.Agent;
+using Hercules.Budget;
 using Hercules.CLI;
 using Hercules.CodeExecution;
 using Hercules.Config;
@@ -171,6 +172,17 @@ builder.ConfigureServices((context, services) =>
     // Hybrid storage services (task_003)
     services.AddSingleton<IBudgetService, BudgetService>();
     services.AddSingleton<IAuditLog, AuditLogService>();
+
+    // Budget and guardrails (task_012)
+    services.AddSingleton(appConfig.Budget);
+    services.AddSingleton<IGuardrailService>(sp =>
+        new GuardrailService(
+            sp.GetRequiredService<BudgetConfig>(),
+            sp.GetRequiredService<IBudgetService>()));
+    services.AddSingleton<BudgetGuard>(sp =>
+        new BudgetGuard(
+            sp.GetRequiredService<BudgetConfig>(),
+            sp.GetRequiredService<ILogger<BudgetGuard>>()));
 
     // Phase 2: Skill packager
     services.AddSingleton<SkillPackager>();

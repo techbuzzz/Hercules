@@ -1,3 +1,4 @@
+using Hercules.Budget;
 using Hercules.Storage;
 
 namespace Hercules.WebApi.Controllers;
@@ -45,5 +46,59 @@ public static class BudgetController
                 isOverBudget = isOver
             });
         }).WithName("BudgetMonthly");
+
+        // GET /api/budget/guardrails — статус всех guardrail-лимитов
+        app.MapGet("/api/budget/guardrails", (IGuardrailService guardrails, string? sessionId) =>
+        {
+            var sid = sessionId ?? "default";
+            var statuses = guardrails.GetStatus(sid);
+            var counters = guardrails.GetRequestCounters(sid);
+            return Results.Ok(new
+            {
+                sessionId = sid,
+                requestCounters = new
+                {
+                    toolCalls = counters.ToolCalls,
+                    retriesForCurrentTool = counters.RetriesForCurrentTool,
+                    elapsedMs = counters.ElapsedMilliseconds,
+                    tokensUsed = counters.TokensUsed
+                },
+                limits = statuses.Select(s => new
+                {
+                    type = s.Type.ToString(),
+                    limit = s.Limit,
+                    current = s.Current,
+                    remaining = s.Remaining,
+                    isExceeded = s.IsExceeded,
+                    isHardCap = s.IsHardCap
+                })
+            });
+        }).WithName("BudgetGuardrails");
+
+        // GET /api/budget/guardrails/{type} — статус конкретного лимита
+        app.MapGet("/api/budget/guardrails/{type}", (IGuardrailService guardrails, string type, string? sessionId) =>
+        {
+            if (!Enum.TryParse<GuardrailLimitType>(type, true, out var limitType))
+            {
+                return Results.BadRequest(new { error = $"Unknown limit type: {type}. Valid values: {string.Join(", ", Enum.GetNames<GuardrailLimitType>())}" });
+            }
+            var sid = sessionId ?? "default";
+            var statuses = guardrails.GetStatus(sid);
+            var status = statuses.FirstOrDefault(s => s.Type == limitType);
+            if (status is null || (status.Type == default && status.Limit == 0))
+            {
+                return Results.NotFound(new { error = $"Limit type '{type}' not found" });
+            }
+            return Results.Ok(new
+            {
+                sessionId = sid,
+                type = status.Type.ToString(),
+                limit = status.Limit,
+                current = status.Current,
+                remaining = status.Remaining,
+                isExceeded = status.IsExceeded,
+                isHardCap = status.IsHardCap
+            });
+        }).WithName("BudgetGuardrailType");
     }
 }

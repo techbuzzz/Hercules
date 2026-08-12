@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hercules.Agent.Loop;
+using Hercules.Budget;
 using Hercules.Config;
 using Hercules.Contracts;
 using Hercules.LLM;
@@ -80,6 +81,8 @@ public sealed class AgentCore : IConfigReload
     private readonly IJsonRepairService _jsonRepair;
     private readonly ToolPolicyEngine? _policy;
     private readonly IApprovalService? _approvals;
+    private readonly IGuardrailService? _guardrails;
+    private readonly BudgetGuard? _budgetGuard;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
@@ -98,7 +101,9 @@ public sealed class AgentCore : IConfigReload
         IJsonRepairService jsonRepair,
         ToolRegistry? tools = null,
         ToolPolicyEngine? policy = null,
-        IApprovalService? approvals = null)
+        IApprovalService? approvals = null,
+        IGuardrailService? guardrails = null,
+        BudgetGuard? budgetGuard = null)
     {
         _llm = llm;
         _router = router;
@@ -111,6 +116,8 @@ public sealed class AgentCore : IConfigReload
         _tools = tools;
         _policy = policy;
         _approvals = approvals;
+        _guardrails = guardrails;
+        _budgetGuard = budgetGuard;
     }
 
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
@@ -157,6 +164,28 @@ public sealed class AgentCore : IConfigReload
     {
         CommandCount++;
 
+        // [task_012] Guardrail pre-check: hard-cap violations stop immediately
+        if (_guardrails is not null && _budgetGuard is not null)
+        {
+            var preCheck = _guardrails.CheckLimits(SessionId);
+            var degradation = _budgetGuard.CheckAndGetDegradationMessage(preCheck);
+            if (degradation is not null)
+            {
+                _logger.LogWarning("[BudgetGuard] Hard-cap pre-check failed — returning degradation response");
+                return new AgentResponse
+                {
+                    Answer = degradation,
+                    Confidence = "low",
+                    Mode = "guardrail_blocked",
+                    Provider = ""
+                };
+            }
+            _budgetGuard.LogSoftWarnings(preCheck);
+        }
+
+        // Reset request counters at the start of each HandleAsync call
+        _guardrails?.ResetRequestCounters(SessionId);
+
         // Resolve effective bounded-execution parameters
         var maxIterations = options?.MaxIterations ?? _cfg.MaxToolIterations;
         var timeoutSeconds = options?.TimeoutSeconds ?? _cfg.MaxWallClockTimeoutSeconds;
@@ -196,6 +225,8 @@ public sealed class AgentCore : IConfigReload
         {
             _logger.LogWarning("[Loop] Wall-clock timeout reached after {Timeout}s — returning graceful degradation",
                 timeoutSeconds);
+            // [task_012] Record elapsed time for guardrails
+            _guardrails?.RecordElapsedTime(SessionId, wallClockTimeout is not null ? (long)wallClockTimeout.Value.TotalMilliseconds : 0);
             return new AgentResponse
             {
                 Answer = "Запрос превысил максимальное время выполнения. Попробуйте упростить запрос или увеличить лимит.",
@@ -217,6 +248,14 @@ public sealed class AgentCore : IConfigReload
         }
 
         var (answer, confidence) = ExtractConfidence(llmResp.Text);
+
+        // [task_012] Record LLM usage for budget guardrails
+        if (_guardrails is not null)
+        {
+            var tokensUsed = llmResp.InputTokens + llmResp.OutputTokens;
+            var cost = EstimateCost(tokensUsed, llmResp.Provider);
+            _guardrails.RecordLlmUsage(SessionId, llmResp.InputTokens, llmResp.OutputTokens, cost, llmResp.Provider);
+        }
 
         // [Loop] Step 3 — Transcript update
         lock (_transcriptLock)
@@ -331,6 +370,10 @@ public sealed class AgentCore : IConfigReload
             // Execute tool — log step
             toolUsed = toolName;
             ctx = ctx.AfterTool(toolName);
+
+            // [task_012] Record tool call for budget guardrails
+            _guardrails?.RecordToolCall(SessionId);
+
             _logger.LogDebug("[Loop] {Step} started — tool={ToolName} iter={Iter}",
                 LoopStep.ToolExecute, toolName, iter);
 
@@ -612,4 +655,18 @@ public sealed class AgentCore : IConfigReload
         var cleaned = ConfidenceRx.Replace(text, "").Trim();
         return (cleaned, confidence);
     }
+
+    /// <summary>
+    ///     Estimate USD cost based on token count and provider.
+    ///     Uses rough per-1K-token pricing for known providers.
+    /// </summary>
+    private static decimal EstimateCost(int totalTokens, string provider) =>
+        provider.ToLowerInvariant() switch
+        {
+            "yandexgpt" => totalTokens * 0.0000015m,      // ~$1.50/1M tokens
+            "ollama-cloud" => totalTokens * 0.000002m,      // ~$2.00/1M tokens
+            "ollama-local" => 0m,                           // free
+            "openai-compatible" => totalTokens * 0.0000015m,
+            _ => totalTokens * 0.000002m,                   // default estimate
+        };
 }

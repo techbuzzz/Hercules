@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Encodings.Web;
 using Hercules.Agent;
+using Hercules.Budget;
 using Hercules.CodeExecution;
 using Hercules.Config;
 using Hercules.LLM;
@@ -68,6 +69,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ToolPolicy);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Approval);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Memory);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Budget);
 builder.Services.AddSingleton(webCfg);
 
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
@@ -165,6 +167,16 @@ builder.Services.AddSingleton<SqliteSessionStore>();
 // Hybrid storage services (task_003)
 builder.Services.AddSingleton<IBudgetService, BudgetService>();
 builder.Services.AddSingleton<IAuditLog, AuditLogService>();
+
+// Budget and guardrails (task_012)
+builder.Services.AddSingleton<IGuardrailService>(sp =>
+    new GuardrailService(
+        sp.GetRequiredService<BudgetConfig>(),
+        sp.GetRequiredService<IBudgetService>()));
+builder.Services.AddSingleton<BudgetGuard>(sp =>
+    new BudgetGuard(
+        sp.GetRequiredService<BudgetConfig>(),
+        sp.GetRequiredService<ILogger<BudgetGuard>>()));
 
 // Layered memory (task_011)
 builder.Services.AddScoped<IWorkingMemory, WorkingMemoryService>();
@@ -270,6 +282,7 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/memory/profile", "PUT /api/memory/profile", "POST /api/memory/reset",
         "GET /api/reflect", "GET /api/stats",
         "GET /api/budget", "GET /api/budget/monthly",
+        "GET /api/budget/guardrails", "GET /api/budget/guardrails/{type}",
         "GET /api/audit", "GET /api/audit/{target}",
         "GET /api/llm/health", "GET /api/llm/health/{provider}",
         "GET /api/llm/capabilities", "GET /api/llm/capabilities/{provider}",

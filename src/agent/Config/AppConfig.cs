@@ -59,6 +59,9 @@ public sealed class AppConfig
 
     /// <summary>Конфигурация layered memory (task_011).</summary>
     public MemoryConfig Memory { get; set; } = new();
+
+    /// <summary>Конфигурация бюджетов и guardrails (task_012).</summary>
+    public BudgetConfig Budget { get; set; } = new();
 }
 
 /// <summary>
@@ -452,4 +455,49 @@ public sealed class MemoryConfig
 
     /// <summary>Максимальный возраст факта перед auto-cleanup (дни). 0 = без cleanup.</summary>
     public int MaxFactAgeDays { get; set; } = 0;
+}
+
+/// <summary>
+///     Конфигурация бюджетов и guardrails (task_012).
+///     Per-request и per-day лимиты на токены, стоимость, время, вызовы инструментов и ретраи.
+/// </summary>
+public sealed class BudgetConfig
+{
+    // ---- Per-request limits ----
+
+    /// <summary>Максимум токенов на один LLM-вызов (input + output). 0 = без лимита.</summary>
+    public int MaxTokensPerRequest { get; set; } = 0;
+
+    /// <summary>Максимум вызовов инструментов на один запрос. 0 = без лимита.</summary>
+    public int MaxToolCallsPerRequest { get; set; } = 0;
+
+    /// <summary>Максимум ретраев инструмента на один запрос. 0 = без лимита.</summary>
+    public int MaxRetriesPerTool { get; set; } = 0;
+
+    /// <summary>Максимум wall-clock секунд на один запрос. 0 = без лимита.</summary>
+    public int MaxWallClockSecondsPerRequest { get; set; } = 0;
+
+    // ---- Per-day limits ----
+
+    /// <summary>Максимум USD на один день. 0 = без лимита.</summary>
+    public decimal MaxCostPerDayUsd { get; set; } = 0;
+
+    /// <summary>Максимум токенов (input + output) на один день. 0 = без лимита.</summary>
+    public int MaxTokensPerDay { get; set; } = 0;
+
+    /// <summary>Максимум LLM-вызовов на один день. 0 = без лимита.</summary>
+    public int MaxCallsPerDay { get; set; } = 0;
+
+    // ---- Enforcement mode ----
+
+    /// <summary>
+    ///     Режим превышения лимита:
+    ///     "soft_warn" — логирует предупреждение, но продолжает выполнение;
+    ///     "hard_cap" — прерывает выполнение и возвращает graceful degradation.
+    ///     По умолчанию "soft_warn" для per-day, "hard_cap" для per-request.
+    /// </summary>
+    public string EnforcementMode { get; set; } = "soft_warn";
+
+    /// <summary>Включить guardrails. false = все проверки отключены.</summary>
+    public bool Enabled { get; set; } = true;
 }

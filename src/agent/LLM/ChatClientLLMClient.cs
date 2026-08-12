@@ -28,8 +28,15 @@ public class ChatClientLLMClient(
     public async Task<LlmResponse> CompleteAsync(IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
     {
         ChatResponse response = await chatClient.GetResponseAsync(Map(messages), BuildOptions(), ct);
-        return new LlmResponse(response.Text ?? string.Empty, ProviderName, ModelName);
+        // Estimate tokens: ~4 chars per token (rough heuristic for mixed English/Russian text).
+        // For accurate counts, integrate with provider-specific usage APIs.
+        var outputTokens = EstimateTokens(response.Text ?? string.Empty);
+        var inputTokens = EstimateTokens(string.Join(" ", messages.Select(m => m.Content)));
+        return new LlmResponse(response.Text ?? string.Empty, ProviderName, ModelName, inputTokens, outputTokens);
     }
+
+    /// <summary>Estimate token count: ~4 chars per token (mixed English/Russian average).</summary>
+    private static int EstimateTokens(string text) => Math.Max(1, text.Length / 4);
 
     public IAsyncEnumerable<string> StreamAsync(string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
     {
