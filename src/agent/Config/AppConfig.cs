@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using Hercules.Cache;
 using Hercules.Tools.Policy;
 
 namespace Hercules.Config;
@@ -33,6 +34,8 @@ public sealed class AppConfig
     public SelfImprovementConfig SelfImprovement { get; set; } = new();
     public TaskConfig Tasks { get; set; } = new();
     public LeastPrivilegeConfig LeastPrivilege { get; set; } = new();
+    public ContextConfig Context { get; set; } = new();
+    public CacheConfig Cache { get; set; } = new();
 }
 
 /// <summary>

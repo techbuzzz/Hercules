@@ -1,4 +1,5 @@
 using Hercules.Agent;
+using Hercules.Cache;
 using Hercules.Storage;
 
 namespace Hercules.Skills.Routing.ScoringComponents;
@@ -6,22 +7,25 @@ namespace Hercules.Skills.Routing.ScoringComponents;
 /// <summary>
 ///     Embedding-based similarity scorer.
 ///     Computes cosine similarity between the input embedding and the skill's cached embedding.
+///     Uses ICacheService for skill embedding storage (task_028).
 /// </summary>
 public sealed class EmbeddingScorer : ISkillScorer
 {
     private readonly IEmbeddingProvider _embedder;
     private readonly SkillManager _skills;
     private readonly double _similarityThreshold;
+    private readonly ICacheService _cache;
 
-    // Cache: skillId → embedding vector
-    private readonly Dictionary<string, float[]> _embeddingCache = new(StringComparer.OrdinalIgnoreCase);
-    private List<string>? _cachedSkillIds;
-
-    public EmbeddingScorer(IEmbeddingProvider embedder, SkillManager skills, double similarityThreshold = 0.35)
+    public EmbeddingScorer(
+        IEmbeddingProvider embedder,
+        SkillManager skills,
+        double similarityThreshold = 0.35,
+        ICacheService? cache = null)
     {
         _embedder = embedder ?? throw new ArgumentNullException(nameof(embedder));
         _skills = skills ?? throw new ArgumentNullException(nameof(skills));
         _similarityThreshold = similarityThreshold;
+        _cache = cache ?? NullCacheService.Instance;
     }
 
     public string ComponentName => "embedding";
@@ -48,9 +52,20 @@ public sealed class EmbeddingScorer : ISkillScorer
         // Ensure skill embedding is cached
         await RefreshCacheIfNeeded(ct);
 
-        if (!_embeddingCache.TryGetValue(skill.Meta.Id, out var skillEmb))
+        // Get skill embedding from unified cache
+        var skillEmb = await _cache.GetOrSetAsync(
+            CacheClass.Embedding,
+            $"skill:{skill.Meta.Id}",
+            async () =>
+            {
+                var text = $"{skill.Meta.Name} {skill.Meta.Description} {string.Join(" ", skill.Meta.PhraseReceivers)}";
+                return await _embedder.EmbedAsync(text, ct);
+            },
+            ct);
+
+        if (skillEmb is null || IsZeroVector(skillEmb))
         {
-            return new ComponentScore(ComponentName, 0, IsEligible: true, "no embedding cached for skill");
+            return new ComponentScore(ComponentName, 0, IsEligible: true, "no embedding for skill");
         }
 
         var similarity = CosineSimilarity(queryEmbedding, skillEmb);
@@ -69,30 +84,27 @@ public sealed class EmbeddingScorer : ISkillScorer
     /// </summary>
     public void InvalidateCache()
     {
-        _cachedSkillIds = null;
-        _embeddingCache.Clear();
+        _cache.InvalidateClass(CacheClass.Embedding);
     }
 
-    public Task RefreshCacheIfNeeded(CancellationToken ct)
+    public async Task RefreshCacheIfNeeded(CancellationToken ct)
     {
         var allSkills = _skills.All();
-        var currentIds = allSkills.Select(s => s.Meta.Id).OrderBy(id => id).ToList();
 
-        if (_cachedSkillIds is not null && _cachedSkillIds.SequenceEqual(currentIds))
-        {
-            return Task.CompletedTask;
-        }
-
-        _embeddingCache.Clear();
         foreach (Skill skill in allSkills)
         {
-            var text = $"{skill.Meta.Name} {skill.Meta.Description} {string.Join(" ", skill.Meta.PhraseReceivers)}";
-            var emb = _embedder.EmbedAsync(text, ct).GetAwaiter().GetResult();
-            _embeddingCache[skill.Meta.Id] = emb;
+            var key = $"skill:{skill.Meta.Id}";
+            // Eagerly populate the cache by forcing a lookup that computes if missing
+            await _cache.GetOrSetAsync(
+                CacheClass.Embedding,
+                key,
+                async () =>
+                {
+                    var text = $"{skill.Meta.Name} {skill.Meta.Description} {string.Join(" ", skill.Meta.PhraseReceivers)}";
+                    return await _embedder.EmbedAsync(text, ct);
+                },
+                ct);
         }
-
-        _cachedSkillIds = currentIds;
-        return Task.CompletedTask;
     }
 
     private static double CosineSimilarity(float[] a, float[] b)

@@ -3,8 +3,11 @@ using System.Text.Encodings.Web;
 using Hercules.Agent;
 using Hercules.Audit;
 using Hercules.Budget;
+using Hercules.Cache;
 using Hercules.CodeExecution;
 using Hercules.Config;
+using Hercules.Context;
+using Hercules.Context.Summarizer;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Memory.Layers;
@@ -90,13 +93,17 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Tasks);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Phase2);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.LeastPrivilege);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Cache);
 
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
 builder.Services.AddSingleton(webCfg);
 
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
-builder.Services.AddSingleton<LlmClientFactory>();
+builder.Services.AddSingleton<LlmClientFactory>(sp =>
+        new LlmClientFactory(
+            sp.GetRequiredService<LlmConfig>(),
+            sp.GetRequiredService<ICacheService>()));
 builder.Services.AddSingleton<RoleRouter>();
 builder.Services.AddSingleton<IJsonRepairService, JsonRepairService>();
 builder.Services.AddSingleton<ResilientLLMClient>(sp =>
@@ -107,7 +114,11 @@ builder.Services.AddSingleton<ResilientLLMClient>(sp =>
         sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
 builder.Services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
 builder.Services.AddSingleton<ProviderHealthChecker>();
-builder.Services.AddSingleton<ProviderCapabilityDetector>();
+builder.Services.AddSingleton<ProviderCapabilityDetector>(sp =>
+    new ProviderCapabilityDetector(
+        sp.GetRequiredService<LlmConfig>(),
+        sp.GetService<ILogger<ProviderCapabilityDetector>>(),
+        sp.GetRequiredService<ICacheService>()));
 
 // Code execution (Stage 2, v2)
 builder.Services.AddSingleton<SandboxOptions>(sp =>
@@ -265,7 +276,8 @@ builder.Services.AddSingleton<EmbeddingScorer>(sp =>
     new EmbeddingScorer(
         sp.GetRequiredService<IEmbeddingProvider>(),
         sp.GetRequiredService<SkillManager>(),
-        sp.GetRequiredService<Phase2Config>().SimilarityThreshold));
+        sp.GetRequiredService<Phase2Config>().SimilarityThreshold,
+        sp.GetRequiredService<ICacheService>()));
 builder.Services.AddSingleton<ISkillScoringEngine>(sp =>
     new SkillScoringEngine(
         sp.GetRequiredService<SkillManager>(),
@@ -285,7 +297,8 @@ builder.Services.AddSingleton<ISkillScoringEngine>(sp =>
 builder.Services.AddSingleton<IDeterministicRouter>(sp =>
     new DeterministicRouter(
         sp.GetRequiredService<SkillManager>(),
-        sp.GetRequiredService<Phase2Config>().DeterministicRouting));
+        sp.GetRequiredService<Phase2Config>().DeterministicRouting,
+        sp.GetRequiredService<ICacheService>()));
 
 builder.Services.AddSingleton<EmbeddingSkillRouter>(sp =>
     new EmbeddingSkillRouter(
@@ -356,6 +369,21 @@ builder.Services.AddSingleton<SkillManager>();
 builder.Services.AddSingleton<SkillRouter>();
 builder.Services.AddSingleton<MemoryManager>();
 builder.Services.AddSingleton<LayeredMemoryManager>();
+
+// [task_027] Context Assembly
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Context);
+builder.Services.AddSingleton<ITraceSummarizer, Hercules.Context.Summarizer.TraceSummarizer>();
+builder.Services.AddSingleton<IContextBuilder>(sp =>
+    new Hercules.Context.ContextBuilder(
+        sp.GetRequiredService<LayeredMemoryManager>(),
+        sp.GetRequiredService<ContextConfig>(),
+        sp.GetRequiredService<ILogger<Hercules.Context.ContextBuilder>>(),
+        sp.GetRequiredService<ITraceSummarizer>()));
+
+// [task_028] Caching — unified cache service
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Cache);
+builder.Services.AddSingleton<ICacheService, CacheService>();
+
 builder.Services.AddSingleton<ReflectionEngine>();
 builder.Services.AddSingleton<AgentCore>();
 // Регистрируем сервисы, поддерживающие hot-reload конфигурации, как IConfigReload
@@ -475,6 +503,9 @@ app.MapSkillHarness();
 app.MapSelfImprovement();
 app.MapSkillManifest();
 app.MapTasks();
+app.MapContext();
+app.MapCache();
+app.MapCache();
 app.MapToolRegistry();
 app.MapMcpEndpoints();
 

@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
 using Hercules.Agent;
+using Hercules.Cache;
 using Hercules.Config;
 using Hercules.Storage;
 
@@ -8,6 +11,7 @@ namespace Hercules.Skills.Routing.Deterministic;
 ///     Task 023: Детерминированный маршрутизатор навыков без embedding.
 ///     Комбинирует keyword matching (phrase-receivers), tag intersection и input type matching.
 ///     Offline-capable: не требует embedding-провайдера.
+///     Routing decisions are cached via ICacheService (task_028).
 ///
 ///     Scoring:
 ///     - keyword score = matched_phrase_receivers / total_phrase_receivers [0..1]
@@ -20,6 +24,7 @@ public sealed class DeterministicRouter : IDeterministicRouter
     private readonly SkillManager _skills;
     private readonly DeterministicRoutingConfig _config;
     private readonly SkillRouter _keywordRouter;
+    private readonly ICacheService _cache;
 
     // Pre-built input-type keyword set for fast lookup
     private static readonly Dictionary<string, string[]> InputTypeKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -35,11 +40,13 @@ public sealed class DeterministicRouter : IDeterministicRouter
 
     public DeterministicRouter(
         SkillManager skills,
-        DeterministicRoutingConfig config)
+        DeterministicRoutingConfig config,
+        ICacheService? cache = null)
     {
         _skills = skills ?? throw new ArgumentNullException(nameof(skills));
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _keywordRouter = new SkillRouter(skills);
+        _cache = cache ?? NullCacheService.Instance;
     }
 
     public bool IsAvailable => true; // Always available — offline-safe
@@ -56,6 +63,31 @@ public sealed class DeterministicRouter : IDeterministicRouter
         {
             return DeterministicRouteResult.None;
         }
+
+        var cacheKey = HashInput(input);
+
+        // Try cache first (sync via GetAwaiter to stay in sync Route method)
+        var cached = _cache.GetOrSetAsync(
+            CacheClass.RoutingDecision,
+            cacheKey,
+            () =>
+            {
+                var r = RouteUncached(input);
+                return Task.FromResult(r.IsSkill ? CachedRouteResult.FromResult(r) : null);
+            },
+            CancellationToken.None).GetAwaiter().GetResult();
+
+        return cached?.Result ?? DeterministicRouteResult.None;
+    }
+
+    /// <summary>
+    ///     Compute the routing decision without caching.
+    ///     Exposed for unit testing and cache population.
+    /// </summary>
+    public DeterministicRouteResult RouteUncached(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return DeterministicRouteResult.None;
 
         var normalizedInput = SkillRouter.Normalize(input);
         var inputTags = ExtractTags(normalizedInput);
@@ -83,6 +115,14 @@ public sealed class DeterministicRouter : IDeterministicRouter
         return bestScore > 0
             ? new DeterministicRouteResult(best, bestScore, bestMethods)
             : DeterministicRouteResult.None;
+    }
+
+    private static string HashInput(string input)
+    {
+        // Short stable hash for cache key — we don't need cryptographic strength here
+        var normalized = SkillRouter.Normalize(input).ToLowerInvariant();
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+        return Convert.ToHexString(bytes)[..16]; // First 16 hex chars = 64 bits
     }
 
     private (double Score, string[] Methods) ScoreSkill(

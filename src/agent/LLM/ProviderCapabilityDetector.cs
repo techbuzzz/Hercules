@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Hercules.Cache;
 using Hercules.Config;
 using Microsoft.Extensions.Logging;
 
@@ -7,13 +8,26 @@ namespace Hercules.LLM;
 /// <summary>
 ///     Detector возможностей LLM-провайдера.
 ///     Определяет vision, function calling, streaming, max tokens из /v1/models или конфига.
+///     Results are cached via ICacheService (task_028).
 /// </summary>
-public sealed class ProviderCapabilityDetector(LlmConfig cfg, ILogger<ProviderCapabilityDetector>? logger = null)
+public sealed class ProviderCapabilityDetector(LlmConfig cfg, ILogger<ProviderCapabilityDetector>? logger = null, ICacheService? cache = null)
 {
     private readonly ILogger<ProviderCapabilityDetector>? _logger = logger;
+    private readonly ICacheService _cache = cache ?? NullCacheService.Instance;
 
-    /// <summary>Detect capabilities for a specific provider.</summary>
+    /// <summary>Detect capabilities for a specific provider (cached).</summary>
     public async Task<ProviderCapabilities> DetectAsync(string provider, CancellationToken ct = default)
+    {
+        var result = await _cache.GetOrSetAsync(
+            CacheClass.LlmCapability,
+            $"provider:{provider}",
+            () => InnerDetectAsync(provider, ct),
+            ct);
+
+        return result ?? new ProviderCapabilities { Provider = provider };
+    }
+
+    private async Task<ProviderCapabilities?> InnerDetectAsync(string provider, CancellationToken ct)
     {
         try
         {

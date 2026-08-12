@@ -4,7 +4,10 @@ using Hercules.Audit;
 using Hercules.Budget;
 using Hercules.CLI;
 using Hercules.CodeExecution;
+using Hercules.Cache;
 using Hercules.Config;
+using Hercules.Context;
+using Hercules.Context.Summarizer;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Mcp;
@@ -77,7 +80,10 @@ builder.ConfigureServices((context, services) =>
     services.AddHerculesOtel(appConfig.Otel);
 
     // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
-    services.AddSingleton<LlmClientFactory>();
+    services.AddSingleton<LlmClientFactory>(sp =>
+        new LlmClientFactory(
+            sp.GetRequiredService<LlmConfig>(),
+            sp.GetRequiredService<ICacheService>()));
     services.AddSingleton<RoleRouter>();
     services.AddSingleton<IJsonRepairService, JsonRepairService>();
     services.AddSingleton<ResilientLLMClient>(sp =>
@@ -88,7 +94,11 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
     services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
     services.AddSingleton<ProviderHealthChecker>();
-    services.AddSingleton<ProviderCapabilityDetector>();
+    services.AddSingleton<ProviderCapabilityDetector>(sp =>
+        new ProviderCapabilityDetector(
+            sp.GetRequiredService<LlmConfig>(),
+            sp.GetService<ILogger<ProviderCapabilityDetector>>(),
+            sp.GetRequiredService<ICacheService>()));
 
     // Code execution (Stage 2, v2)
     services.AddSingleton<SandboxOptions>(sp =>
@@ -251,7 +261,8 @@ builder.ConfigureServices((context, services) =>
         new EmbeddingScorer(
             sp.GetRequiredService<IEmbeddingProvider>(),
             sp.GetRequiredService<SkillManager>(),
-            sp.GetRequiredService<Phase2Config>().SimilarityThreshold));
+            sp.GetRequiredService<Phase2Config>().SimilarityThreshold,
+            sp.GetRequiredService<ICacheService>()));
 
     // Skill scoring engine
     services.AddSingleton<ISkillScoringEngine>(sp =>
@@ -274,7 +285,8 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<IDeterministicRouter>(sp =>
         new DeterministicRouter(
             sp.GetRequiredService<SkillManager>(),
-            sp.GetRequiredService<Phase2Config>().DeterministicRouting));
+            sp.GetRequiredService<Phase2Config>().DeterministicRouting,
+            sp.GetRequiredService<ICacheService>()));
 
     // EmbeddingSkillRouter (wraps SkillScoringEngine)
     services.AddSingleton<EmbeddingSkillRouter>(sp =>
@@ -361,6 +373,21 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<SkillRouter>();
     services.AddSingleton<MemoryManager>();
     services.AddSingleton<LayeredMemoryManager>();
+
+    // [task_027] Context Assembly
+    services.AddSingleton(appConfig.Context);
+    services.AddSingleton<ITraceSummarizer, TraceSummarizer>();
+    services.AddSingleton<IContextBuilder>(sp =>
+        new ContextBuilder(
+            sp.GetRequiredService<LayeredMemoryManager>(),
+            sp.GetRequiredService<ContextConfig>(),
+            sp.GetRequiredService<ILogger<ContextBuilder>>(),
+            sp.GetRequiredService<ITraceSummarizer>()));
+
+    // [task_028] Caching — unified cache service
+    services.AddSingleton(appConfig.Cache);
+    services.AddSingleton<ICacheService, CacheService>();
+
     services.AddSingleton<ReflectionEngine>();
     services.AddSingleton<AgentCore>();
 
