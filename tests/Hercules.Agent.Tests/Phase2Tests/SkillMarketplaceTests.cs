@@ -1,4 +1,5 @@
 using Hercules.Config;
+using Hercules.LLM.JsonRepair;
 using Hercules.Skills;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -21,7 +22,7 @@ public class SkillMarketplaceTests : IDisposable
       var storageCfg = new StorageConfig { DataRoot = _tempDir };
       _repo = new FileSkillRepository(storageCfg, NullLogger<FileSkillRepository>.Instance);
       _packager = new SkillPackager(_repo);
-      _skillManager = new SkillManager(_repo, new StubLlm("test"), new AgentConfig());
+      _skillManager = new SkillManager(_repo, new StubLlm("test"), new AgentConfig(), new JsonRepairService());
       _marketplace = new SkillMarketplace(storageCfg, _packager);
    }
 

@@ -4,6 +4,7 @@ using Hercules.CLI;
 using Hercules.CodeExecution;
 using Hercules.Config;
 using Hercules.LLM;
+using Hercules.LLM.JsonRepair;
 using Hercules.Mesh;
 using Hercules.Skills;
 using Hercules.Storage;
@@ -56,6 +57,7 @@ builder.ConfigureServices((context, services) =>
     // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
     services.AddSingleton<LlmClientFactory>();
     services.AddSingleton<RoleRouter>();
+    services.AddSingleton<IJsonRepairService, JsonRepairService>();
     services.AddSingleton<ResilientLLMClient>(sp =>
         new ResilientLLMClient(
             sp.GetRequiredService<LlmConfig>(),

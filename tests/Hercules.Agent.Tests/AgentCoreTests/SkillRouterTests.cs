@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Config;
 using Hercules.LLM;
+using Hercules.LLM.JsonRepair;
 using Hercules.Skills;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -25,7 +26,7 @@ public class SkillRouterTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var cfg = new StorageConfig { DataRoot = _tempDir };
         _repo = new FileSkillRepository(cfg, NullLogger<FileSkillRepository>.Instance);
-        _skillManager = new SkillManager(_repo, new StubLlm("test"), new AgentConfig());
+        _skillManager = new SkillManager(_repo, new StubLlm("test"), new AgentConfig(), new JsonRepairService());
         _router = new SkillRouter(_skillManager);
     }
 

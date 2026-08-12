@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Hercules.Config;
 using Hercules.LLM;
+using Hercules.LLM.JsonRepair;
 using Hercules.Mesh;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -30,10 +31,10 @@ public class MeshRouterTests : IDisposable
       var storageCfg = new StorageConfig { DataRoot = _tempDir };
       _repo = new FileSkillRepository(storageCfg, NullLogger<FileSkillRepository>.Instance);
       _sessions = new SqliteSessionStore(storageCfg);
-      _skillManager = new SkillManager(_repo, new StubLlmMesh("test"), new AgentConfig());
+      _skillManager = new SkillManager(_repo, new StubLlmMesh("test"), new AgentConfig(), new JsonRepairService());
       var router = new SkillRouter(_skillManager);
       _memory = new MemoryManager(new MemoryStore(storageCfg), new StubLlmMesh("mem"));
-      _agent = new AgentCore(new StubLlmMesh("Ответ", "high"), router, _skillManager, _memory, _sessions, new AgentConfig(), NullLogger<AgentCore>.Instance);
+      _agent = new AgentCore(new StubLlmMesh("Ответ", "high"), router, _skillManager, _memory, _sessions, new AgentConfig(), NullLogger<AgentCore>.Instance, new JsonRepairService());
 
       var dbPath = Path.Combine(_tempDir, "registry.db");
       _registry = new CapabilityRegistry(dbPath);

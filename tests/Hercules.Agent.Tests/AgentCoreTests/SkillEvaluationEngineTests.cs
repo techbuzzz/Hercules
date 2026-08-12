@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Hercules.Agent;
 using Hercules.Config;
 using Hercules.LLM;
+using Hercules.LLM.JsonRepair;
 using Hercules.Skills;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -28,7 +29,7 @@ public class SkillEvaluationEngineTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var storageCfg = new StorageConfig { DataRoot = _tempDir };
         _repo = new FileSkillRepository(storageCfg, NullLogger<FileSkillRepository>.Instance);
-        _skillManager = new SkillManager(_repo, new StubLlmClient("тестовый ответ"), new AgentConfig());
+        _skillManager = new SkillManager(_repo, new StubLlmClient("тестовый ответ"), new AgentConfig(), new JsonRepairService());
         _deprecation = new SkillDeprecationManager(_repo, NullLogger<SkillDeprecationManager>.Instance);
         _policy = new SkillLifecyclePolicy();
 
@@ -38,7 +39,8 @@ public class SkillEvaluationEngineTests : IDisposable
         _agent = new AgentCore(
             new StubLlmClient("тестовый ответ [confidence: high]"),
             router, _skillManager, memory, sessions,
-            new AgentConfig(), NullLogger<AgentCore>.Instance);
+            new AgentConfig(), NullLogger<AgentCore>.Instance,
+            new JsonRepairService());
 
         _engine = new SkillEvaluationEngine(_agent, NullLogger<SkillEvaluationEngine>.Instance);
     }
@@ -78,7 +80,7 @@ public class SkillEvaluationEngineTests : IDisposable
         var stubRouter = new SkillRouter(_skillManager);
         var stubMemory = new MemoryManager(new MemoryStore(new StorageConfig { DataRoot = _tempDir }), stub);
         var stubAgent = new AgentCore(stub, stubRouter, _skillManager, stubMemory, sessions,
-            new AgentConfig(), NullLogger<AgentCore>.Instance);
+            new AgentConfig(), NullLogger<AgentCore>.Instance, new JsonRepairService());
         var engine = new SkillEvaluationEngine(stubAgent, NullLogger<SkillEvaluationEngine>.Instance);
 
         var skill = _skillManager.CreateManual("содержимое", ["содерж"], "Ты — тестовый ассистент.");
@@ -110,7 +112,7 @@ public class SkillEvaluationEngineTests : IDisposable
         var stubRouter = new SkillRouter(_skillManager);
         var stubMemory = new MemoryManager(new MemoryStore(new StorageConfig { DataRoot = _tempDir }), stub);
         var stubAgent = new AgentCore(stub, stubRouter, _skillManager, stubMemory, sessions,
-            new AgentConfig(), NullLogger<AgentCore>.Instance);
+            new AgentConfig(), NullLogger<AgentCore>.Instance, new JsonRepairService());
         var engine = new SkillEvaluationEngine(stubAgent, NullLogger<SkillEvaluationEngine>.Instance);
 
         var skill = _skillManager.CreateManual("проверка", ["проверка"], "Ты — ассистент проверки.");

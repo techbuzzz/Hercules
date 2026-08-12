@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Hercules.Agent.Loop;
 using Hercules.Config;
 using Hercules.LLM;
+using Hercules.LLM.JsonRepair;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -29,7 +30,8 @@ public class AgentCoreLoopTests : IDisposable
         _skillManager = new SkillManager(
             skillRepo,
             new StubLlmClient("test"),
-            new AgentConfig { SkillEvaluationWindow = 5 });
+            new AgentConfig { SkillEvaluationWindow = 5 },
+            new JsonRepairService());
         _router = new SkillRouter(_skillManager);
         _memory = new MemoryManager(new MemoryStore(storageCfg), new StubLlmClient("mem"));
     }
@@ -48,7 +50,8 @@ public class AgentCoreLoopTests : IDisposable
             _memory,
             _sessions,
             cfg ?? new AgentConfig { SkillCreationThreshold = 3, SkillImprovementThreshold = 0.6, SkillEvaluationWindow = 5 },
-            NullLogger<AgentCore>.Instance);
+            NullLogger<AgentCore>.Instance,
+            new JsonRepairService());
 
     // ---- LoopContext state transitions ----
 
@@ -163,7 +166,8 @@ public class AgentCoreLoopTests : IDisposable
         var cfg = new AgentConfig { SkillEvaluationWindow = 5 };
         var core = new AgentCore(structuredLlm, _router, _skillManager,
             new MemoryManager(new MemoryStore(new StorageConfig { DataRoot = _tempDir }), structuredLlm),
-            _sessions, cfg, NullLogger<AgentCore>.Instance);
+            _sessions, cfg, NullLogger<AgentCore>.Instance,
+            new JsonRepairService());
 
         core.StartSession();
         await core.HandleAsync("Привет");

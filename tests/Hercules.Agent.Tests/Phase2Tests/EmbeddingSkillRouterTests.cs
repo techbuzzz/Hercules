@@ -1,4 +1,5 @@
 using Hercules.Config;
+using Hercules.LLM.JsonRepair;
 using Hercules.Skills;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,7 +21,7 @@ public class EmbeddingSkillRouterTests : IDisposable
       Directory.CreateDirectory(_tempDir);
       var storageCfg = new StorageConfig { DataRoot = _tempDir };
       _repo = new FileSkillRepository(storageCfg, NullLogger<FileSkillRepository>.Instance);
-      _skillManager = new SkillManager(_repo, new StubLlm("test"), new AgentConfig());
+      _skillManager = new SkillManager(_repo, new StubLlm("test"), new AgentConfig(), new JsonRepairService());
       _embedder = new StubEmbeddingProvider();
       _router = new EmbeddingSkillRouter(_embedder, _skillManager)
       {

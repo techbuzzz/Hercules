@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Hercules.Config;
+using Hercules.Contracts;
 using Hercules.LLM;
+using Hercules.LLM.JsonRepair;
 using Hercules.Skills;
 using Hercules.Storage;
 
@@ -10,9 +12,14 @@ namespace Hercules.Agent;
 ///     CRUD навыков и их версионирование. Генерирует описание + system prompt навыка
 ///     с помощью LLM, фиксирует использование и инициирует улучшение версий.
 /// </summary>
-public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, AgentConfig cfg) : IConfigReload
+public sealed class SkillManager(
+    FileSkillRepository repo,
+    ILLMClient llm,
+    AgentConfig cfg,
+    IJsonRepairService jsonRepair) : IConfigReload
 {
     private AgentConfig _cfg = cfg;
+    private readonly IJsonRepairService _jsonRepair = jsonRepair;
 
     /// <summary>
     ///     Применить новую конфигурацию агента без перезагрузки.
@@ -322,8 +329,33 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
             : "{}";
     }
 
-    private static (string, string, List<string>, string) ParseSkillJson(string text, string fallbackTopic)
+    private (string, string, List<string>, string) ParseSkillJson(string text, string fallbackTopic)
     {
+        // Try typed contract first (preferred path)
+        SkillCreationContract? contract = _jsonRepair.TryParse<SkillCreationContract>(text);
+        if (contract is not null)
+        {
+            var receivers = contract.PhraseReceivers.Count > 0
+                ? contract.PhraseReceivers
+                : contract.Triggers ?? [];
+
+            if (receivers.Count == 0)
+            {
+                receivers.Add(fallbackTopic.ToLowerInvariant());
+            }
+
+            var prompt = string.IsNullOrWhiteSpace(contract.Prompt)
+                ? $"Ты — ассистент, специализирующийся на задаче: {fallbackTopic}. Отвечай чётко и по делу."
+                : contract.Prompt;
+
+            return (
+                string.IsNullOrWhiteSpace(contract.Name) ? fallbackTopic : contract.Name,
+                string.IsNullOrWhiteSpace(contract.Description) ? "" : contract.Description,
+                receivers,
+                prompt);
+        }
+
+        // Fallback: legacy JsonDocument parse
         try
         {
             using var doc = JsonDocument.Parse(ExtractJson(text));
@@ -396,8 +428,18 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
         return [];
     }
 
-    private static (string, string) ParseImproveJson(string text, Skill current)
+    private (string, string) ParseImproveJson(string text, Skill current)
     {
+        // Try typed contract first
+        SkillImproveContract? contract = _jsonRepair.TryParse<SkillImproveContract>(text);
+        if (contract is not null)
+        {
+            return (
+                string.IsNullOrWhiteSpace(contract.Description) ? current.Description : contract.Description,
+                string.IsNullOrWhiteSpace(contract.Prompt) ? current.Prompt : contract.Prompt);
+        }
+
+        // Fallback: legacy JsonDocument parse
         try
         {
             using var doc = JsonDocument.Parse(ExtractJson(text));

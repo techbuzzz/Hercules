@@ -4,7 +4,9 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hercules.Agent.Loop;
 using Hercules.Config;
+using Hercules.Contracts;
 using Hercules.LLM;
+using Hercules.LLM.JsonRepair;
 using Hercules.Storage;
 using Hercules.Tools;
 using Microsoft.Extensions.Logging;
@@ -60,6 +62,7 @@ public sealed class AgentCore : IConfigReload
     private readonly SqliteSessionStore _sessions;
     private readonly SkillManager _skills;
     private readonly ToolRegistry? _tools;
+    private readonly IJsonRepairService _jsonRepair;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
@@ -75,6 +78,7 @@ public sealed class AgentCore : IConfigReload
         SqliteSessionStore sessions,
         AgentConfig cfg,
         ILogger<AgentCore> logger,
+        IJsonRepairService jsonRepair,
         ToolRegistry? tools = null)
     {
         _llm = llm;
@@ -84,6 +88,7 @@ public sealed class AgentCore : IConfigReload
         _sessions = sessions;
         _cfg = cfg;
         _logger = logger;
+        _jsonRepair = jsonRepair;
         _tools = tools;
     }
 
@@ -233,12 +238,16 @@ public sealed class AgentCore : IConfigReload
                 LoopStep.ToolExecute, toolName, iter);
 
             ToolResult toolResult = await tool.ExecuteAsync(argsJson, ct);
-            var resultJson = JsonSerializer.Serialize(new
+            var resultContract = new ToolResultContract
             {
-                success = toolResult.Success,
-                output = toolResult.Output,
-                error = toolResult.Error
-            }, ActionJsonOpts);
+                Success = toolResult.Success,
+                Output = toolResult.Output,
+                Error = toolResult.Error,
+                Metadata = toolResult.Metadata is { } meta
+                    ? new Dictionary<string, object?>(meta.Select(kv => new KeyValuePair<string, object?>(kv.Key, kv.Value)))
+                    : null
+            };
+            var resultJson = JsonSerializer.Serialize(resultContract, ActionJsonOpts);
 
             _logger.LogWarning("Tool '{ToolName}' → {Status} (output: {OutputLen} chars, error: {Error_len} chars)", toolName, toolResult.Success ? "ok" : "FAIL", toolResult.Output.Length, toolResult.Error?.Length ?? 0);
 
@@ -261,9 +270,27 @@ public sealed class AgentCore : IConfigReload
         return (last, toolUsed, ctx);
     }
 
-    private static (string Name, string ArgsJson)? TryParseAction(string llmText)
+    private (string Name, string ArgsJson)? TryParseAction(string llmText)
     {
-        // Ищем JSON-блок с action. LLM может обернуть его в markdown ```json ... ```
+        // Try typed contract first (preferred path)
+        ToolCallContract? contract = _jsonRepair.TryParse<ToolCallContract>(llmText);
+        if (contract is not null && !string.IsNullOrWhiteSpace(contract.Action))
+        {
+            string argsJson;
+            if (contract.Arguments.Count > 0)
+            {
+                argsJson = JsonSerializer.Serialize(contract.Arguments, ActionJsonOpts);
+            }
+            else
+            {
+                argsJson = "{}";
+            }
+
+            _logger.LogDebug("[Loop] TryParseAction: typed contract parsed — action={Action}", contract.Action);
+            return (contract.Action, argsJson);
+        }
+
+        // Fallback: legacy regex (backward compat with older prompts or external callers)
         var cleaned = llmText;
         Match jsonMatch = Regex.Match(cleaned, @"```(?:json)?\s*(\{.*?\})\s*```", RegexOptions.Singleline);
         if (jsonMatch.Success)
@@ -277,6 +304,7 @@ public sealed class AgentCore : IConfigReload
             return null;
         }
 
+        _logger.LogDebug("[Loop] TryParseAction: legacy regex fallback — action={Action}", match.Groups["name"].Value);
         return (match.Groups["name"].Value.Trim(), match.Groups["args"].Value.Trim());
     }
 

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Hercules.Config;
 using Hercules.LLM;
+using Hercules.LLM.JsonRepair;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -70,7 +71,7 @@ public class AgentCoreSkillThresholdTests : IDisposable
          SkillCreationThreshold = 3,
          SkillImprovementThreshold = 0.6,
          SkillEvaluationWindow = 5
-      });
+      }, new JsonRepairService());
       _router = new SkillRouter(_skillManager);
       _memory = new MemoryManager(new MemoryStore(storageCfg), new StubLlmClient("mem"));
    }
@@ -105,7 +106,8 @@ public class AgentCoreSkillThresholdTests : IDisposable
          _memory,
          _sessions,
          cfg ?? new AgentConfig { SkillCreationThreshold = 3, SkillImprovementThreshold = 0.6, SkillEvaluationWindow = 5 },
-         NullLogger<AgentCore>.Instance);
+         NullLogger<AgentCore>.Instance,
+         new JsonRepairService());
    }
 
    [Fact]
@@ -200,7 +202,8 @@ public class AgentCoreSkillThresholdTests : IDisposable
       // Теперь запрос с low confidence должен предложить улучшение
       var lowCore = new AgentCore(
          new StubLlmClient("плохой ответ", "low"),
-         _router, _skillManager, _memory, _sessions, cfg, NullLogger<AgentCore>.Instance);
+         _router, _skillManager, _memory, _sessions, cfg, NullLogger<AgentCore>.Instance,
+         new JsonRepairService());
       lowCore.StartSession();
 
       var resp = await lowCore.HandleAsync("тестовый запрос");
@@ -241,7 +244,8 @@ public class AgentCoreSkillThresholdTests : IDisposable
       var initialCfg = new AgentConfig { SkillCreationThreshold = 3, ReflectionEveryNCommands = 10 };
       var core = new AgentCore(
          new StubLlmClient("x"),
-         _router, _skillManager, _memory, _sessions, initialCfg, NullLogger<AgentCore>.Instance);
+         _router, _skillManager, _memory, _sessions, initialCfg, NullLogger<AgentCore>.Instance,
+         new JsonRepairService());
 
       var newCfg = new AppConfig
       {

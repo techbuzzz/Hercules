@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Hercules.Config;
 using Hercules.LLM;
+using Hercules.LLM.JsonRepair;
 using Hercules.Skills;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -24,7 +25,7 @@ public class SkillDeprecationManagerTests : IDisposable
         Directory.CreateDirectory(_tempDir);
         var storageCfg = new StorageConfig { DataRoot = _tempDir };
         _repo = new FileSkillRepository(storageCfg, NullLogger<FileSkillRepository>.Instance);
-        _skillManager = new SkillManager(_repo, new StubLlmClient("test"), new AgentConfig());
+        _skillManager = new SkillManager(_repo, new StubLlmClient("test"), new AgentConfig(), new JsonRepairService());
         _manager = new SkillDeprecationManager(_repo, NullLogger<SkillDeprecationManager>.Instance);
     }
 
