@@ -1,6 +1,7 @@
-# Task 47 — Retry, timeout, circuit breaker
+﻿# Task 47 — Retry, timeout, circuit breaker
 
 **Phase:** 4
+**Initiative:** 19
 **Status:** pending
 **Owner:** —
 **Slug:** `retry-timeout-breaker`

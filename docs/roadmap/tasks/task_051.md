@@ -1,6 +1,7 @@
-# Task 51 — Shared memory sync
+﻿# Task 51 — Shared memory sync
 
 **Phase:** 4
+**Initiative:** 21
 **Status:** pending
 **Owner:** —
 **Slug:** `shared-memory-sync`

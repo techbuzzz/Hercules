@@ -1,6 +1,7 @@
-# Task 70 — Backend-профили и деградация
+﻿# Task 70 — Backend-профили и деградация
 
 **Phase:** 4
+**Initiative:** 30
 **Status:** pending
 **Owner:** —
 **Slug:** `backend-profiles-degradation`

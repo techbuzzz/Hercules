@@ -1,6 +1,7 @@
-# Task 48 — Границы делегации
+﻿# Task 48 — Границы делегации
 
 **Phase:** 4
+**Initiative:** 23
 **Status:** pending
 **Owner:** —
 **Slug:** `delegation-boundaries`

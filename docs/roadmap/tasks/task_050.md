@@ -1,6 +1,7 @@
-# Task 50 — Distributed reflection
+﻿# Task 50 — Distributed reflection
 
 **Phase:** 4
+**Initiative:** 20
 **Status:** pending
 **Owner:** —
 **Slug:** `distributed-reflection`

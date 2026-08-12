@@ -1,6 +1,7 @@
-# Task 68 — NATS / JetStream transport option
+﻿# Task 68 — NATS / JetStream transport option
 
 **Phase:** 4
+**Initiative:** 28
 **Status:** pending
 **Owner:** —
 **Slug:** `nats-jetstream-transport`

@@ -1,6 +1,7 @@
-# Task 60 — Offline resilience
+﻿# Task 60 — Offline resilience
 
 **Phase:** 5
+**Initiative:** 38
 **Status:** pending
 **Owner:** —
 **Slug:** `offline-resilience`

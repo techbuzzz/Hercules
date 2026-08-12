@@ -1,6 +1,7 @@
-# Task 69 — PostgreSQL shared state backend
+﻿# Task 69 — PostgreSQL shared state backend
 
 **Phase:** 4
+**Initiative:** 29
 **Status:** pending
 **Owner:** —
 **Slug:** `postgres-shared-state`

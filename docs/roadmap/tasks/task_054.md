@@ -1,6 +1,7 @@
-# Task 54 — Централизованные логи и трейсы
+﻿# Task 54 — Централизованные логи и трейсы
 
 **Phase:** 5
+**Initiative:** 33
 **Status:** pending
 **Owner:** —
 **Slug:** `centralized-observability`

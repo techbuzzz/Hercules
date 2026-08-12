@@ -1,6 +1,7 @@
-# Task 49 — Human-in-the-loop эскалация
+﻿# Task 49 — Human-in-the-loop эскалация
 
 **Phase:** 4
+**Initiative:** 24
 **Status:** pending
 **Owner:** —
 **Slug:** `human-escalation`

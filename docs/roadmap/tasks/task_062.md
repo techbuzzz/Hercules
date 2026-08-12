@@ -1,6 +1,7 @@
-# Task 62 — Fleet templates
+﻿# Task 62 — Fleet templates
 
 **Phase:** 5
+**Initiative:** 39
 **Status:** pending
 **Owner:** —
 **Slug:** `fleet-templates`

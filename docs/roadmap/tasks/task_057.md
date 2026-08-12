@@ -1,6 +1,7 @@
-# Task 57 — Управление жизненным циклом
+﻿# Task 57 — Управление жизненным циклом
 
 **Phase:** 5
+**Initiative:** 36
 **Status:** pending
 **Owner:** —
 **Slug:** `lifecycle-management`

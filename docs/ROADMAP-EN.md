@@ -141,8 +141,13 @@ Goal: make the mesh production-ready, observable, and governable — including f
 | 37 | **Edge provisioning** | SD-card image / Docker image for Raspberry Pi with first-boot Wi-Fi and API-key activation flow. |
 | 38 | **Offline resilience** | Agent buffers sensor logs and outgoing alerts; syncs with mesh/cloud when connectivity returns. |
 | 39 | **Fleet templates** | One template per vertical (greenhouse, cold-chain, closet, vending) with validated hardware bill of materials. |
+| 40 | **Security operations** | Fleet-wide identity rotation, credential revocation, certificate renewal, signed package verification, vulnerability reporting, and security audit export. |
+| 41 | **Configuration and policy rollout** | Signed, versioned configuration and policy bundles with staged rollout, local validation, expiry, rollback, and last-known-good fallback. |
+| 42 | **Local-first degradation** | When the cloud LLM, peers, or network are unavailable, the agent follows a configured safe fallback: deterministic rules, local skills, reduced-capability models, queued work, and operator notification. |
+| 43 | **Backup and recovery** | Encrypted backups cover configuration, skills, selected memory, SQLite data, and device identity; restore procedures are automated and regularly tested. |
+| 44 | **Operational SLOs** | Every template declares availability, response-time, data-loss, recovery-time, and cost objectives together with alert thresholds and runbooks. |
 
-**Deliverable:** Hercules mesh can be deployed as a set of small services behind a gateway, and as a fleet of Raspberry Pi edge agents, with operational visibility.
+**Deliverable:** Hercules mesh can be deployed as a set of small services behind a gateway, and as a fleet of Raspberry Pi edge agents, with operational visibility, signed configuration rollouts, encrypted backups, declared SLOs, and graceful degradation when external services are unavailable.
 
 ---
 

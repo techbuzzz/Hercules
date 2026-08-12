@@ -1,6 +1,7 @@
-# Task 67 — Redis/Valkey coordination backend
+﻿# Task 67 — Redis/Valkey coordination backend
 
 **Phase:** 4
+**Initiative:** 27
 **Status:** pending
 **Owner:** —
 **Slug:** `redis-coordination-backend`

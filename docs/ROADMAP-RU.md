@@ -141,8 +141,13 @@ flowchart TD
 | 37 | **Edge provisioning** | Образ SD-карты / Docker-образ для Raspberry Pi с flow активации Wi-Fi и API-ключа при первом включении. |
 | 38 | **Offline resilience** | Агент буферизирует сенсорные логи и исходящие алерты; синхронизируется с mesh/облаком при возвращении связи. |
 | 39 | **Флит-шаблоны** | Один шаблон на вертикаль (теплица, холодовая цепь, серверная, вендинг) с валидированной спецификацией железа. |
+| 40 | **Security operations** | Fleet-wide ротация identity, отзыв credentials, обновление сертификатов, проверка подписи пакетов, vulnerability reporting и экспорт security audit. |
+| 41 | **Configuration и policy rollout** | Подписанные версионированные configuration и policy бандлы со staged rollout, local validation, expiry, rollback и last-known-good fallback. |
+| 42 | **Local-first degradation** | Когда cloud LLM, peers или сеть недоступны, агент следует configured safe fallback: детерминированные правила, локальные навыки, reduced-capability модели, queued work и operator notification. |
+| 43 | **Backup и recovery** | Encrypted backups покрывают configuration, skills, избранную память, данные SQLite и device identity; restore-процедуры автоматизированы и регулярно тестируются. |
+| 44 | **Операционные SLO** | Каждый template объявляет availability, response-time, data-loss, recovery-time и cost objectives вместе с alert thresholds и runbook'ами. |
 
-**Доставляемый результат:** mesh Hercules можно развёртывать как набор маленьких сервисов за gateway и как флот Raspberry Pi edge-агентов с операционной видимостью.
+**Доставляемый результат:** mesh Hercules можно развёртывать как набор маленьких сервисов за gateway и как флот Raspberry Pi edge-агентов с операционной видимостью, подписанными configuration rollout'ами, encrypted backups, объявленными SLO и graceful degradation при недоступности внешних сервисов.
 
 ---
 

@@ -1,6 +1,7 @@
-# Task 58 — Configuration и policy rollout
+﻿# Task 58 — Configuration и policy rollout
 
 **Phase:** 5
+**Initiative:** 41
 **Status:** pending
 **Owner:** —
 **Slug:** `config-policy-rollout`

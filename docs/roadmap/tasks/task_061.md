@@ -1,6 +1,7 @@
-# Task 61 — Local-first degradation
+﻿# Task 61 — Local-first degradation
 
 **Phase:** 5
+**Initiative:** 42
 **Status:** pending
 **Owner:** —
 **Slug:** `local-degradation`
