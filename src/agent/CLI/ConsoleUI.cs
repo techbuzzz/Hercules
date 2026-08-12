@@ -2,6 +2,7 @@ using System.Text;
 using Hercules.Agent;
 using Hercules.Mesh;
 using Hercules.Skills;
+using Hercules.Skills.Eval;
 using Hercules.Storage;
 using Hercules.Tools.Approval;
 using Spectre.Console;
@@ -29,7 +30,8 @@ public sealed class ConsoleUI(
     CircuitBreaker circuitBreaker,
     DistributedReflection distributedReflection,
     SharedMemorySync sharedMemorySync,
-    IApprovalService? approvalService = null)
+    IApprovalService? approvalService = null,
+    IEvalHarnessService? evalHarness = null)
 {
     public async Task RunAsync(CancellationToken ct = default)
     {
@@ -212,6 +214,17 @@ public sealed class ConsoleUI(
                 await HandleApprovalsCommandAsync(parts, ct);
                 break;
 
+            case "/skill":
+                if (parts.Length >= 3 && parts[1] == "eval")
+                {
+                    await HandleSkillEvalCommandAsync(parts[2], ct);
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[yellow]Использование: /skill eval <skill_id>[/]");
+                }
+                break;
+
             default:
                 AnsiConsole.MarkupLineInterpolated($"[red]Неизвестная команда:[/] {cmd}. Наберите /help.");
                 break;
@@ -360,6 +373,63 @@ public sealed class ConsoleUI(
                 AnsiConsole.MarkupLine("[grey]Команды:[/] /approvals list | approve {id} | deny {id}");
                 break;
         }
+    }
+
+    private async Task HandleSkillEvalCommandAsync(string skillId, CancellationToken ct)
+    {
+        if (evalHarness is null)
+        {
+            AnsiConsole.MarkupLine("[yellow]Eval harness не настроен (EvalConfig или сервис не зарегистрирован).[/]");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(skillId))
+        {
+            AnsiConsole.MarkupLine("[red]Использование: /skill eval <skill_id>[/]");
+            return;
+        }
+
+        AnsiConsole.MarkupLineInterpolated($"[cyan]Запускаю eval harness для навыка '{skillId}'...[/]");
+
+        var result = await AnsiConsole.Status().StartAsync(
+            "Оценка навыка...",
+            async _ => await evalHarness.RunHarnessAsync(skillId, ct));
+
+        var baseline = evalHarness.GetBaseline(skillId);
+        if (baseline is null)
+        {
+            AnsiConsole.MarkupLine("[grey]Baseline не найден — текущий результат записан как baseline.[/]");
+        }
+        else
+        {
+            var table = new Table().Border(TableBorder.Rounded).Title("[yellow]Baseline[/]");
+            table.AddColumn("Параметр");
+            table.AddColumn("Значение");
+            table.AddRow("Baseline ID", baseline.Id);
+            table.AddRow("Score", $"{baseline.Score:F2}");
+            table.AddRow("Записан", baseline.RecordedAt);
+            table.AddRow("Причина", baseline.Reason ?? "—");
+            AnsiConsole.Write(table);
+        }
+
+        if (result.HasRegression)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]⚠ РЕГРЕССИЯ: score упал на {Math.Abs(result.ScoreDelta):F2} (с {result.PreviousScore:F2} до {result.CurrentScore:F2})[/]");
+            if (result.BlockedReasons.Count > 0)
+            {
+                foreach (var r in result.BlockedReasons)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"  [red]- {r.TestName}:[/] {r.Reason}");
+                }
+            }
+        }
+        else
+        {
+            var emoji = Math.Abs(result.ScoreDelta) < 0.001 ? "≈" : "+";
+            AnsiConsole.MarkupLineInterpolated($"[green]✓ Нет регрессии.[/] Score: {result.CurrentScore:F2} ({emoji}{result.ScoreDelta:F2} vs baseline)");
+        }
+
+        AnsiConsole.MarkupLineInterpolated($"[grey]Оценено: {result.EvaluatedAt}[/]");
     }
 
     private async Task ShutdownAsync(CancellationToken ct)
@@ -808,6 +878,7 @@ public sealed class ConsoleUI(
         table.AddRow("/skills improve {id}", "Улучшить навык (новая версия)");
         table.AddRow("/skills export {id}", "Экспортировать навык в .skillpkg");
         table.AddRow("/skills import {path}", "Импортировать навык из .skillpkg");
+        table.AddRow("/skill eval {id}", "Запустить eval harness для навыка");
         table.AddRow("/marketplace list", "Показать пакеты навыков в маркетплейсе");
         table.AddRow("/marketplace search {q}", "Поиск в маркетплейсе");
         table.AddRow("/marketplace install {f}", "Установить пакет из маркетплейса");

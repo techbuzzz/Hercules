@@ -12,6 +12,7 @@ using Hercules.Mesh;
 using Hercules.Observability;
 using Hercules.Redaction;
 using Hercules.Skills;
+using Hercules.Skills.Eval;
 using Hercules.Storage;
 using Hercules.Telegram;
 using Hercules.Tools;
@@ -215,6 +216,12 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<SkillDeprecationManager>();
     services.AddSingleton<SkillEvaluationEngine>();
     services.AddSingleton<SkillLifecycleService>();
+
+    // Eval harness (task_016)
+    services.AddSingleton(appConfig.Eval);
+    services.AddSingleton<BaselineManager>();
+    services.AddSingleton<SkillTestGenerator>();
+    services.AddSingleton<IEvalHarnessService, EvalHarnessService>();
 
     // Audit and privacy (task_014)
     services.AddSingleton(appConfig.Audit);

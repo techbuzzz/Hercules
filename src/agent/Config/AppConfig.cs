@@ -71,6 +71,9 @@ public sealed class AppConfig
 
     /// <summary>Конфигурация секретов и конфиденциальных данных (task_015). Environment variables, secret redaction.</summary>
     public SecretsConfig Secrets { get; set; } = new();
+
+    /// <summary>Конфигурация eval harness (task_016). Baseline comparison, regression blocking.</summary>
+    public EvalConfig Eval { get; set; } = new();
 }
 
 /// <summary>
@@ -613,4 +616,36 @@ public sealed class SecretsConfig
     ///     Если true — string-значения redacted перед записью в traces/metrics.
     /// </summary>
     public bool RedactInTelemetry { get; set; } = true;
+}
+
+/// <summary>
+///     Конфигурация eval harness (task_016).
+///     Baseline comparison, regression blocking, fixture generation.
+/// </summary>
+public sealed class EvalConfig
+{
+    /// <summary>
+    ///     Блокировать автоматический rollout при обнаружении regression.
+    ///     Если true — SkillLifecycleService откатывает изменения и кидает RegressionBlockedException.
+    /// </summary>
+    public bool BlockOnRegression { get; set; } = true;
+
+    /// <summary>
+    ///     Максимально допустимое падение score относительно baseline.
+    ///     Если текущий score - baseline < -threshold — это regression.
+    ///     По умолчанию 0.05 (5%).
+    /// </summary>
+    public double BaselineComparisonThreshold { get; set; } = 0.05;
+
+    /// <summary>
+    ///     Количество детерминированных fixtures, генерируемых автоматически
+    ///     если у навыка нет test suite.
+    /// </summary>
+    public int DefaultFixtureCount { get; set; } = 5;
+
+    /// <summary>
+    ///     Включить LLM-judge кейсы при автоматической генерации fixtures.
+    ///     Если true — помимо deterministic fixtures генерируются llm_judge кейсы.
+    /// </summary>
+    public bool EnableLlmJudgeCases { get; set; } = false;
 }

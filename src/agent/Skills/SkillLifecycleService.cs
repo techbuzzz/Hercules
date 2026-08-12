@@ -1,4 +1,6 @@
 using Hercules.Agent;
+using Hercules.Config;
+using Hercules.Skills.Eval;
 using Hercules.Storage;
 
 namespace Hercules.Skills;
@@ -14,17 +16,23 @@ public sealed class SkillLifecycleService
     private readonly SkillDeprecationManager _deprecation;
     private readonly SkillLifecyclePolicy _policy;
     private readonly SkillEvaluationEngine _evaluator;
+    private readonly EvalConfig _evalConfig;
+    private readonly IEvalHarnessService? _harness;
 
     public SkillLifecycleService(
         SkillManager manager,
         SkillDeprecationManager deprecation,
         SkillLifecyclePolicy policy,
-        SkillEvaluationEngine evaluator)
+        SkillEvaluationEngine evaluator,
+        EvalConfig? evalConfig = null,
+        IEvalHarnessService? harness = null)
     {
         _manager = manager ?? throw new ArgumentNullException(nameof(manager));
         _deprecation = deprecation ?? throw new ArgumentNullException(nameof(deprecation));
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
         _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
+        _evalConfig = evalConfig ?? new EvalConfig();
+        _harness = harness;
     }
 
     /// <summary>
@@ -109,6 +117,37 @@ public sealed class SkillLifecycleService
     ///     Удалить навык (с backup).
     /// </summary>
     public bool Delete(string skillId) => _manager.Delete(skillId);
+
+    /// <summary>
+    ///     Запустить eval harness с regression check.
+    ///     Вызывается после promotion навыка. Если BlockOnRegression=true и обнаружена
+    ///     регрессия — откатывает изменения и кидает RegressionBlockedException.
+    /// </summary>
+    public async Task<RegressionResult> EvalHarnessAsync(string skillId, CancellationToken ct = default)
+    {
+        if (_harness is null)
+        {
+            return new RegressionResult
+            {
+                HasRegression = false,
+                ScoreDelta = 0,
+                PreviousScore = 0,
+                CurrentScore = 0,
+                EvaluatedAt = DateTime.UtcNow.ToString("o")
+            };
+        }
+
+        var result = await _harness.RunHarnessAsync(skillId, ct);
+
+        if (result.HasRegression && _evalConfig.BlockOnRegression)
+        {
+            // Откатываем к предыдущей версии
+            _deprecation.Rollback(skillId);
+            throw new RegressionBlockedException(skillId, result);
+        }
+
+        return result;
+    }
 }
 
 /// <summary>
@@ -124,5 +163,22 @@ public sealed class ApprovalRequiredException : Exception
     {
         Action = action;
         Risk = risk;
+    }
+}
+
+/// <summary>
+///     Исключение: автоматическая регрессия обнаружена и изменения откачены.
+///     Кидается из SkillLifecycleService.EvalHarnessAsync когда BlockOnRegression=true.
+/// </summary>
+public sealed class RegressionBlockedException : Exception
+{
+    public string SkillId { get; }
+    public RegressionResult Result { get; }
+
+    public RegressionBlockedException(string skillId, RegressionResult result)
+        : base($"Regression detected for skill '{skillId}': score dropped from {result.PreviousScore:F2} to {result.CurrentScore:F2} (delta={result.ScoreDelta:F2}). Rollback performed.")
+    {
+        SkillId = skillId;
+        Result = result;
     }
 }

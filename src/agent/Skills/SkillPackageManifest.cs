@@ -22,6 +22,7 @@ public sealed class ToolDeclaration
 /// <summary>
 ///     Тест-кейс для навыка: вход → ожидаемый выход (или критерий проверки).
 ///     Используется для валидации навыка при импорте и улучшении.
+///     JudgedBy: null=legacy(deterministic), "deterministic", "llm" (seed-based reproducibility).
 /// </summary>
 public sealed class SkillTestCase
 {
@@ -40,6 +41,12 @@ public sealed class SkillTestCase
 
     /// <summary>Ожидаемый режим ответа: skill | direct | tool. Если null — любой.</summary>
     public string? ExpectedMode { get; set; }
+
+    /// <summary>Тип проверки: deterministic (default) | llm. Null treated as deterministic.</summary>
+    public string? JudgedBy { get; set; }
+
+    /// <summary>Prompt для LLM-judge (используется только при JudgedBy="llm").</summary>
+    public string? JudgePrompt { get; set; }
 }
 
 /// <summary>
@@ -48,7 +55,10 @@ public sealed class SkillTestCase
 public sealed class SkillTestSuite
 {
     /// <summary>Версия формата тестов.</summary>
-    public int Version { get; set; } = 1;
+    public string? Version { get; set; } = "1.0";
+
+    /// <summary>Описание набора тестов.</summary>
+    public string? Description { get; set; }
 
     /// <summary>Список тест-кейсов.</summary>
     public List<SkillTestCase> Tests { get; set; } = new();
