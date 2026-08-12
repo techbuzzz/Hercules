@@ -58,17 +58,116 @@ public class AgentCoreLoopTests : IDisposable
     [Fact]
     public void LoopContext_Initial_HasCorrectDefaults()
     {
-        var ctx = LoopContext.Initial;
+        var ctx = LoopContext.Initial(maxIterations: 3, wallClockTimeout: TimeSpan.FromSeconds(120), maxRecursionDepth: 2);
         Assert.Equal(LoopStep.SkillRoute, ctx.CurrentStep);
         Assert.Equal(0, ctx.ToolIteration);
         Assert.Null(ctx.LastTool);
         Assert.False(ctx.Cancelled);
+        Assert.Equal(3, ctx.MaxIterations);
+        Assert.Equal(TimeSpan.FromSeconds(120), ctx.WallClockTimeout);
+        Assert.Equal(2, ctx.MaxRecursionDepth);
+        Assert.Equal(0, ctx.RecursionDepth);
+        Assert.False(ctx.CancellationRequested);
+    }
+
+    [Fact]
+    public void LoopContext_Initial_DefaultValues()
+    {
+        // Without explicit parameters, uses defaults
+        var ctx = LoopContext.Initial();
+        Assert.Equal(3, ctx.MaxIterations);
+        Assert.Null(ctx.WallClockTimeout);
+        Assert.Equal(2, ctx.MaxRecursionDepth);
+        Assert.Equal(0, ctx.RecursionDepth);
+    }
+
+    [Fact]
+    public void LoopContext_TickRecursion_IncrementsDepth()
+    {
+        var ctx = LoopContext.Initial();
+        var deeper = ctx.TickRecursion();
+        Assert.Equal(1, deeper.RecursionDepth);
+        var evenDeeper = deeper.TickRecursion();
+        Assert.Equal(2, evenDeeper.RecursionDepth);
+    }
+
+    [Fact]
+    public void LoopContext_UnwindRecursion_DecrementsDepth()
+    {
+        var ctx = LoopContext.Initial().TickRecursion().TickRecursion();
+        Assert.Equal(2, ctx.RecursionDepth);
+        var shallower = ctx.UnwindRecursion();
+        Assert.Equal(1, shallower.RecursionDepth);
+        var root = shallower.UnwindRecursion();
+        Assert.Equal(0, root.RecursionDepth);
+    }
+
+    [Fact]
+    public void LoopContext_IsWallClockExpired_NotExpired_WithinTimeout()
+    {
+        var ctx = LoopContext.Initial(
+            wallClockTimeout: TimeSpan.FromMinutes(5));
+        Thread.Sleep(100); // tiny sleep well within timeout
+        Assert.False(ctx.IsWallClockExpired);
+    }
+
+    [Fact]
+    public void LoopContext_IsWallClockExpired_Expired_WhenTimeoutReached()
+    {
+        // Use a tiny timeout to simulate expiration
+        var ctx = LoopContext.Initial(
+            wallClockTimeout: TimeSpan.FromMilliseconds(10));
+        Thread.Sleep(50);
+        Assert.True(ctx.IsWallClockExpired);
+    }
+
+    [Fact]
+    public void LoopContext_IsRecursionExceeded_WithinLimit()
+    {
+        var ctx = LoopContext.Initial(maxRecursionDepth: 3);
+        Assert.False(ctx.IsRecursionExceeded);
+        var d1 = ctx.TickRecursion();
+        Assert.False(d1.IsRecursionExceeded);
+        var d2 = d1.TickRecursion();
+        Assert.False(d2.IsRecursionExceeded);
+        // depth=3, max=3 → exceeded
+        var d3 = d2.TickRecursion();
+        Assert.True(d3.IsRecursionExceeded);
+    }
+
+    [Fact]
+    public void LoopContext_IsRecursionExceeded_Unlimited_ZeroDepth()
+    {
+        var ctx = LoopContext.Initial(maxRecursionDepth: 0); // 0 = unlimited
+        Assert.False(ctx.IsRecursionExceeded);
+        for (var i = 0; i < 10; i++)
+        {
+            ctx = ctx.TickRecursion();
+            Assert.False(ctx.IsRecursionExceeded);
+        }
+    }
+
+    [Fact]
+    public void LoopContext_WithCancellationRequested_SetsFlag()
+    {
+        var ctx = LoopContext.Initial().WithCancellationRequested();
+        Assert.True(ctx.CancellationRequested);
+        Assert.False(ctx.Cancelled); // Cancelled is separate
+    }
+
+    [Fact]
+    public void LoopContext_WithMaxIterations_OverridesValue()
+    {
+        var ctx = LoopContext.Initial(maxIterations: 3);
+        var overridden = ctx.WithMaxIterations(5);
+        Assert.Equal(3, ctx.MaxIterations);
+        Assert.Equal(5, overridden.MaxIterations);
     }
 
     [Fact]
     public void LoopContext_AfterTool_IncrementsIteration()
     {
-        var ctx = LoopContext.Initial;
+        var ctx = LoopContext.Initial();
         var next = ctx.AfterTool("http_tool");
         Assert.Equal(LoopStep.ToolExecute, next.CurrentStep);
         Assert.Equal(1, next.ToolIteration);
@@ -78,21 +177,21 @@ public class AgentCoreLoopTests : IDisposable
     [Fact]
     public void LoopContext_WithStep_UpdatesCurrentStep()
     {
-        var ctx = LoopContext.Initial with { CurrentStep = LoopStep.LlmCall };
+        var ctx = LoopContext.Initial() with { CurrentStep = LoopStep.LlmCall };
         Assert.Equal(LoopStep.LlmCall, ctx.CurrentStep);
     }
 
     [Fact]
     public void LoopContext_CancelledContext_MarksCancelled()
     {
-        var ctx = LoopContext.Initial.CancelledContext();
+        var ctx = LoopContext.Initial().CancelledContext();
         Assert.True(ctx.Cancelled);
     }
 
     [Fact]
     public void LoopContext_MultipleToolCalls_IncrementIteration()
     {
-        var ctx = LoopContext.Initial;
+        var ctx = LoopContext.Initial();
         var after1 = ctx.AfterTool("tool_a");
         var after2 = after1.AfterTool("tool_b");
         Assert.Equal(1, after1.ToolIteration);

@@ -272,6 +272,27 @@ public sealed class AgentConfig
 
     /// <summary>Запуск рефлексии каждые N команд (помимо завершения сессии).</summary>
     public int ReflectionEveryNCommands { get; set; } = 10;
+
+    // ---- Bounded execution (task_008) ----
+
+    /// <summary>
+    ///     Максимальное число tool-call итераций внутри одного запроса.
+    ///     Защита от infinite loops. Старое hardcoded значение было 3.
+    /// </summary>
+    public int MaxToolIterations { get; set; } = 3;
+
+    /// <summary>
+    ///     Wall-clock timeout на один запрос (секунды).
+    ///     При превышении агент возвращает graceful degradation ответ.
+    ///     0 = без ограничения.
+    /// </summary>
+    public int MaxWallClockTimeoutSeconds { get; set; } = 120;
+
+    /// <summary>
+    ///     Максимальная глубина рекурсии (вложенные tool-call → tool-call).
+    ///     0 = без ограничения.
+    /// </summary>
+    public int MaxRecursionDepth { get; set; } = 2;
 }
 
 /// <summary>Параметры Telegram-бота.</summary>

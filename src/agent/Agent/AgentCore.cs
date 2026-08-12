@@ -13,6 +13,22 @@ using Microsoft.Extensions.Logging;
 
 namespace Hercules.Agent;
 
+/// <summary>
+///     Per-request override для bounded execution limits.
+///     Используется в <see cref="AgentCore.HandleAsync(string, BoundedExecutionOptions?, CancellationToken)" />.
+/// </summary>
+public sealed record BoundedExecutionOptions
+{
+    /// <summary>Override для MaxToolIterations. Null = использовать конфиг.</summary>
+    public int? MaxIterations { get; init; }
+
+    /// <summary>Override для wall-clock timeout (секунды). Null = использовать конфиг. 0 = unlimited.</summary>
+    public int? TimeoutSeconds { get; init; }
+
+    /// <summary>Override для MaxRecursionDepth. Null = использовать конфиг. 0 = unlimited.</summary>
+    public int? MaxRecursionDepth { get; init; }
+}
+
 /// <summary>Ответ агента на один запрос пользователя.</summary>
 public sealed record AgentResponse
 {
@@ -39,9 +55,6 @@ public sealed record AgentResponse
 /// </summary>
 public sealed class AgentCore : IConfigReload
 {
-    /// <summary>Максимум tool-итераций (защита от infinite loops).</summary>
-    private const int MaxToolIterations = 3;
-
     private static readonly Regex ConfidenceRx =
         new(@"\[confidence:\s*(high|medium|low)\s*\]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -124,11 +137,32 @@ public sealed class AgentCore : IConfigReload
         _contextBlock = _memory.BuildContextBlock();
     }
 
-    /// <summary>Обработать один запрос пользователя.</summary>
-    public async Task<AgentResponse> HandleAsync(string input, CancellationToken ct = default)
+    /// <summary>Обработать один запрос пользователя (без per-request bounded-execution override).</summary>
+    public Task<AgentResponse> HandleAsync(string input, CancellationToken ct = default) =>
+        HandleAsync(input, null, ct);
+
+    /// <summary>Обработать один запрос пользователя с optional per-request execution limits.</summary>
+    public async Task<AgentResponse> HandleAsync(
+        string input,
+        BoundedExecutionOptions? options,
+        CancellationToken externalCt = default)
     {
         CommandCount++;
-        var loopCtx = LoopContext.Initial;
+
+        // Resolve effective bounded-execution parameters
+        var maxIterations = options?.MaxIterations ?? _cfg.MaxToolIterations;
+        var timeoutSeconds = options?.TimeoutSeconds ?? _cfg.MaxWallClockTimeoutSeconds;
+        var maxRecursion = options?.MaxRecursionDepth ?? _cfg.MaxRecursionDepth;
+
+        TimeSpan? wallClockTimeout = timeoutSeconds > 0
+            ? TimeSpan.FromSeconds(timeoutSeconds)
+            : null;
+
+        // Linked CTS: parent = wall-clock timeout, child = external cancellation
+        using var lcts = new LinkedCancellationTokenSource(externalCt, wallClockTimeout);
+        var ct = lcts.Token;
+
+        var loopCtx = LoopContext.Initial(maxIterations, wallClockTimeout, maxRecursion);
 
         // [Loop] Step 1 — Skill routing
         _logger.LogDebug("[Loop] {Step} started (input: {InputLen} chars)", loopCtx.CurrentStep, input.Length);
@@ -149,6 +183,18 @@ public sealed class AgentCore : IConfigReload
         try
         {
             (llmResp, toolUsed, loopCtx) = await RunWithToolsAsync(messages, loopCtx, ct);
+        }
+        catch (OperationCanceledException) when (lcts.IsWallClockTimeout)
+        {
+            _logger.LogWarning("[Loop] Wall-clock timeout reached after {Timeout}s — returning graceful degradation",
+                timeoutSeconds);
+            return new AgentResponse
+            {
+                Answer = "Запрос превысил максимальное время выполнения. Попробуйте упростить запрос или увеличить лимит.",
+                Confidence = "low",
+                Mode = "timeout",
+                UsedSkill = route.MatchedSkill
+            };
         }
         catch (Exception ex)
         {
@@ -202,7 +248,8 @@ public sealed class AgentCore : IConfigReload
     {
         var toolUsed = "";
         LlmResponse last = default!;
-        for (var iter = 0; iter <= MaxToolIterations; iter++)
+        var maxIter = ctx.MaxIterations;
+        for (var iter = 0; iter <= maxIter; iter++)
         {
             last = await _llm.CompleteAsync(messages, ct);
 
@@ -237,6 +284,25 @@ public sealed class AgentCore : IConfigReload
             _logger.LogDebug("[Loop] {Step} started — tool={ToolName} iter={Iter}",
                 LoopStep.ToolExecute, toolName, iter);
 
+            // Check policy cancellation before executing
+            if (ctx.IsWallClockExpired)
+            {
+                _logger.LogWarning("[Loop] {Step} — wall-clock timeout reached at iter={Iter}", LoopStep.ToolExecute, iter);
+                messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
+                messages.Add(new ChatTurn(ChatRole.System,
+                    "[system] Execution timeout reached. Provide a final answer now."));
+                break;
+            }
+
+            if (ctx.CancellationRequested)
+            {
+                _logger.LogWarning("[Loop] {Step} — cancelled by policy before execution", LoopStep.ToolExecute);
+                messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
+                messages.Add(new ChatTurn(ChatRole.System,
+                    "[system] Execution cancelled by policy. Provide a final answer now."));
+                break;
+            }
+
             ToolResult toolResult = await tool.ExecuteAsync(argsJson, ct);
             var resultContract = new ToolResultContract
             {
@@ -258,12 +324,12 @@ public sealed class AgentCore : IConfigReload
                 "If you need another tool call, include 'action' JSON again. " +
                 "Otherwise provide a plain-text response (no JSON)."));
 
-            if (iter == MaxToolIterations)
+            if (iter == maxIter)
             {
                 messages.Add(new ChatTurn(ChatRole.System,
                     "[system] Maximum tool iterations reached. Provide final answer now."));
                 _logger.LogWarning("[Loop] {Step} — max iterations ({Max}) reached, stopping tool loop",
-                    LoopStep.ToolExecute, MaxToolIterations);
+                    LoopStep.ToolExecute, maxIter);
             }
         }
 
@@ -355,10 +421,8 @@ public sealed class AgentCore : IConfigReload
     /// <summary>
     ///     Псевдоним для <see cref="HandleAsync" /> — используется Web API адаптером.
     /// </summary>
-    public Task<AgentResponse> ProcessMessageAsync(string input, CancellationToken ct = default)
-    {
-        return HandleAsync(input, ct);
-    }
+    public Task<AgentResponse> ProcessMessageAsync(string input, CancellationToken ct = default) =>
+        HandleAsync(input, null, ct);
 
     /// <summary>
     ///     Оценить навык на конкретном запросе: принудительно использует skill,
@@ -381,7 +445,10 @@ public sealed class AgentCore : IConfigReload
         string toolUsed = "";
         try
         {
-            (llmResp, toolUsed, _) = await RunWithToolsAsync(messages, LoopContext.Initial, ct);
+            (llmResp, toolUsed, _) = await RunWithToolsAsync(
+                messages,
+                LoopContext.Initial(_cfg.MaxToolIterations, _cfg.MaxWallClockTimeoutSeconds > 0 ? TimeSpan.FromSeconds(_cfg.MaxWallClockTimeoutSeconds) : null, _cfg.MaxRecursionDepth),
+                ct);
         }
         catch (Exception ex)
         {
