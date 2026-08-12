@@ -41,7 +41,7 @@
 | 15 | — | [Секреты и конфигурация](tasks/task_015.md) | `secrets-config` | pending |
 | 16 | — | [Оценка навыков (eval harness)](tasks/task_016.md) | `eval-harness` | pending |
 | 17 | — | [Безопасное самоулучшение](tasks/task_017.md) | `safe-self-improvement` | pending |
-| 18 | — | [Устойчивый жизненный цикл задач](tasks/task_018.md) | `durable-task-lifecycle` | pending |
+| 18 | — | [Устойчивый жизненный цикл задач](tasks/task_018.md) | `durable-task-lifecycle` | done |
 
 ## Phase 2 — Composable skills and tool use (Q4 2026)
 

@@ -1,4 +1,5 @@
 using Hercules.Config;
+using Hercules.Tasks;
 using Microsoft.Data.Sqlite;
 
 namespace Hercules.Storage;
@@ -24,6 +25,7 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         _conn.Open();
         InitSchema();
         EnableWalMode();
+        InitCheckpointSchemaAsync().GetAwaiter().GetResult();
     }
 
     public ValueTask DisposeAsync()
@@ -190,6 +192,36 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
             try
             {
                 cmd.CommandText = migration;
+                cmd.ExecuteNonQuery();
+            }
+            catch (SqliteException ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
+            {
+                // Column already exists — ignore
+            }
+        }
+
+        // task_018: extend task_states with durable task fields
+        var taskMigrations = new[]
+        {
+            "ALTER TABLE task_states ADD COLUMN name TEXT",
+            "ALTER TABLE task_states ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE task_states ADD COLUMN current_step INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE task_states ADD COLUMN completed_at TEXT",
+            "ALTER TABLE task_states ADD COLUMN cancellation_reason TEXT",
+            "ALTER TABLE task_states ADD COLUMN retry_policy TEXT",
+            "ALTER TABLE task_states ADD COLUMN skill_id TEXT",
+            "ALTER TABLE task_states ADD COLUMN session_id TEXT",
+            "ALTER TABLE task_states ADD COLUMN priority TEXT DEFAULT 'normal'",
+            "ALTER TABLE task_states ADD COLUMN tags TEXT",
+            "ALTER TABLE task_states ADD COLUMN created_by TEXT",
+            "ALTER TABLE task_states ADD COLUMN description TEXT",
+            "ALTER TABLE task_states ADD COLUMN owner_agent_id TEXT"
+        };
+        foreach (var m in taskMigrations)
+        {
+            try
+            {
+                cmd.CommandText = m;
                 cmd.ExecuteNonQuery();
             }
             catch (SqliteException ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
@@ -896,6 +928,7 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
     }
 
     // ---- Durable task state (task_003 / task_018) ----
+    // task_018: extended SaveTaskStateAsync with new durable task columns
 
     public async Task SaveTaskStateAsync(
         string taskId,
@@ -1133,6 +1166,258 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         var cutoff = DateTime.UtcNow.AddMinutes(-ttlMinutes).ToString("o");
         using SqliteCommand cmd = _conn.CreateCommand();
         cmd.CommandText = "UPDATE approval_requests SET status = 'Expired' WHERE status = 'Pending' AND requested_at < $cutoff";
+        cmd.Parameters.AddWithValue("$cutoff", cutoff);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // ---- task_018: durable task repository methods ----
+
+    private static Hercules.Tasks.DurableTask? MapRowToDurableTask(SqliteDataReader r)
+    {
+        var taskIdStr = r.GetString(r.GetOrdinal("task_id"));
+        var statusStr = r.GetString(r.GetOrdinal("status"));
+        if (!Enum.TryParse<DurableTaskStatus>(statusStr, true, out var status))
+            status = DurableTaskStatus.Pending;
+
+        var metadata = new DurableTaskMetadata();
+        if (!r.IsDBNull(r.GetOrdinal("skill_id")))
+            metadata.SkillId = r.GetString(r.GetOrdinal("skill_id"));
+        if (!r.IsDBNull(r.GetOrdinal("session_id")))
+            metadata.SessionId = r.GetString(r.GetOrdinal("session_id"));
+        if (!r.IsDBNull(r.GetOrdinal("priority")))
+            metadata.Priority = r.GetString(r.GetOrdinal("priority"));
+        if (!r.IsDBNull(r.GetOrdinal("created_by")))
+            metadata.CreatedBy = r.GetString(r.GetOrdinal("created_by"));
+        if (!r.IsDBNull(r.GetOrdinal("description")))
+            metadata.Description = r.GetString(r.GetOrdinal("description"));
+        if (!r.IsDBNull(r.GetOrdinal("owner_agent_id")))
+            metadata.OwnerAgentId = r.GetString(r.GetOrdinal("owner_agent_id"));
+        if (!r.IsDBNull(r.GetOrdinal("tags")))
+        {
+            var tagsJson = r.GetString(r.GetOrdinal("tags"));
+            if (!string.IsNullOrEmpty(tagsJson))
+            {
+                try { metadata.Tags = System.Text.Json.JsonSerializer.Deserialize<List<string>>(tagsJson) ?? new(); }
+                catch { metadata.Tags = new(); }
+            }
+        }
+
+        var retryPolicy = new TaskRetryPolicy();
+        if (!r.IsDBNull(r.GetOrdinal("retry_policy")))
+        {
+            var rpJson = r.GetString(r.GetOrdinal("retry_policy"));
+            if (!string.IsNullOrEmpty(rpJson))
+            {
+                try { retryPolicy = System.Text.Json.JsonSerializer.Deserialize<TaskRetryPolicy>(rpJson) ?? retryPolicy; }
+                catch { /* use defaults */ }
+            }
+        }
+
+        var attemptOrdinal = r.GetOrdinal("attempt_count");
+        var stepOrdinal = r.GetOrdinal("current_step");
+
+        DateTime? completedAt = null;
+        var completedAtOrdinal = r.GetOrdinal("completed_at");
+        if (!r.IsDBNull(completedAtOrdinal))
+            completedAt = DateTime.Parse(r.GetString(completedAtOrdinal));
+
+        return new Hercules.Tasks.DurableTask(
+            new Hercules.Tasks.TaskId(Guid.Parse(taskIdStr)),
+            r.IsDBNull(r.GetOrdinal("name")) ? "" : r.GetString(r.GetOrdinal("name")),
+            status,
+            metadata,
+            retryPolicy,
+            r.IsDBNull(attemptOrdinal) ? 0 : r.GetInt32(attemptOrdinal),
+            r.IsDBNull(stepOrdinal) ? 0 : r.GetInt32(stepOrdinal),
+            r.IsDBNull(r.GetOrdinal("result")) ? null : r.GetString(r.GetOrdinal("result")),
+            r.IsDBNull(r.GetOrdinal("error")) ? null : r.GetString(r.GetOrdinal("error")),
+            DateTime.Parse(r.GetString(r.GetOrdinal("created_at"))),
+            DateTime.Parse(r.GetString(r.GetOrdinal("updated_at"))),
+            completedAt,
+            r.IsDBNull(r.GetOrdinal("cancellation_reason")) ? null : r.GetString(r.GetOrdinal("cancellation_reason")));
+    }
+
+    /// <summary>
+    ///     task_018: Save full DurableTask state (INSERT OR REPLACE).
+    ///     Maps DurableTask fields to the extended task_states columns.
+    /// </summary>
+    public async Task SaveDurableTaskAsync(Hercules.Tasks.DurableTask task, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow.ToString("o");
+        var metadata = task.Metadata;
+        var rpJson = System.Text.Json.JsonSerializer.Serialize(task.RetryPolicy);
+        var tagsJson = System.Text.Json.JsonSerializer.Serialize(metadata.Tags);
+
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          INSERT INTO task_states (task_id, name, status, result, error, metadata,
+                              created_at, updated_at, attempt_count, current_step, completed_at,
+                              cancellation_reason, retry_policy, skill_id, session_id,
+                              priority, tags, created_by, description, owner_agent_id)
+                          VALUES ($id, $name, $st, $r, $e, $m, $ca, $ua, $ac, $cs, $compl,
+                              $cr, $rp, $skid, $sid, $pri, $tags, $cb, $desc, $oid)
+                          ON CONFLICT(task_id) DO UPDATE SET
+                              name = excluded.name,
+                              status = excluded.status,
+                              result = excluded.result,
+                              error = excluded.error,
+                              metadata = excluded.metadata,
+                              updated_at = excluded.updated_at,
+                              attempt_count = excluded.attempt_count,
+                              current_step = excluded.current_step,
+                              completed_at = excluded.completed_at,
+                              cancellation_reason = excluded.cancellation_reason,
+                              retry_policy = excluded.retry_policy,
+                              skill_id = excluded.skill_id,
+                              session_id = excluded.session_id,
+                              priority = excluded.priority,
+                              tags = excluded.tags,
+                              created_by = excluded.created_by,
+                              description = excluded.description,
+                              owner_agent_id = excluded.owner_agent_id
+                          """;
+        cmd.Parameters.AddWithValue("$id", task.Id.ToString());
+        cmd.Parameters.AddWithValue("$name", (object?)task.Name ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$st", task.Status.ToString());
+        cmd.Parameters.AddWithValue("$r", (object?)task.Result ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$e", (object?)task.Error ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$m", DBNull.Value); // legacy metadata column
+        cmd.Parameters.AddWithValue("$ca", task.CreatedAt.ToString("o"));
+        cmd.Parameters.AddWithValue("$ua", now);
+        cmd.Parameters.AddWithValue("$ac", task.AttemptCount);
+        cmd.Parameters.AddWithValue("$cs", task.CurrentStep);
+        cmd.Parameters.AddWithValue("$compl", task.CompletedAt?.ToString("o") ?? (object?)DBNull.Value);
+        cmd.Parameters.AddWithValue("$cr", (object?)task.CancellationReason ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$rp", rpJson);
+        cmd.Parameters.AddWithValue("$skid", (object?)metadata.SkillId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$sid", (object?)metadata.SessionId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$pri", metadata.Priority);
+        cmd.Parameters.AddWithValue("$tags", tagsJson);
+        cmd.Parameters.AddWithValue("$cb", (object?)metadata.CreatedBy ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$desc", (object?)metadata.Description ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$oid", (object?)metadata.OwnerAgentId ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    ///     task_018: Load a DurableTask by ID.
+    /// </summary>
+    public async Task<Hercules.Tasks.DurableTask?> LoadDurableTaskAsync(string taskId, CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT task_id, name, status, result, error, metadata, created_at, updated_at, attempt_count, current_step, completed_at, cancellation_reason, retry_policy, skill_id, session_id, priority, tags, created_by, description, owner_agent_id FROM task_states WHERE task_id = $id";
+        cmd.Parameters.AddWithValue("$id", taskId);
+        using var r = await cmd.ExecuteReaderAsync(ct);
+        if (await r.ReadAsync(ct))
+        {
+            return MapRowToDurableTask(r);
+        }
+        return null;
+    }
+
+    /// <summary>
+    ///     task_018: List DurableTasks with optional status filter.
+    /// </summary>
+    public async Task<List<Hercules.Tasks.DurableTask>> ListDurableTasksAsync(DurableTaskStatus? statusFilter = null, int limit = 100, CancellationToken ct = default)
+    {
+        var list = new List<Hercules.Tasks.DurableTask>();
+        using SqliteCommand cmd = _conn.CreateCommand();
+        var sql = "SELECT task_id, name, status, result, error, metadata, created_at, updated_at, attempt_count, current_step, completed_at, cancellation_reason, retry_policy, skill_id, session_id, priority, tags, created_by, description, owner_agent_id FROM task_states";
+        if (statusFilter.HasValue)
+            sql += " WHERE status = $st";
+        sql += " ORDER BY updated_at DESC LIMIT $n";
+        cmd.CommandText = sql;
+        if (statusFilter.HasValue) cmd.Parameters.AddWithValue("$st", statusFilter.Value.ToString());
+        cmd.Parameters.AddWithValue("$n", limit);
+        using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var task = MapRowToDurableTask(r);
+            if (task is not null) list.Add(task);
+        }
+        return list;
+    }
+
+    /// <summary>
+    ///     task_018: Delete a DurableTask.
+    /// </summary>
+    public async Task DeleteDurableTaskAsync(string taskId, CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM task_states WHERE task_id = $id";
+        cmd.Parameters.AddWithValue("$id", taskId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    ///     task_018: Checkpoint table for durable tasks.
+    /// </summary>
+    public async Task InitCheckpointSchemaAsync(CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                         CREATE TABLE IF NOT EXISTS task_checkpoints (
+                             id              TEXT PRIMARY KEY,
+                             task_id         TEXT NOT NULL,
+                             step_number     INTEGER NOT NULL,
+                             state_snapshot  TEXT NOT NULL,
+                             created_at      TEXT NOT NULL
+                         );
+                         CREATE INDEX IF NOT EXISTS ix_ckp_task ON task_checkpoints(task_id);
+                         """;
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    ///     task_018: Save a task checkpoint.
+    /// </summary>
+    public async Task SaveCheckpointAsync(TaskCheckpoint ckpt, CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          INSERT OR REPLACE INTO task_checkpoints (id, task_id, step_number, state_snapshot, created_at)
+                          VALUES ($id, $tid, $sn, $ss, $ca)
+                          """;
+        cmd.Parameters.AddWithValue("$id", ckpt.Id);
+        cmd.Parameters.AddWithValue("$tid", ckpt.TaskId.ToString());
+        cmd.Parameters.AddWithValue("$sn", ckpt.StepNumber);
+        cmd.Parameters.AddWithValue("$ss", ckpt.StateSnapshot);
+        cmd.Parameters.AddWithValue("$ca", ckpt.CreatedAt.ToString("o"));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    ///     task_018: List checkpoints for a task.
+    /// </summary>
+    public async Task<List<TaskCheckpoint>> ListCheckpointsAsync(string taskId, CancellationToken ct = default)
+    {
+        var list = new List<TaskCheckpoint>();
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = "SELECT id, task_id, step_number, state_snapshot, created_at FROM task_checkpoints WHERE task_id = $tid ORDER BY step_number ASC";
+        cmd.Parameters.AddWithValue("$tid", taskId);
+        using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new TaskCheckpoint
+            {
+                Id = r.GetString(0),
+                TaskId = new TaskId(Guid.Parse(r.GetString(1))),
+                StepNumber = r.GetInt32(2),
+                StateSnapshot = r.GetString(3),
+                CreatedAt = DateTime.Parse(r.GetString(4))
+            });
+        }
+        return list;
+    }
+
+    /// <summary>
+    ///     task_018: Delete old checkpoints (retention policy).
+    /// </summary>
+    public async Task CleanupOldCheckpointsAsync(int retentionDays, CancellationToken ct = default)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(-retentionDays).ToString("o");
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM task_checkpoints WHERE created_at < $cutoff";
         cmd.Parameters.AddWithValue("$cutoff", cutoff);
         await cmd.ExecuteNonQueryAsync(ct);
     }

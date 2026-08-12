@@ -15,6 +15,7 @@ using Hercules.Reflection;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
 using Hercules.Storage;
+using Hercules.Tasks;
 using Hercules.Telegram;
 using Hercules.Tools;
 using Hercules.Tools.Approval;
@@ -230,6 +231,17 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<global::Hercules.Reflection.ProposalDiffer>();
     services.AddSingleton<global::Hercules.Reflection.MaintenanceWorkflow>();
     services.AddSingleton<global::Hercules.Reflection.SelfImprovementService>();
+
+    // Durable task lifecycle (task_018)
+    services.AddSingleton(appConfig.Tasks);
+    services.AddSingleton<ITaskRepository>(sp =>
+        new SqliteTaskRepository(sp.GetRequiredService<SqliteSessionStore>()));
+    services.AddSingleton<TaskRetryHandler>();
+    services.AddSingleton<ITaskExecutionService>(sp =>
+        new TaskExecutionService(
+            sp.GetRequiredService<ITaskRepository>(),
+            sp.GetRequiredService<TaskConfig>(),
+            sp.GetRequiredService<ILogger<TaskExecutionService>>()));
 
     // Audit and privacy (task_014)
     services.AddSingleton(appConfig.Audit);

@@ -14,6 +14,8 @@ using Hercules.Redaction;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
 using Hercules.Storage;
+using Hercules.Tasks;
+using Hercules.Telegram;
 using Hercules.Tools;
 using Hercules.Tools.Approval;
 using Hercules.Tools.Policy;
@@ -79,6 +81,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Secrets);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Eval);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SelfImprovement);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Tasks);
 
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
@@ -184,6 +187,16 @@ builder.Services.AddSingleton<SqliteSessionStore>();
 // Hybrid storage services (task_003)
 builder.Services.AddSingleton<IBudgetService, BudgetService>();
 builder.Services.AddSingleton<IAuditLog, AuditLogService>();
+
+// Durable task lifecycle (task_018)
+builder.Services.AddSingleton<ITaskRepository>(sp =>
+    new SqliteTaskRepository(sp.GetRequiredService<SqliteSessionStore>()));
+builder.Services.AddSingleton<TaskRetryHandler>();
+builder.Services.AddSingleton<ITaskExecutionService>(sp =>
+    new TaskExecutionService(
+        sp.GetRequiredService<ITaskRepository>(),
+        sp.GetRequiredService<TaskConfig>(),
+        sp.GetRequiredService<ILogger<TaskExecutionService>>()));
 
 // Budget and guardrails (task_012)
 builder.Services.AddSingleton<IGuardrailService>(sp =>
@@ -372,6 +385,7 @@ app.MapApprovals();
 app.MapObservability();
 app.MapSkillHarness();
 app.MapSelfImprovement();
+app.MapTasks();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");

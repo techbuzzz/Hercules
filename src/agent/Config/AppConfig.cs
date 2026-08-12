@@ -29,6 +29,7 @@ public sealed class AppConfig
     public SecretsConfig Secrets { get; set; } = new();
     public EvalConfig Eval { get; set; } = new();
     public SelfImprovementConfig SelfImprovement { get; set; } = new();
+    public TaskConfig Tasks { get; set; } = new();
 }
 
 /// <summary>
@@ -344,6 +345,19 @@ public sealed class EvalConfig
     public double BaselineComparisonThreshold { get; set; } = 0.05;
     public int DefaultFixtureCount { get; set; } = 5;
     public bool EnableLlmJudgeCases { get; set; } = false;
+}
+
+/// <summary>
+///     Конфигурация durable task lifecycle (task_018).
+///     Retry policy, concurrent limits, checkpoint retention.
+/// </summary>
+public sealed class TaskConfig
+{
+    public int DefaultMaxRetries { get; set; } = 3;
+    public int DefaultRetryDelayMs { get; set; } = 1000;
+    public double DefaultBackoffMultiplier { get; set; } = 2.0;
+    public int MaxConcurrentDurableTasks { get; set; } = 10;
+    public int CheckpointRetentionDays { get; set; } = 7;
 }
 
 /// <summary>
