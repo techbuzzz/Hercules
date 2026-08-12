@@ -65,15 +65,26 @@ public sealed class SkillTestSuite
 }
 
 /// <summary>
-///     Манифест пакета навыка (skill.package.json).
+///     Манифест пакета навыка (skill.package.json, ZIP only).
 ///     Описывает содержимое пакета: метаданные навыка, инструменты, тесты, версия формата.
-///     Один пакет = одна папка с файлами: skill.meta.json, skill.prompt.md, skill.description.md,
-///     skill.tests.json, tool.schema.json (опционально), skill.usage.json (опционально).
+///     Для folder-структуры авторитетные данные лежат в skill.meta.json, skill.prompt.md, etc.
 /// </summary>
 public sealed class SkillPackageManifest
 {
-    /// <summary>Версия формата пакета.</summary>
+    /// <summary>Версия формата пакета (1 = текущая).</summary>
     public int PackageVersion { get; set; } = 1;
+
+    /// <summary>
+    ///     Формат пакета: "folder" (directory) или "zip" (.skillpkg).
+    ///     Для ZIP-пакетов это поле всегда "zip"; для folder-экспорта ставится "folder".
+    /// </summary>
+    public string PackageFormat { get; set; } = "zip";
+
+    /// <summary>
+    ///     Версия спецификации формата пакета (semver). Сигнализирует о breaking changes в формате.
+    ///     Текущая версия: "1.0.0".
+    /// </summary>
+    public string PackageSpecVersion { get; set; } = "1.0.0";
 
     /// <summary>Метаданные навыка (id, name, description, phrase_receivers, version, ...).</summary>
     public SkillPackageSkillMeta Skill { get; set; } = new();
@@ -83,6 +94,9 @@ public sealed class SkillPackageManifest
 
     /// <summary>Тесты навыка (опционально).</summary>
     public SkillTestSuite? Tests { get; set; }
+
+    /// <summary>Примеры использования навыка (skill.examples.json, опционально).</summary>
+    public SkillExamples? Examples { get; set; }
 
     /// <summary>Источник пакета (author, license, repository URL).</summary>
     public SkillPackageSource? Source { get; set; }
@@ -117,4 +131,24 @@ public sealed class SkillPackageSource
 
     /// <summary>URL репозитория или маркетплейса, откуда импортирован пакет.</summary>
     public string? Repository { get; set; }
+}
+
+/// <summary>
+///     Примеры использования навыка (skill.examples.json).
+/// </summary>
+public sealed class SkillExamples
+{
+    public List<SkillExample> Examples { get; set; } = new();
+}
+
+/// <summary>
+///     Один пример использования навыка.
+/// </summary>
+public sealed class SkillExample
+{
+    /// <summary>Пример входного запроса пользователя.</summary>
+    public string Input { get; set; } = "";
+
+    /// <summary>Ожидаемое поведение навыка.</summary>
+    public string ExpectedBehavior { get; set; } = "";
 }
