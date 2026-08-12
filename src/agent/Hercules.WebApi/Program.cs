@@ -14,6 +14,8 @@ using Hercules.Redaction;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
 using Hercules.Skills.Marketplace;
+using Hercules.Skills.Routing;
+using Hercules.Skills.Routing.ScoringComponents;
 using Hercules.Storage;
 using Hercules.Tasks;
 using Hercules.Telegram;
@@ -229,8 +231,45 @@ builder.Services.AddSingleton<SkillPackager>(sp =>
         sp.GetRequiredService<IMarketplaceSigningService>()));
 
 // Phase 2: Semantic routing (embedding-based). Stub provider — offline.
+// Phase 2: Semantic routing (task_022) — scoring components
 builder.Services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();
-builder.Services.AddSingleton<EmbeddingSkillRouter>();
+builder.Services.AddSingleton<LexicalScorer>();
+builder.Services.AddSingleton<HistoricalQualityScorer>();
+builder.Services.AddSingleton<SchemaCompatibilityScorer>(sp =>
+    new SchemaCompatibilityScorer(
+        sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>()));
+builder.Services.AddSingleton<LatencyScorer>();
+builder.Services.AddSingleton<PolicyEligibilityScorer>(sp =>
+    new PolicyEligibilityScorer(
+        sp.GetService<ToolPolicyConfig>(),
+        sp.GetService<ToolPolicyConfig>()?.AgentPermissions.Split('|') ?? Enumerable.Empty<string>(),
+        sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>()));
+builder.Services.AddSingleton<EmbeddingScorer>(sp =>
+    new EmbeddingScorer(
+        sp.GetRequiredService<IEmbeddingProvider>(),
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<Phase2Config>().SimilarityThreshold));
+builder.Services.AddSingleton<ISkillScoringEngine>(sp =>
+    new SkillScoringEngine(
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<Phase2Config>(),
+        new ISkillScorer[]
+        {
+            sp.GetRequiredService<EmbeddingScorer>(),
+            sp.GetRequiredService<LexicalScorer>(),
+            sp.GetRequiredService<SchemaCompatibilityScorer>(),
+            sp.GetRequiredService<HistoricalQualityScorer>(),
+            sp.GetRequiredService<LatencyScorer>(),
+            sp.GetRequiredService<PolicyEligibilityScorer>(),
+        },
+        sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>(),
+        sp.GetService<EmbeddingScorer>()));
+builder.Services.AddSingleton<EmbeddingSkillRouter>(sp =>
+    new EmbeddingSkillRouter(
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<Phase2Config>(),
+        sp.GetRequiredService<SkillRouter>(),
+        sp.GetService<ISkillScoringEngine>()));
 
 // Phase 2: Skill marketplace + agent templates (task_021)
 builder.Services.AddSingleton<SkillMarketplace>(sp =>

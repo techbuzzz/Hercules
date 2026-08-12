@@ -166,6 +166,12 @@ public sealed class SkillUsage
 
     /// <summary>Уверенность ответа: high/medium/low.</summary>
     public string Confidence { get; set; } = "medium";
+
+    /// <summary>
+    ///     Продолжительность выполнения навыка в миллисекундах.
+    ///     Используется LatencyScorer для приоритизации быстрых навыков (task_022).
+    /// </summary>
+    public int LatencyMs { get; set; } = 0;
 }
 
 /// <summary>Запись взаимодействия для лога SQLite.</summary>

@@ -50,7 +50,7 @@
 | 19 | 7 | [Формат пакета навыка](tasks/task_019.md) | `skill-package-format` | done |
 | 20 | — | [Манифест навыка и совместимость](tasks/task_020.md) | `skill-manifest` | done |
 | 21 | 8 | [Маркетплейс навыков](tasks/task_021.md) | `skill-marketplace` | done |
-| 22 | 9 | [Семантическая маршрутизация](tasks/task_022.md) | `semantic-routing` | pending |
+| 22 | 9 | [Семантическая маршрутизация](tasks/task_022.md) | `semantic-routing` | done |
 | 23 | — | [Детерминированный fallback маршрутизатора](tasks/task_023.md) | `deterministic-router` | pending |
 | 24 | 10 | [Реестр инструментов](tasks/task_024.md) | `tool-registry` | pending |
 | 25 | — | [MCP-адаптер](tasks/task_025.md) | `mcp-adapter` | pending |

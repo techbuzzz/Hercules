@@ -130,6 +130,20 @@ public sealed class SkillManager(
         repo.AppendUsage(id, new SkillUsage { Success = success, Confidence = confidence }, _cfg.SkillEvaluationWindow);
     }
 
+    /// <summary>Зафиксировать использование навыка с latency и пересчитать метрики (task_022).</summary>
+    public void RecordUsage(string id, bool success, string confidence, int latencyMs)
+    {
+        repo.AppendUsage(id, new SkillUsage { Success = success, Confidence = confidence, LatencyMs = latencyMs }, _cfg.SkillEvaluationWindow);
+    }
+
+    /// <summary>Получить среднюю latency навыка из usage history (task_022).</summary>
+    public double GetAverageLatency(string id)
+    {
+        var usages = repo.LoadUsages(id);
+        var withLatency = usages.Where(u => u.LatencyMs > 0).ToList();
+        return withLatency.Count > 0 ? withLatency.Average(u => u.LatencyMs) : 0;
+    }
+
     /// <summary>
     ///     Создать навык вручную из явных данных (без обращения к LLM).
     ///     Используется Web API: POST /api/skills (phraseReceivers + prompt).

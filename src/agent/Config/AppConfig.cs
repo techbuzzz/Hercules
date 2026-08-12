@@ -61,6 +61,21 @@ public sealed class Phase2Config
     public string TemplatesDir { get; set; } = "Templates";
 
     /// <summary>
+    ///     Веса scoring-компонентов для семантической маршрутизации (task_022).
+    ///     Key = имя компонента, Value = вес [0..1]. Сумма не обязана равняться 1 (нормализуется в engine).
+    ///     Компоненты с весом 0 пропускаются.
+    /// </summary>
+    public Dictionary<string, double> SkillScoringWeights { get; set; } = new()
+    {
+        ["embedding"] = 0.40,
+        ["lexical"]   = 0.20,
+        ["schema"]    = 0.15,
+        ["quality"]    = 0.15,
+        ["latency"]   = 0.05,
+        ["policy"]     = 0.05,
+    };
+
+    /// <summary>
     ///     Настройки манифеста навыка (task_020): версия Hercules, разрешённые уровни риска.
     /// </summary>
     public SkillManifestConfig SkillManifest { get; set; } = new();

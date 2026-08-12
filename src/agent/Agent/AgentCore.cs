@@ -10,6 +10,7 @@ using Hercules.Contracts;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Observability;
+using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Tools;
 using Hercules.Tools.Approval;
@@ -77,6 +78,8 @@ public sealed class AgentCore : IConfigReload
     private readonly ILogger<AgentCore> _logger;
     private readonly MemoryManager _memory;
     private readonly SkillRouter _router;
+    private readonly EmbeddingSkillRouter? _embeddingRouter;  // null when semantic routing disabled
+    private Phase2Config? _phase2Config;
     private readonly SqliteSessionStore _sessions;
     private readonly SkillManager _skills;
     private readonly ToolRegistry? _tools;
@@ -110,10 +113,14 @@ public sealed class AgentCore : IConfigReload
         IGuardrailService? guardrails = null,
         BudgetGuard? budgetGuard = null,
         IOtelService? otel = null,
-        IAuditService? auditService = null)
+        IAuditService? auditService = null,
+        EmbeddingSkillRouter? embeddingRouter = null,
+        Phase2Config? phase2Config = null)
     {
         _llm = llm;
         _router = router;
+        _embeddingRouter = embeddingRouter;
+        _phase2Config = phase2Config;
         _skills = skills;
         _memory = memory;
         _sessions = sessions;
@@ -152,6 +159,7 @@ public sealed class AgentCore : IConfigReload
     public void Reload(AppConfig config)
     {
         _cfg = config.Agent;
+        _phase2Config = config.Phase2;
     }
 
     /// <summary>Инициализация сессии: создать запись и загрузить контекст памяти.</summary>
@@ -247,7 +255,20 @@ public sealed class AgentCore : IConfigReload
         // [Loop] Step 1 — Skill routing
         _logger.LogDebug("[Loop] {Step} started (input: {InputLen} chars)", loopCtx.CurrentStep, input.Length);
         var routeSw = Stopwatch.StartNew();
-        RouteResult route = _router.Route(input);
+        RouteResult route;
+
+        if (_embeddingRouter is not null && _phase2Config?.SemanticRoutingEnabled == true)
+        {
+            // [task_022] Semantic scoring engine routing
+            var semResult = await _embeddingRouter.RouteAsync(input, ct);
+            route = new RouteResult(semResult.MatchedSkill, (int)(semResult.Score * 100));
+        }
+        else
+        {
+            // Legacy keyword routing
+            route = _router.Route(input);
+        }
+
         _lastInput = input;
         var systemPrompt = BuildSystemPrompt(route.MatchedSkill);
         routeSw.Stop();
@@ -339,9 +360,10 @@ public sealed class AgentCore : IConfigReload
             route.MatchedSkill?.Meta.Id, llmResp.Provider, DateTime.UtcNow));
 
         // Запись использования навыка (успех = уверенность не low)
+        // [task_022] LatencyScorer: записываем elapsed time от начала HandleAsync
         if (route.IsSkill)
         {
-            _skills.RecordUsage(route.MatchedSkill!.Meta.Id, confidence != "low", confidence);
+            _skills.RecordUsage(route.MatchedSkill!.Meta.Id, confidence != "low", confidence, (int)handleSw.ElapsedMilliseconds);
         }
 
         // [task_013] Record final handle duration
