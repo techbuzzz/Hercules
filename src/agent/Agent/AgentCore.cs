@@ -332,6 +332,55 @@ public sealed class AgentCore : IConfigReload
         return HandleAsync(input, ct);
     }
 
+    /// <summary>
+    ///     Оценить навык на конкретном запросе: принудительно использует skill,
+    ///     игнорируя роутер. Используется SkillEvaluationEngine для запуска test suite.
+    /// </summary>
+    /// <param name="skill">Навык для принудительного использования.</param>
+    /// <param name="input">Тестовый запрос.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>AgentResponse от навыка.</returns>
+    public async Task<AgentResponse> EvaluateSkillAsync(Skill skill, string input, CancellationToken ct = default)
+    {
+        _logger.LogDebug("[Eval] Evaluating skill '{Name}' with input: {Input}", skill.Meta.Name, input);
+        CommandCount++;
+
+        // Строим system prompt напрямую с навыком (минуя роутер)
+        var systemPrompt = BuildSystemPrompt(skill);
+        var messages = BuildMessages(systemPrompt, input);
+
+        LlmResponse llmResp;
+        string toolUsed = "";
+        try
+        {
+            (llmResp, toolUsed, _) = await RunWithToolsAsync(messages, LoopContext.Initial, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Eval] LLM call failed for skill '{Name}'", skill.Meta.Name);
+            return new AgentResponse
+            {
+                Answer = $"Ошибка LLM: {ex.Message}",
+                Confidence = "low",
+                Mode = "skill",
+                UsedSkill = skill
+            };
+        }
+
+        var (answer, confidence) = ExtractConfidence(llmResp.Text);
+        var mode = !string.IsNullOrEmpty(toolUsed) ? "tool" : "skill";
+
+        return new AgentResponse
+        {
+            Answer = answer,
+            Mode = mode,
+            Confidence = confidence,
+            Provider = llmResp.Provider,
+            UsedSkill = skill,
+            ToolUsed = string.IsNullOrEmpty(toolUsed) ? null : toolUsed
+        };
+    }
+
     /// <summary>Сбросить счётчик повторов запроса (после создания навыка).</summary>
     public void ResetRequestCounter(string input)
     {

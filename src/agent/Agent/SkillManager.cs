@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Hercules.Config;
 using Hercules.LLM;
+using Hercules.Skills;
 using Hercules.Storage;
 
 namespace Hercules.Agent;
@@ -237,6 +238,77 @@ public sealed class SkillManager(FileSkillRepository repo, ILLMClient llm, Agent
         return repo.LoadAll()
             .Where(s => s.Meta.TotalUses >= _cfg.SkillEvaluationWindow && s.Meta.SuccessRate < _cfg.SkillImprovementThreshold)
             .ToList();
+    }
+
+    /// <summary>
+    ///     Запустить оценку навыка через SkillEvaluationEngine.
+    ///     После оценки обновляет Meta.LastEvaluationScore.
+    /// </summary>
+    public async Task<SkillEvaluationResult> EvaluateAsync(
+        string id,
+        SkillTestSuite? testSuite,
+        SkillEvaluationEngine engine,
+        CancellationToken ct = default)
+    {
+        Skill? skill = repo.Load(id);
+        if (skill is null)
+        {
+            return new SkillEvaluationResult
+            {
+                SkillId = id,
+                SkillName = "(unknown)",
+                TotalTests = 0,
+                PassedTests = 0,
+                FailedTests = 0,
+                Score = 0,
+                TestResults = [],
+                EvaluatedAt = DateTime.UtcNow.ToString("o"),
+                Error = $"Навык '{id}' не найден."
+            };
+        }
+
+        var result = await engine.EvaluateAsync(skill, testSuite, ct);
+
+        // Записываем LastEvaluationScore в meta.json
+        skill.Meta.LastEvaluationScore = result.Score;
+        repo.Save(skill);
+
+        return result;
+    }
+
+    /// <summary>
+    ///     Запустить оценку навыка, загружая test suite из skill.{id}.tests.json.
+    /// </summary>
+    public async Task<SkillEvaluationResult> EvaluateAsync(
+        string id,
+        SkillEvaluationEngine engine,
+        CancellationToken ct = default)
+    {
+        var testSuite = SkillEvaluationEngine.LoadTestSuite(id, repo.SkillsDirectory);
+        return await EvaluateAsync(id, testSuite, engine, ct);
+    }
+
+    /// <summary>
+    ///     Удалить навык (создаёт backup перед удалением).
+    /// </summary>
+    public bool Delete(string id)
+    {
+        Skill? skill = repo.Load(id);
+        if (skill is null)
+        {
+            return false;
+        }
+
+        // Backup: перемещаем meta.json в .deleted
+        var metaPath = Path.Combine(repo.SkillsDirectory, $"skill.{id}.meta.json");
+        var backupPath = Path.Combine(repo.SkillsDirectory, $"skill.{id}.deleted.{DateTime.UtcNow:yyyyMMddHHmmss}.json");
+        if (File.Exists(metaPath))
+        {
+            File.Move(metaPath, backupPath);
+        }
+
+        // Остальные файлы не удаляем — можно восстановить вручную
+        return true;
     }
 
     // ---- Парсинг JSON-ответов LLM (с защитой от лишнего текста) ----

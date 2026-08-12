@@ -145,6 +145,12 @@ builder.Services.AddSingleton<EmbeddingSkillRouter>();
 builder.Services.AddSingleton<SkillMarketplace>();
 builder.Services.AddSingleton<AgentTemplateManager>();
 
+// Skill lifecycle: policy, deprecation, evaluation
+builder.Services.AddSingleton<SkillLifecyclePolicy>();
+builder.Services.AddSingleton<SkillDeprecationManager>();
+builder.Services.AddSingleton<SkillEvaluationEngine>();
+builder.Services.AddSingleton<SkillLifecycleService>();
+
 // Агент
 builder.Services.AddSingleton<SkillManager>();
 builder.Services.AddSingleton<SkillRouter>();
@@ -218,6 +224,9 @@ app.MapGet("/", () => Results.Ok(new
         "POST /api/chat", "GET /api/skills", "POST /api/skills",
         "GET /api/skills/{id}", "PUT /api/skills/{id}", "POST /api/skills/{id}/improve",
         "GET /api/skills/{id}/export", "POST /api/skills/import",
+        "POST /api/skills/{id}/evaluate", "POST /api/skills/{id}/deprecate",
+        "POST /api/skills/{id}/rollback", "POST /api/skills/{id}/undeprecate",
+        "GET /api/skills/deprecated",
         "GET /api/memory/profile", "PUT /api/memory/profile", "POST /api/memory/reset",
         "GET /api/reflect", "GET /api/stats",
         "GET /api/config", "PUT /api/config", "PATCH /api/config",
@@ -232,6 +241,7 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", time = Date
 // --- Доменные эндпоинты ---
 app.MapChat();
 app.MapSkills();
+app.MapSkillLifecycle();
 app.MapMemory();
 app.MapStats();
 app.MapConfig();

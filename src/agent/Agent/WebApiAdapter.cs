@@ -31,7 +31,10 @@ public sealed record SkillDto(
     int Version,
     double SuccessRate,
     int TotalUses,
-    string CreatedAt);
+    string CreatedAt,
+    string? DeprecatedAt = null,
+    string? DeprecationReason = null,
+    double? LastEvaluationScore = null);
 
 /// <summary>Полное представление навыка (с prompt и описанием).</summary>
 public sealed record SkillDetailDto(
@@ -219,6 +222,7 @@ public sealed class WebApiAdapter(
     {
         return new SkillDto(
             s.Meta.Id, s.Meta.Name, s.Meta.Description, s.Meta.PhraseReceivers,
-            s.Meta.Version, s.Meta.SuccessRate, s.Meta.TotalUses, s.Meta.CreatedAt);
+            s.Meta.Version, s.Meta.SuccessRate, s.Meta.TotalUses, s.Meta.CreatedAt,
+            s.Meta.DeprecatedAt, s.Meta.DeprecationReason, s.Meta.LastEvaluationScore);
     }
 }

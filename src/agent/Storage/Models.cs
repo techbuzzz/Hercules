@@ -59,6 +59,23 @@ public sealed class SkillMeta
     public int Version { get; set; } = 1;
     public double SuccessRate { get; set; } = 1.0;
     public int TotalUses { get; set; } = 0;
+
+    /// <summary>
+    ///     Дата депрекации навыка. Null = навык активен.
+    ///     Заполняется через SkillDeprecationManager.DeprecateAsync.
+    /// </summary>
+    public string? DeprecatedAt { get; set; }
+
+    /// <summary>
+    ///     Причина депрекации (например, "заменён навыком X", "низкое качество").
+    /// </summary>
+    public string? DeprecationReason { get; set; }
+
+    /// <summary>
+    ///     Последняя оценка качества (0..1), записанная через SkillEvaluationEngine.
+    ///     Null = оценка ещё не проводилась.
+    /// </summary>
+    public double? LastEvaluationScore { get; set; }
 }
 
 /// <summary>
