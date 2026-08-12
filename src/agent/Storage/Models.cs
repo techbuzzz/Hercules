@@ -140,6 +140,7 @@ public sealed record BudgetSummary(
 
 /// <summary>
 ///     Один аудит-лог: фиксация действия агента или пользователя.
+///     Расширен в task_014 для поддержки enriched fields: requestId, tool name, policy decision, payload hash.
 /// </summary>
 public sealed record AuditLogEntry(
     long Id,
@@ -148,7 +149,26 @@ public sealed record AuditLogEntry(
     string? Target,      // skill_id, session_id, etc.
     string? Details,     // JSON payload
     string? SessionId,
-    DateTime CreatedAt);
+    DateTime CreatedAt)
+{
+    /// <summary>Уникальный request ID (для traceability конкретного вызова).</summary>
+    public string? RequestId { get; init; }
+
+    /// <summary>Имя tool'а, если событие связано с tool execution.</summary>
+    public string? ToolName { get; init; }
+
+    /// <summary>Результат policy-проверки: Allowed, Denied, NeedsApproval.</summary>
+    public string? PolicyDecision { get; init; }
+
+    /// <summary>Использованные permissions (comma-separated).</summary>
+    public string? PermissionUsed { get; init; }
+
+    /// <summary>Результат действия: success, failure, timeout, denied.</summary>
+    public string? Result { get; init; }
+
+    /// <summary>SHA256-хеш payload (first 16 hex chars) для integrity verification.</summary>
+    public string? PayloadHash { get; init; }
+}
 
 /// <summary>
 ///     Результат оценки навыка (SkillEvaluationEngine).

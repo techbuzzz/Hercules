@@ -37,7 +37,7 @@
 | 11 | — | [Слоистая память](tasks/task_011.md) | `layered-memory` | pending |
 | 12 | — | [Бюджеты и guardrails](tasks/task_012.md) | `budget-guardrails` | pending |
 | 13 | — | [Фундамент OpenTelemetry](tasks/task_013.md) | `opentelemetry` | pending |
-| 14 | — | [Аудит и приватность](tasks/task_014.md) | `audit-privacy` | pending |
+| 14 | — | [Аудит и приватность](tasks/task_014.md) | `audit-privacy` | done |
 | 15 | — | [Секреты и конфигурация](tasks/task_015.md) | `secrets-config` | pending |
 | 16 | — | [Оценка навыков (eval harness)](tasks/task_016.md) | `eval-harness` | pending |
 | 17 | — | [Безопасное самоулучшение](tasks/task_017.md) | `safe-self-improvement` | pending |

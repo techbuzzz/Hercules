@@ -61,7 +61,7 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
 
     private void InitSchema()
     {
-        const string sql = """
+        const string ddl = """
                            CREATE TABLE IF NOT EXISTS sessions (
                                id          TEXT PRIMARY KEY,
                                started_at  TEXT NOT NULL,
@@ -106,6 +106,7 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
                                created_at      TEXT NOT NULL
                            );
                            -- task_003: audit log
+                           -- task_014: enriched with request_id, tool_name, policy_decision, permission_used, result, payload_hash
                            CREATE TABLE IF NOT EXISTS audit_log (
                                id              INTEGER PRIMARY KEY AUTOINCREMENT,
                                actor           TEXT NOT NULL,
@@ -113,7 +114,13 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
                                target          TEXT,
                                details         TEXT,
                                session_id      TEXT,
-                               created_at      TEXT NOT NULL
+                               created_at      TEXT NOT NULL,
+                               request_id      TEXT,
+                               tool_name       TEXT,
+                               policy_decision TEXT,
+                               permission_used TEXT,
+                               result          TEXT,
+                               payload_hash    TEXT
                            );
                            -- task_003: skill evaluation history
                            CREATE TABLE IF NOT EXISTS skill_evaluations (
@@ -157,14 +164,39 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
                            CREATE INDEX IF NOT EXISTS ix_budget_created ON budget_entries(created_at);
                            CREATE INDEX IF NOT EXISTS ix_audit_created ON audit_log(created_at);
                            CREATE INDEX IF NOT EXISTS ix_audit_target ON audit_log(target);
+                           CREATE INDEX IF NOT EXISTS ix_audit_session ON audit_log(session_id);
+                           CREATE INDEX IF NOT EXISTS ix_audit_tool ON audit_log(tool_name);
                            CREATE INDEX IF NOT EXISTS ix_eval_skill ON skill_evaluations(skill_id);
                            CREATE INDEX IF NOT EXISTS ix_task_taskid ON task_states(task_id);
                            CREATE INDEX IF NOT EXISTS ix_approval_session ON approval_requests(session_id);
                            CREATE INDEX IF NOT EXISTS ix_approval_status ON approval_requests(status);
                            """;
         using SqliteCommand cmd = _conn.CreateCommand();
-        cmd.CommandText = sql;
+        cmd.CommandText = ddl;
         cmd.ExecuteNonQuery();
+
+        // task_014: add new columns to existing audit_log table (forward migration)
+        var migrations = new[]
+        {
+            "ALTER TABLE audit_log ADD COLUMN request_id TEXT",
+            "ALTER TABLE audit_log ADD COLUMN tool_name TEXT",
+            "ALTER TABLE audit_log ADD COLUMN policy_decision TEXT",
+            "ALTER TABLE audit_log ADD COLUMN permission_used TEXT",
+            "ALTER TABLE audit_log ADD COLUMN result TEXT",
+            "ALTER TABLE audit_log ADD COLUMN payload_hash TEXT"
+        };
+        foreach (var migration in migrations)
+        {
+            try
+            {
+                cmd.CommandText = migration;
+                cmd.ExecuteNonQuery();
+            }
+            catch (SqliteException ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
+            {
+                // Column already exists — ignore
+            }
+        }
     }
 
     public Task StartSessionAsync(string sessionId, CancellationToken ct = default)
@@ -652,8 +684,12 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return GetDailyBudgetAsync(days).GetAwaiter().GetResult();
     }
 
-    // ---- Audit log (task_003) ----
+    // ---- Audit log (task_003 / task_014) ----
 
+    /// <summary>
+    ///     Записать аудит-событие (task_003).
+    ///     task_014: перенаправляет на LogAuditExAsync с базовыми полями.
+    /// </summary>
     public async Task LogAuditAsync(
         string actor,
         string action,
@@ -662,18 +698,9 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         string? sessionId,
         CancellationToken ct = default)
     {
-        using SqliteCommand cmd = _conn.CreateCommand();
-        cmd.CommandText = """
-                          INSERT INTO audit_log (actor, action, target, details, session_id, created_at)
-                          VALUES ($a, $ac, $t, $d, $s, $ct)
-                          """;
-        cmd.Parameters.AddWithValue("$a", actor);
-        cmd.Parameters.AddWithValue("$ac", action);
-        cmd.Parameters.AddWithValue("$t", (object?)target ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$d", (object?)details ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$s", (object?)sessionId ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("$ct", DateTime.UtcNow.ToString("o"));
-        await cmd.ExecuteNonQueryAsync(ct);
+        await LogAuditExAsync(actor, action, target, details, sessionId,
+            requestId: null, toolName: null, policyDecision: null,
+            permissionUsed: null, result: null, payloadHash: null, ct: ct);
     }
 
     public void LogAudit(string actor, string action, string? target = null, string? details = null, string? sessionId = null)
@@ -681,12 +708,53 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         LogAuditAsync(actor, action, target, details, sessionId).GetAwaiter().GetResult();
     }
 
+    /// <summary>
+    ///     Расширенное аудит-событие (task_014).
+    ///     Все параметры кроме actor/action — опциональны.
+    /// </summary>
+    public async Task LogAuditExAsync(
+        string actor,
+        string action,
+        string? target,
+        string? details,
+        string? sessionId,
+        string? requestId,
+        string? toolName,
+        string? policyDecision,
+        string? permissionUsed,
+        string? result,
+        string? payloadHash,
+        CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          INSERT INTO audit_log
+                              (actor, action, target, details, session_id, created_at,
+                               request_id, tool_name, policy_decision, permission_used, result, payload_hash)
+                          VALUES ($a, $ac, $t, $d, $s, $ct, $rid, $tn, $pd, $pu, $r, $ph)
+                          """;
+        cmd.Parameters.AddWithValue("$a", actor);
+        cmd.Parameters.AddWithValue("$ac", action);
+        cmd.Parameters.AddWithValue("$t", (object?)target ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$d", (object?)details ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$s", (object?)sessionId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$ct", DateTime.UtcNow.ToString("o"));
+        cmd.Parameters.AddWithValue("$rid", (object?)requestId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$tn", (object?)toolName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$pd", (object?)policyDecision ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$pu", (object?)permissionUsed ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$r", (object?)result ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$ph", (object?)payloadHash ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<List<AuditLogEntry>> GetAuditLogAsync(int limit = 100, CancellationToken ct = default)
     {
         var list = new List<AuditLogEntry>();
         using SqliteCommand cmd = _conn.CreateCommand();
         cmd.CommandText = """
-                          SELECT id, actor, action, target, details, session_id, created_at
+                          SELECT id, actor, action, target, details, session_id, created_at,
+                                 request_id, tool_name, policy_decision, permission_used, result, payload_hash
                           FROM audit_log
                           ORDER BY id DESC
                           LIMIT $n
@@ -702,7 +770,15 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
                 r.IsDBNull(3) ? null : r.GetString(3),
                 r.IsDBNull(4) ? null : r.GetString(4),
                 r.IsDBNull(5) ? null : r.GetString(5),
-                DateTime.Parse(r.GetString(6))));
+                DateTime.Parse(r.GetString(6)))
+            {
+                RequestId = r.IsDBNull(7) ? null : r.GetString(7),
+                ToolName = r.IsDBNull(8) ? null : r.GetString(8),
+                PolicyDecision = r.IsDBNull(9) ? null : r.GetString(9),
+                PermissionUsed = r.IsDBNull(10) ? null : r.GetString(10),
+                Result = r.IsDBNull(11) ? null : r.GetString(11),
+                PayloadHash = r.IsDBNull(12) ? null : r.GetString(12)
+            });
         }
 
         return list;
@@ -718,7 +794,8 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         var list = new List<AuditLogEntry>();
         using SqliteCommand cmd = _conn.CreateCommand();
         cmd.CommandText = """
-                          SELECT id, actor, action, target, details, session_id, created_at
+                          SELECT id, actor, action, target, details, session_id, created_at,
+                                 request_id, tool_name, policy_decision, permission_used, result, payload_hash
                           FROM audit_log
                           WHERE target = $t
                           ORDER BY id DESC
@@ -736,7 +813,15 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
                 r.IsDBNull(3) ? null : r.GetString(3),
                 r.IsDBNull(4) ? null : r.GetString(4),
                 r.IsDBNull(5) ? null : r.GetString(5),
-                DateTime.Parse(r.GetString(6))));
+                DateTime.Parse(r.GetString(6)))
+            {
+                RequestId = r.IsDBNull(7) ? null : r.GetString(7),
+                ToolName = r.IsDBNull(8) ? null : r.GetString(8),
+                PolicyDecision = r.IsDBNull(9) ? null : r.GetString(9),
+                PermissionUsed = r.IsDBNull(10) ? null : r.GetString(10),
+                Result = r.IsDBNull(11) ? null : r.GetString(11),
+                PayloadHash = r.IsDBNull(12) ? null : r.GetString(12)
+            });
         }
 
         return list;

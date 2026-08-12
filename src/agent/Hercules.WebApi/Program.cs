@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Encodings.Web;
 using Hercules.Agent;
+using Hercules.Audit;
 using Hercules.Budget;
 using Hercules.CodeExecution;
 using Hercules.Config;
@@ -9,6 +10,7 @@ using Hercules.LLM.JsonRepair;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Observability;
+using Hercules.Redaction;
 using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Tools;
@@ -72,6 +74,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Memory);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Budget);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Otel);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Audit);
 
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
@@ -136,7 +139,8 @@ builder.Services.AddSingleton<ToolPolicyEngine>(sp =>
         sp.GetRequiredService<ToolPolicyConfig>(),
         sp.GetRequiredService<ToolPermissionSet>(),
         sp.GetRequiredService<ILogger<ToolPolicyEngine>>(),
-        sp.GetRequiredService<IApprovalService>()));
+        sp.GetRequiredService<IApprovalService>(),
+        sp.GetRequiredService<IAuditService>()));
 builder.Services.AddSingleton<ToolRegistry>();
 builder.Services.AddSingleton<McpClient>();
 
@@ -206,6 +210,20 @@ builder.Services.AddSingleton<SkillLifecyclePolicy>();
 builder.Services.AddSingleton<SkillDeprecationManager>();
 builder.Services.AddSingleton<SkillEvaluationEngine>();
 builder.Services.AddSingleton<SkillLifecycleService>();
+
+// Audit and privacy (task_014)
+builder.Services.AddSingleton<PayloadHashService>();
+builder.Services.AddSingleton<IRedactionService>(sp =>
+    new RedactionService(
+        sp.GetRequiredService<AuditConfig>(),
+        sp.GetRequiredService<ILogger<RedactionService>>()));
+builder.Services.AddSingleton<IAuditService>(sp =>
+    new AuditService(
+        sp.GetRequiredService<IAuditLog>(),
+        sp.GetRequiredService<AuditConfig>(),
+        sp.GetService<IRedactionService>(),
+        sp.GetRequiredService<PayloadHashService>(),
+        sp.GetRequiredService<ILogger<AuditService>>()));
 
 // Агент
 builder.Services.AddSingleton<SkillManager>();

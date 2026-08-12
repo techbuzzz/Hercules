@@ -1,5 +1,6 @@
 using System.Text;
 using Hercules.Agent;
+using Hercules.Audit;
 using Hercules.Budget;
 using Hercules.CLI;
 using Hercules.CodeExecution;
@@ -9,6 +10,7 @@ using Hercules.LLM.JsonRepair;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Observability;
+using Hercules.Redaction;
 using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Telegram;
@@ -124,7 +126,8 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<ToolPolicyConfig>(),
             sp.GetRequiredService<ToolPermissionSet>(),
             sp.GetRequiredService<ILogger<ToolPolicyEngine>>(),
-            sp.GetRequiredService<IApprovalService>()));
+            sp.GetRequiredService<IApprovalService>(),
+            sp.GetRequiredService<IAuditService>()));
     services.AddSingleton<ToolRegistry>();
     services.AddSingleton<McpClient>();
 
@@ -204,6 +207,21 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<SkillDeprecationManager>();
     services.AddSingleton<SkillEvaluationEngine>();
     services.AddSingleton<SkillLifecycleService>();
+
+    // Audit and privacy (task_014)
+    services.AddSingleton(appConfig.Audit);
+    services.AddSingleton<PayloadHashService>();
+    services.AddSingleton<IRedactionService>(sp =>
+        new RedactionService(
+            sp.GetRequiredService<AuditConfig>(),
+            sp.GetRequiredService<ILogger<RedactionService>>()));
+    services.AddSingleton<IAuditService>(sp =>
+        new AuditService(
+            sp.GetRequiredService<IAuditLog>(),
+            sp.GetRequiredService<AuditConfig>(),
+            sp.GetService<IRedactionService>(),
+            sp.GetRequiredService<PayloadHashService>(),
+            sp.GetRequiredService<ILogger<AuditService>>()));
 
     // Агент
     services.AddSingleton<SkillManager>();

@@ -65,6 +65,9 @@ public sealed class AppConfig
 
     /// <summary>Конфигурация OpenTelemetry (task_013). Трассировка, метрики, structured logs.</summary>
     public OtelConfig Otel { get; set; } = new();
+
+    /// <summary>Конфигурация аудита и приватности (task_014). Audit records, PII redaction.</summary>
+    public AuditConfig Audit { get; set; } = new();
 }
 
 /// <summary>
@@ -528,4 +531,41 @@ public sealed class OtelConfig
     ///     Для продакта рекомендуется 0.1–0.5 для снижения стоимости хранения.
     /// </summary>
     public double SamplingRatio { get; set; } = 1.0;
+}
+
+/// <summary>
+///     Конфигурация аудита и приватности (task_014).
+///     Controls audit log enrichment, PII redaction, and payload hashing.
+/// </summary>
+public sealed class AuditConfig
+{
+    /// <summary>Включить расширенный аудит. false = используется базовый IAuditLog (task_003).</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Уровни sensitivity, которые подвергаются redaction (high/medium/low). По умолчанию — high и medium.</summary>
+    public List<string> RedactSensitivityLevels { get; set; } = new() { "high", "medium" };
+
+    /// <summary>Включить вычисление SHA256-хеша payload для integrity verification.</summary>
+    public bool PayloadHashEnabled { get; set; } = true;
+
+    /// <summary>Какие типы actor логируются в аудит: agent/system/user.</summary>
+    public List<string> LogActorActions { get; set; } = new() { "agent", "system", "user" };
+
+    /// <summary>Сколько дней хранить аудит-лог. 0 = без ограничения.</summary>
+    public int RetentionDays { get; set; } = 90;
+
+    /// <summary>Custom regex-паттерны для redaction (например, {"pattern": "secret=\\w+", "replacement": "secret=***"}).</summary>
+    public List<AuditRedactionPattern> RedactionPatterns { get; set; } = new();
+}
+
+/// <summary>
+///     Custom redaction pattern для AuditConfig.RedactionPatterns.
+/// </summary>
+public sealed class AuditRedactionPattern
+{
+    /// <summary>Regex pattern для поиска.</summary>
+    public string Pattern { get; set; } = "";
+
+    /// <summary>Строка замены.</summary>
+    public string Replacement { get; set; } = "***";
 }

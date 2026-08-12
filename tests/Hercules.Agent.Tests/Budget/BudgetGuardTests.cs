@@ -1,5 +1,6 @@
 using Hercules.Budget;
 using Hercules.Config;
+using Hercules.Storage;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
@@ -117,7 +118,7 @@ public class BudgetGuardTests
         var result = new GuardrailCheckResult(violations, true);
         _guard.LogSoftWarnings(result);
         _loggerMock.Verify(
-            l => l.Log(LogLevel.Warning, It.IsAny<EventId>(), It.Is<It.IsAnyType>(), null, It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            l => l.Log(LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<object>(), null, It.IsAny<Func<object, Exception?, string>>()),
             Times.Never);
     }
 

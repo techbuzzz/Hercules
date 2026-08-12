@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hercules.Agent.Loop;
+using Hercules.Audit;
 using Hercules.Budget;
 using Hercules.Config;
 using Hercules.Contracts;
@@ -85,6 +86,7 @@ public sealed class AgentCore : IConfigReload
     private readonly IGuardrailService? _guardrails;
     private readonly BudgetGuard? _budgetGuard;
     private readonly IOtelService? _otel;
+    private readonly IAuditService? _auditService;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
@@ -107,7 +109,8 @@ public sealed class AgentCore : IConfigReload
         IApprovalService? approvals = null,
         IGuardrailService? guardrails = null,
         BudgetGuard? budgetGuard = null,
-        IOtelService? otel = null)
+        IOtelService? otel = null,
+        IAuditService? auditService = null)
     {
         _llm = llm;
         _router = router;
@@ -123,6 +126,7 @@ public sealed class AgentCore : IConfigReload
         _guardrails = guardrails;
         _budgetGuard = budgetGuard;
         _otel = otel;
+        _auditService = auditService;
     }
 
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
@@ -282,6 +286,7 @@ public sealed class AgentCore : IConfigReload
             _otel?.SetErrorStatus(_currentHandleActivity, "timeout");
             handleSw.Stop();
             OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
+            _ = AuditHandleResultAsync(input, "timeout", toolUsed, route.MatchedSkill?.Meta.Id);
             return new AgentResponse
             {
                 Answer = "Запрос превысил максимальное время выполнения. Попробуйте упростить запрос или увеличить лимит.",
@@ -296,6 +301,7 @@ public sealed class AgentCore : IConfigReload
             _otel?.SetErrorStatus(_currentHandleActivity, ex.Message);
             handleSw.Stop();
             OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
+            _ = AuditHandleResultAsync(input, "error", toolUsed, route.MatchedSkill?.Meta.Id, ex.Message);
             return new AgentResponse
             {
                 Answer = $"Ошибка обращения к LLM: {ex.Message}",
@@ -777,4 +783,36 @@ public sealed class AgentCore : IConfigReload
             "openai-compatible" => totalTokens * 0.0000015m,
             _ => totalTokens * 0.000002m,                   // default estimate
         };
+
+    /// <summary>
+    ///     Fire-and-forget audit logging of handle result (task_014).
+    ///     Failures are swallowed to prevent handle logic from being affected by audit failures.
+    /// </summary>
+    private async Task AuditHandleResultAsync(
+        string input,
+        string result,
+        string? toolUsed,
+        string? skillId,
+        string? error = null)
+    {
+        if (_auditService is null) return;
+        try
+        {
+            var details = error is not null
+                ? $"error={error}"
+                : $"tool={toolUsed ?? "(none)"}";
+
+            await _auditService.LogAsync(
+                actor: "agent",
+                action: "handle_completed",
+                target: skillId,
+                details: details,
+                sessionId: SessionId,
+                result: result);
+        }
+        catch
+        {
+            // Swallow — audit failures must not affect agent operation
+        }
+    }
 }

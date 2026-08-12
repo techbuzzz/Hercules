@@ -8,6 +8,13 @@ public interface IAuditLog
     /// <summary>Записать аудит-событие.</summary>
     Task LogAsync(string actor, string action, string? target = null, string? details = null, string? sessionId = null, CancellationToken ct = default);
 
+    /// <summary>Записать расширенное аудит-событие (task_014: requestId, toolName, policyDecision, etc.).</summary>
+    Task LogExAsync(
+        string actor, string action, string? target, string? details, string? sessionId,
+        string? requestId, string? toolName, string? policyDecision,
+        string? permissionUsed, string? result, string? payloadHash,
+        CancellationToken ct = default);
+
     /// <summary>Получить последние N записей.</summary>
     Task<IReadOnlyList<AuditLogEntry>> GetRecentAsync(int limit = 100, CancellationToken ct = default);
 
@@ -23,6 +30,16 @@ public sealed class AuditLogService(SqliteSessionStore store) : IAuditLog
     public async Task LogAsync(string actor, string action, string? target = null, string? details = null, string? sessionId = null, CancellationToken ct = default)
     {
         await store.LogAuditAsync(actor, action, target, details, sessionId, ct);
+    }
+
+    public async Task LogExAsync(
+        string actor, string action, string? target, string? details, string? sessionId,
+        string? requestId, string? toolName, string? policyDecision,
+        string? permissionUsed, string? result, string? payloadHash,
+        CancellationToken ct = default)
+    {
+        await store.LogAuditExAsync(actor, action, target, details, sessionId,
+            requestId, toolName, policyDecision, permissionUsed, result, payloadHash, ct);
     }
 
     public async Task<IReadOnlyList<AuditLogEntry>> GetRecentAsync(int limit = 100, CancellationToken ct = default)

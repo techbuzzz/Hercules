@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Hercules.Audit;
 using Hercules.Config;
 using Hercules.Tools.Approval;
 using Microsoft.Extensions.Logging;
@@ -20,6 +21,7 @@ public sealed class ToolPolicyEngine : IConfigReload
     private readonly ILogger<ToolPolicyEngine> _logger;
     private readonly ToolPermissionSet _permissions;
     private readonly IApprovalService? _approvalService;
+    private readonly IAuditService? _auditService;
 
     /// <summary>
     ///     Реестр descriptors для известных tools.
@@ -31,12 +33,14 @@ public sealed class ToolPolicyEngine : IConfigReload
         ToolPolicyConfig config,
         ToolPermissionSet permissions,
         ILogger<ToolPolicyEngine> logger,
-        IApprovalService? approvalService = null)
+        IApprovalService? approvalService = null,
+        IAuditService? auditService = null)
     {
         _config = config;
         _permissions = permissions;
         _logger = logger;
         _approvalService = approvalService;
+        _auditService = auditService;
     }
 
     /// <summary>
@@ -100,6 +104,7 @@ public sealed class ToolPolicyEngine : IConfigReload
                 if (MatchesPattern(toolName, pattern))
                 {
                     _logger.LogWarning("[Policy] Tool '{Name}' DENIED — matches deny rule '{Pattern}'", toolName, pattern);
+                    _ = AuditPolicyDecisionAsync("system", toolName, "Denied", null, ctx.ArgumentsJson, ctx.SessionId);
                     return ToolPolicyResult.Denied($"Tool '{toolName}' is in the deny list (pattern: {pattern})");
                 }
             }
@@ -116,6 +121,7 @@ public sealed class ToolPolicyEngine : IConfigReload
             }
 
             _logger.LogWarning("[Policy] Unknown tool '{Name}' — DENIED", toolName);
+            _ = AuditPolicyDecisionAsync("system", toolName, "Denied", null, ctx.ArgumentsJson, ctx.SessionId);
             return ToolPolicyResult.UnknownTool(toolName);
         }
 
@@ -130,6 +136,7 @@ public sealed class ToolPolicyEngine : IConfigReload
             {
                 var missing = _permissions.Missing(descriptor.RequiredPermissions);
                 _logger.LogWarning("[Policy] Tool '{Name}' DENIED — missing permissions: {Missing}", toolName, missing);
+                _ = AuditPolicyDecisionAsync("system", toolName, "Denied", missing.ToString(), ctx.ArgumentsJson, ctx.SessionId);
                 return ToolPolicyResult.Denied($"Missing permissions: {missing}");
             }
 
@@ -141,10 +148,12 @@ public sealed class ToolPolicyEngine : IConfigReload
                 var approvalResult = _approvalService
                     .RequestAsync(ctx.SessionId ?? "default", toolName, ctx.ArgumentsJson, reason)
                     .GetAwaiter().GetResult();
+                _ = AuditPolicyDecisionAsync("system", toolName, "NeedsApproval", descriptor.RequiredPermissions.ToString(), ctx.ArgumentsJson, ctx.SessionId);
                 return ToolPolicyResult.NeedsApproval(
                     $"{reason}. Approval request id={approvalResult.RequestId}, status={approvalResult.Status}");
             }
 
+            _ = AuditPolicyDecisionAsync("system", toolName, "NeedsApproval", descriptor.RequiredPermissions.ToString(), ctx.ArgumentsJson, ctx.SessionId);
             return ToolPolicyResult.NeedsApproval(
                 $"Tool '{toolName}' has side_effect_level={descriptor.SideEffectLevel} " +
                 $"which requires human approval (threshold={_config.MinSideEffectLevelForApproval})");
@@ -155,6 +164,7 @@ public sealed class ToolPolicyEngine : IConfigReload
         {
             var missing = _permissions.Missing(descriptor.RequiredPermissions);
             _logger.LogWarning("[Policy] Tool '{Name}' DENIED — missing permissions: {Missing}", toolName, missing);
+            _ = AuditPolicyDecisionAsync("system", toolName, "Denied", missing.ToString(), ctx.ArgumentsJson, ctx.SessionId);
             return ToolPolicyResult.Denied($"Missing permissions: {missing}");
         }
 
@@ -168,15 +178,42 @@ public sealed class ToolPolicyEngine : IConfigReload
                 var approvalResult = _approvalService
                     .RequestAsync(ctx.SessionId ?? "default", toolName, ctx.ArgumentsJson, reason)
                     .GetAwaiter().GetResult();
+                _ = AuditPolicyDecisionAsync("system", toolName, "NeedsApproval", descriptor.RequiredPermissions.ToString(), ctx.ArgumentsJson, ctx.SessionId);
                 return ToolPolicyResult.NeedsApproval(
                     $"{reason}. Approval request id={approvalResult.RequestId}, status={approvalResult.Status}");
             }
 
+            _ = AuditPolicyDecisionAsync("system", toolName, "NeedsApproval", descriptor.RequiredPermissions.ToString(), ctx.ArgumentsJson, ctx.SessionId);
             return ToolPolicyResult.NeedsApproval($"Tool '{toolName}' is marked Critical");
         }
 
         _logger.LogDebug("[Policy] Tool '{Name}' ALLOWED", toolName);
+        _ = AuditPolicyDecisionAsync("system", toolName, "Allowed", descriptor.RequiredPermissions.ToString(), ctx.ArgumentsJson, ctx.SessionId);
         return ToolPolicyResult.Allowed();
+    }
+
+    /// <summary>
+    ///     Fire-and-forget audit logging of policy decision (task_014).
+    ///     Failures are swallowed to prevent policy logic from being affected by audit failures.
+    /// </summary>
+    private async Task AuditPolicyDecisionAsync(
+        string actor,
+        string toolName,
+        string decision,
+        string? permissions,
+        string? argsJson,
+        string? sessionId)
+    {
+        if (_auditService is null) return;
+        try
+        {
+            await _auditService.LogToolPolicyDecisionAsync(
+                actor, toolName, decision, permissions, argsJson, sessionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Audit] Failed to log tool policy decision for {Tool}", toolName);
+        }
     }
 
     /// <summary>Получить descriptor для tool'а.</summary>

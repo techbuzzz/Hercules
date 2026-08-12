@@ -52,7 +52,7 @@ public class OtelServiceTests
         Assert.NotNull(parent);
         using var child = service.StartActivity("child.operation", parent.Context);
         Assert.NotNull(child);
-        Assert.Equal(parent.Context.TraceId, child.ParentId);
+        Assert.Equal(parent.Context.TraceId.ToString(), child.ParentId ?? "");
     }
 
     [Fact]
