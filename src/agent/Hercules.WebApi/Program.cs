@@ -89,6 +89,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SelfImprovement);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Tasks);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Phase2);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.LeastPrivilege);
 
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
@@ -154,7 +155,8 @@ builder.Services.AddSingleton<ToolPolicyEngine>(sp =>
         sp.GetRequiredService<ToolPermissionSet>(),
         sp.GetRequiredService<ILogger<ToolPolicyEngine>>(),
         sp.GetRequiredService<IApprovalService>(),
-        sp.GetRequiredService<IAuditService>()));
+        sp.GetRequiredService<IAuditService>(),
+        sp.GetRequiredService<Hercules.Tools.Grants.ISkillGrantService>()));
 builder.Services.AddSingleton<ToolRegistry>();
 builder.Services.AddSingleton<IToolRegistryService, ToolRegistryService>();
 builder.Services.AddHostedService<ToolHealthService>();
@@ -194,6 +196,12 @@ builder.Services.AddSingleton<MemoryStore>(sp =>
         sp.GetRequiredService<SecretsConfig>(),
         sp.GetRequiredService<ISecretMaskingService>()));
 builder.Services.AddSingleton<SqliteSessionStore>();
+
+// task_026: Least-privilege grants
+builder.Services.AddSingleton(sp =>
+    new Hercules.Tools.Grants.SkillGrantStore(
+        Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, "grants.db")));
+builder.Services.AddSingleton<Hercules.Tools.Grants.ISkillGrantService, Hercules.Tools.Grants.SkillGrantService>();
 
 // Hybrid storage services (task_003)
 builder.Services.AddSingleton<IBudgetService, BudgetService>();
@@ -235,7 +243,9 @@ builder.Services.AddSingleton<SkillPackager>(sp =>
         sp.GetRequiredService<FileSkillRepository>(),
         sp.GetRequiredService<SecretsConfig>(),
         sp.GetRequiredService<ISecretMaskingService>(),
-        sp.GetRequiredService<IMarketplaceSigningService>()));
+        sp.GetRequiredService<IMarketplaceSigningService>(),
+        sp.GetRequiredService<Hercules.Config.LeastPrivilegeConfig>(),
+        sp.GetRequiredService<Hercules.Tools.Grants.ISkillGrantService>()));
 
 // Phase 2: Semantic routing (embedding-based). Stub provider — offline.
 // Phase 2: Semantic routing (task_022) — scoring components

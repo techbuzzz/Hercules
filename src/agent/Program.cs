@@ -71,6 +71,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton(appConfig.Mesh);
     services.AddSingleton(appConfig.ToolPolicy);
     services.AddSingleton(appConfig.Phase2);
+    services.AddSingleton(appConfig.LeastPrivilege);
 
     // OpenTelemetry (task_013) — tracing + metrics
     services.AddHerculesOtel(appConfig.Otel);
@@ -137,7 +138,8 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<ToolPermissionSet>(),
             sp.GetRequiredService<ILogger<ToolPolicyEngine>>(),
             sp.GetRequiredService<IApprovalService>(),
-            sp.GetRequiredService<IAuditService>()));
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<Hercules.Tools.Grants.ISkillGrantService>()));
     services.AddSingleton<ToolRegistry>();
     services.AddSingleton(appConfig.ToolRegistry);
     services.AddSingleton<IToolRegistryService, ToolRegistryService>();
@@ -173,6 +175,12 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<SecretsConfig>(),
             sp.GetRequiredService<ISecretMaskingService>()));
     services.AddSingleton<SqliteSessionStore>();
+
+    // task_026: Least-privilege grants
+    services.AddSingleton(sp =>
+        new Hercules.Tools.Grants.SkillGrantStore(
+            Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, "grants.db")));
+    services.AddSingleton<Hercules.Tools.Grants.ISkillGrantService, Hercules.Tools.Grants.SkillGrantService>();
 
     // Layered memory (task_011)
     services.AddSingleton(appConfig.Memory);
@@ -218,7 +226,9 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<FileSkillRepository>(),
             sp.GetRequiredService<SecretsConfig>(),
             sp.GetRequiredService<ISecretMaskingService>(),
-            sp.GetRequiredService<IMarketplaceSigningService>()));
+            sp.GetRequiredService<IMarketplaceSigningService>(),
+            sp.GetRequiredService<Hercules.Config.LeastPrivilegeConfig>(),
+            sp.GetRequiredService<Hercules.Tools.Grants.ISkillGrantService>()));
 
     // Phase 2: Semantic routing (task_022)
     services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();

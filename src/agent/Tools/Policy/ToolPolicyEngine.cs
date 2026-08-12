@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Hercules.Audit;
 using Hercules.Config;
 using Hercules.Tools.Approval;
+using Hercules.Tools.Grants;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.Tools.Policy;
@@ -22,6 +23,7 @@ public sealed class ToolPolicyEngine : IConfigReload
     private readonly ToolPermissionSet _permissions;
     private readonly IApprovalService? _approvalService;
     private readonly IAuditService? _auditService;
+    private readonly ISkillGrantService? _skillGrantService;
 
     /// <summary>
     ///     Реестр descriptors для известных tools.
@@ -34,13 +36,15 @@ public sealed class ToolPolicyEngine : IConfigReload
         ToolPermissionSet permissions,
         ILogger<ToolPolicyEngine> logger,
         IApprovalService? approvalService = null,
-        IAuditService? auditService = null)
+        IAuditService? auditService = null,
+        ISkillGrantService? skillGrantService = null)
     {
         _config = config;
         _permissions = permissions;
         _logger = logger;
         _approvalService = approvalService;
         _auditService = auditService;
+        _skillGrantService = skillGrantService;
     }
 
     /// <summary>
@@ -166,6 +170,27 @@ public sealed class ToolPolicyEngine : IConfigReload
             _logger.LogWarning("[Policy] Tool '{Name}' DENIED — missing permissions: {Missing}", toolName, missing);
             _ = AuditPolicyDecisionAsync("system", toolName, "Denied", missing.ToString(), ctx.ArgumentsJson, ctx.SessionId);
             return ToolPolicyResult.Denied($"Missing permissions: {missing}");
+        }
+
+        // task_026: Skill grant check — навык проверяется только если SkillId указан
+        if (_skillGrantService is not null && !string.IsNullOrWhiteSpace(ctx.SkillId))
+        {
+            var grantResult = _skillGrantService.CheckAllPermissionsAsync(
+                ctx.SkillId, descriptor.RequiredPermissions, ctx.SessionId).GetAwaiter().GetResult();
+
+            if (!grantResult.IsValid)
+            {
+                _logger.LogWarning("[Policy] Tool '{Name}' DENIED — skill '{SkillId}' missing grant for required permissions: {Missing}",
+                    toolName, ctx.SkillId, ToolPermissionExtensions.ToHumanReadable(grantResult.MissingPermissions));
+                _ = AuditPolicyDecisionAsync("system", toolName, "Denied", $"skill_missing_grant:{grantResult.MissingPermissions}",
+                    ctx.ArgumentsJson, ctx.SessionId);
+                return ToolPolicyResult.Denied(
+                    $"Skill '{ctx.SkillId}' does not have required grant for permissions: " +
+                    $"{ToolPermissionExtensions.ToHumanReadable(grantResult.MissingPermissions)}. " +
+                    (grantResult.NotFound
+                        ? "No grants found (migration mode may apply)."
+                        : grantResult.Message ?? "Permission denied by least-privilege policy."));
+            }
         }
 
         // 6. Critical tool check (always needs approval)

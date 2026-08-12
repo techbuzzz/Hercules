@@ -145,4 +145,7 @@ public sealed class PolicyContext
 
     /// <summary>Уже одобренные tool'ы в этом сеансе (для chaining detection).</summary>
     public IReadOnlyList<string> ApprovedToolsThisSession { get; init; } = [];
+
+    /// <summary>ID навыка, запросившего tool (для least-privilege grant check, task_026).</summary>
+    public string? SkillId { get; init; }
 }

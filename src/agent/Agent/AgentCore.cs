@@ -296,7 +296,7 @@ public sealed class AgentCore : IConfigReload
         string toolUsed = "";
         try
         {
-            (llmResp, toolUsed, loopCtx) = await RunWithToolsAsync(messages, loopCtx, ct);
+            (llmResp, toolUsed, loopCtx) = await RunWithToolsAsync(messages, loopCtx, route.MatchedSkill?.Meta.Id, ct);
         }
         catch (OperationCanceledException) when (lcts.IsWallClockTimeout)
         {
@@ -383,7 +383,7 @@ public sealed class AgentCore : IConfigReload
     ///     Контекст обновляется после каждого tool execution для observability.
     /// </summary>
     private async Task<(LlmResponse Response, string ToolUsed, LoopContext Context)> RunWithToolsAsync(
-        List<ChatTurn> messages, LoopContext ctx, CancellationToken ct)
+        List<ChatTurn> messages, LoopContext ctx, string? skillId, CancellationToken ct)
     {
         var toolUsed = "";
         LlmResponse last = default!;
@@ -424,7 +424,8 @@ public sealed class AgentCore : IConfigReload
                 {
                     ToolName = toolName,
                     ArgumentsJson = argsJson,
-                    SessionId = SessionId
+                    SessionId = SessionId,
+                    SkillId = skillId
                 });
 
                 if (policyResult.IsDenied)
@@ -677,6 +678,7 @@ public sealed class AgentCore : IConfigReload
             (llmResp, toolUsed, _) = await RunWithToolsAsync(
                 messages,
                 LoopContext.Initial(_cfg.MaxToolIterations, _cfg.MaxWallClockTimeoutSeconds > 0 ? TimeSpan.FromSeconds(_cfg.MaxWallClockTimeoutSeconds) : null, _cfg.MaxRecursionDepth),
+                skill.Meta.Id,
                 ct);
         }
         catch (Exception ex)

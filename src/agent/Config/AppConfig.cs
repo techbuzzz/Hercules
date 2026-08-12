@@ -32,6 +32,42 @@ public sealed class AppConfig
     public EvalConfig Eval { get; set; } = new();
     public SelfImprovementConfig SelfImprovement { get; set; } = new();
     public TaskConfig Tasks { get; set; } = new();
+    public LeastPrivilegeConfig LeastPrivilege { get; set; } = new();
+}
+
+/// <summary>
+///     Конфигурация least-privilege grants (task_026).
+///     Контролирует, проверяются ли permissions навыков при импорте и runtime.
+/// </summary>
+public sealed class LeastPrivilegeConfig
+{
+    /// <summary>Включить проверку grants. Если false — все навыки работают без ограничений.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    ///     Режим миграции: если true, навыки без declared permissions считаются разрешёнными
+    ///     (обратная совместимость). Если false — такие навыки получают только Read grant.
+    /// </summary>
+    public bool MigrationMode { get; set; } = true;
+
+    /// <summary>
+    ///     Проверять permissions при импорте навыка. Если навык запрашивает permission,
+    ///     не входящий в AllowedPermissions — импорт блокируется.
+    /// </summary>
+    public bool EnforceOnImport { get; set; } = true;
+
+    /// <summary>
+    ///     Проверять permissions при runtime (перед tool execution).
+    ///     Если навык не имеет нужного grant — tool denied.
+    /// </summary>
+    public bool EnforceOnRuntime { get; set; } = true;
+
+    /// <summary>
+    ///     Список разрешённых permission-строк для импорта навыков.
+    ///     Навык импортируется только если его Permissions ⊆ AllowedPermissions.
+    ///     Пустой список = все permissions разрешены.
+    /// </summary>
+    public List<string> AllowedPermissions { get; set; } = new();
 }
 
 /// <summary>

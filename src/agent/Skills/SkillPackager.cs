@@ -4,6 +4,8 @@ using System.Text.Json;
 using Hercules.Config;
 using Hercules.Skills.Marketplace;
 using Hercules.Storage;
+using Hercules.Tools.Grants;
+using Hercules.Tools.Policy;
 
 namespace Hercules.Skills;
 
@@ -46,6 +48,8 @@ public sealed class SkillPackager
     private readonly ISecretMaskingService? _masking;
     private readonly bool _redactInExports;
     private readonly IMarketplaceSigningService? _signing;
+    private readonly LeastPrivilegeConfig? _leastPrivilege;
+    private readonly ISkillGrantService? _grantService;
 
     public SkillPackager(FileSkillRepository repo)
     {
@@ -71,6 +75,22 @@ public sealed class SkillPackager
         _masking = masking;
         _redactInExports = secretsConfig?.RedactInExports ?? true;
         _signing = signing;
+    }
+
+    public SkillPackager(
+        FileSkillRepository repo,
+        SecretsConfig? secretsConfig,
+        ISecretMaskingService? masking,
+        IMarketplaceSigningService? signing,
+        LeastPrivilegeConfig? leastPrivilege,
+        ISkillGrantService? grantService)
+    {
+        _repo = repo ?? throw new ArgumentNullException(nameof(repo));
+        _masking = masking;
+        _redactInExports = secretsConfig?.RedactInExports ?? true;
+        _signing = signing;
+        _leastPrivilege = leastPrivilege;
+        _grantService = grantService;
     }
 
     /// <summary>Имя файла-пакета по умолчанию: {id}-v{version}.skillpkg.</summary>
@@ -370,6 +390,31 @@ public sealed class SkillPackager
                 case ConflictResolution.Replace:
                     // Существующие файлы будут перезаписаны через Save
                     break;
+            }
+        }
+
+        // task_026: Least-privilege — проверка permissions при импорте
+        if (_leastPrivilege?.EnforceOnImport == true && manifest.Skill.Permissions.Count > 0)
+        {
+            var skillPerms = manifest.Skill.Permissions
+                .Select(p => ToolPermissionExtensions.ParseFromString(p))
+                .Aggregate(ToolPermission.None, (a, b) => a | b);
+
+            // Если AllowedPermissions пуст = все разрешены
+            var allowedPerms = _leastPrivilege.AllowedPermissions.Count > 0
+                ? _leastPrivilege.AllowedPermissions
+                    .Select(p => ToolPermissionExtensions.ParseFromString(p))
+                    .Aggregate(ToolPermission.None, (a, b) => a | b)
+                : ToolPermission.Read | ToolPermission.Write | ToolPermission.Network | ToolPermission.Memory;
+
+            var missing = skillPerms & ~allowedPerms;
+            if (missing != ToolPermission.None)
+            {
+                var missingStr = ToolPermissionExtensions.ToHumanReadable(missing);
+                throw new InvalidOperationException(
+                    $"Import denied: skill '{manifest.Skill.Id}' requires permissions [{missingStr}] " +
+                    $"which are not in the allowed set. Import is blocked by least-privilege policy. " +
+                    $"Allowed: [{ToolPermissionExtensions.ToHumanReadable(allowedPerms)}].");
             }
         }
 
