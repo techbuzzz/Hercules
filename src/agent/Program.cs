@@ -5,6 +5,7 @@ using Hercules.CodeExecution;
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Skills;
 using Hercules.Storage;
@@ -147,6 +148,26 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<MemoryStore>();
     services.AddSingleton<SqliteSessionStore>();
 
+    // Layered memory (task_011)
+    services.AddSingleton(appConfig.Memory);
+    services.AddSingleton<LayeredMemoryConfig>(sp =>
+    {
+        var cfg = sp.GetRequiredService<MemoryConfig>();
+        return new LayeredMemoryConfig
+        {
+            MaxWorkingMemoryEntries = cfg.MaxWorkingMemoryEntries,
+            MaxEpisodesInContext = cfg.MaxEpisodesInContext,
+            DefaultFactTtlMinutes = cfg.DefaultFactTtlMinutes,
+            SensitivityRedactionEnabled = cfg.SensitivityRedactionEnabled,
+            MaxFactAgeDays = cfg.MaxFactAgeDays
+        };
+    });
+    services.AddScoped<IWorkingMemory, WorkingMemoryService>();
+    services.AddSingleton<IDurableFactsStore, DurableFactsService>();
+    services.AddSingleton<IEpisodicStore, EpisodicStore>();
+    services.AddSingleton<LayerMetadataExtractor>();
+    services.AddSingleton<LayeredMemoryManager>();
+
     // Hybrid storage services (task_003)
     services.AddSingleton<IBudgetService, BudgetService>();
     services.AddSingleton<IAuditLog, AuditLogService>();
@@ -172,6 +193,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<SkillManager>();
     services.AddSingleton<SkillRouter>();
     services.AddSingleton<MemoryManager>();
+    services.AddSingleton<LayeredMemoryManager>();
     services.AddSingleton<ReflectionEngine>();
     services.AddSingleton<AgentCore>();
 

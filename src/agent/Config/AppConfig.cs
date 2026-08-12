@@ -56,6 +56,9 @@ public sealed class AppConfig
 
     /// <summary>Конфигурация approval gates (task_010).</summary>
     public ApprovalConfig Approval { get; set; } = new();
+
+    /// <summary>Конфигурация layered memory (task_011).</summary>
+    public MemoryConfig Memory { get; set; } = new();
 }
 
 /// <summary>
@@ -427,4 +430,26 @@ public sealed class ApprovalConfig
 
     /// <summary>Максимальное число pending-запросов одновременно.</summary>
     public int MaxPending { get; set; } = 50;
+}
+
+/// <summary>
+///     Конфигурация layered memory (task_011).
+///     Controls working memory capacity, episodic context size, fact TTL, and redaction.
+/// </summary>
+public sealed class MemoryConfig
+{
+    /// <summary>Максимальное число записей в working memory перед eviction.</summary>
+    public int MaxWorkingMemoryEntries { get; set; } = 100;
+
+    /// <summary>Сколько последних эпизодов включать в context block.</summary>
+    public int MaxEpisodesInContext { get; set; } = 5;
+
+    /// <summary>TTL для фактов без явного TTL (минуты). 0 = навсегда.</summary>
+    public int DefaultFactTtlMinutes { get; set; } = 0;
+
+    /// <summary>Включить sensitivity-based redaction из LLM context.</summary>
+    public bool SensitivityRedactionEnabled { get; set; } = true;
+
+    /// <summary>Максимальный возраст факта перед auto-cleanup (дни). 0 = без cleanup.</summary>
+    public int MaxFactAgeDays { get; set; } = 0;
 }

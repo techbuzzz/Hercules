@@ -5,6 +5,7 @@ using Hercules.CodeExecution;
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Skills;
 using Hercules.Storage;
@@ -66,6 +67,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Mesh);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ToolPolicy);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Approval);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Memory);
 builder.Services.AddSingleton(webCfg);
 
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
@@ -164,6 +166,13 @@ builder.Services.AddSingleton<SqliteSessionStore>();
 builder.Services.AddSingleton<IBudgetService, BudgetService>();
 builder.Services.AddSingleton<IAuditLog, AuditLogService>();
 
+// Layered memory (task_011)
+builder.Services.AddScoped<IWorkingMemory, WorkingMemoryService>();
+builder.Services.AddSingleton<IDurableFactsStore, DurableFactsService>();
+builder.Services.AddSingleton<IEpisodicStore, EpisodicStore>();
+builder.Services.AddSingleton<LayerMetadataExtractor>();
+builder.Services.AddSingleton<LayeredMemoryManager>();
+
 // Phase 2: Skill packager (export/import .skillpkg)
 builder.Services.AddSingleton<SkillPackager>();
 
@@ -185,6 +194,7 @@ builder.Services.AddSingleton<SkillLifecycleService>();
 builder.Services.AddSingleton<SkillManager>();
 builder.Services.AddSingleton<SkillRouter>();
 builder.Services.AddSingleton<MemoryManager>();
+builder.Services.AddSingleton<LayeredMemoryManager>();
 builder.Services.AddSingleton<ReflectionEngine>();
 builder.Services.AddSingleton<AgentCore>();
 // Регистрируем сервисы, поддерживающие hot-reload конфигурации, как IConfigReload

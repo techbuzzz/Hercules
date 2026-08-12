@@ -1,5 +1,6 @@
 using System.Text;
 using Hercules.LLM;
+using Hercules.Memory.Layers;
 using Hercules.Storage;
 
 namespace Hercules.Agent;
@@ -7,8 +8,12 @@ namespace Hercules.Agent;
 /// <summary>
 ///     Управляет долговременной памятью: загрузка контекста при старте сессии,
 ///     извлечение фактов о пользователе после сессии, сохранение в Markdown.
+///     Uses layered memory (request context, working memory, durable facts, episodic).
 /// </summary>
-public sealed class MemoryManager(MemoryStore store, ILLMClient llm)
+public sealed class MemoryManager(
+    MemoryStore store,
+    ILLMClient llm,
+    LayeredMemoryManager? layered = null)
 {
     public string ProfileMarkdown => store.ReadProfile();
 
@@ -19,6 +24,12 @@ public sealed class MemoryManager(MemoryStore store, ILLMClient llm)
     /// <summary>Собрать контекст для системного промпта (профиль + предпочтения + последний контекст).</summary>
     public string BuildContextBlock()
     {
+        // Use layered manager for new layered context (null-safe)
+        string layeredBlock = layered is not null
+            ? layered.BuildContextBlockAsync().GetAwaiter().GetResult()
+            : "";
+
+        // Fall back to legacy profile/prefs/entities for backward compatibility
         var sb = new StringBuilder();
         sb.AppendLine("=== ПАМЯТЬ О ПОЛЬЗОВАТЕЛЕ ===");
         sb.AppendLine(store.ReadProfile().Trim());
@@ -34,6 +45,13 @@ public sealed class MemoryManager(MemoryStore store, ILLMClient llm)
             sb.AppendLine(lastCtx.Trim());
         }
 
+        // Append layered block if non-empty
+        if (!string.IsNullOrWhiteSpace(layeredBlock))
+        {
+            sb.AppendLine();
+            sb.Append(layeredBlock);
+        }
+
         return sb.ToString();
     }
 
@@ -46,13 +64,15 @@ public sealed class MemoryManager(MemoryStore store, ILLMClient llm)
     public void Reset()
     {
         store.Reset();
+        layered?.ClearWorking();
     }
 
     /// <summary>
     ///     По завершении сессии: попросить LLM извлечь из диалога краткое содержание,
     ///     новые факты о пользователе, сущности и предпочтения; сохранить в память.
+    ///     Now uses LayerMetadataExtractor for proper metadata on durable facts.
     /// </summary>
-    public async Task PersistSessionAsync(IReadOnlyList<ChatTurn> transcript, CancellationToken ct = default)
+    public async Task PersistSessionAsync(IReadOnlyList<ChatTurn> transcript, string sessionId, CancellationToken ct = default)
     {
         if (transcript.Count == 0)
         {
@@ -91,26 +111,45 @@ public sealed class MemoryManager(MemoryStore store, ILLMClient llm)
 
         Dictionary<string, string> sections = ParseSections(resp.Text);
         var today = DateOnly.FromDateTime(DateTime.Now);
+        var extractedAt = DateTime.UtcNow;
 
         if (sections.TryGetValue("SUMMARY", out var summary) && IsMeaningful(summary))
         {
+            // Append to legacy episodic context
             store.AppendContext(summary, today);
+
+            // Also append as episodic record with metadata
+            var episodeEntry = new MemoryEntry("session_extract", MemoryConfidence.Medium, 0, MemorySensitivity.Internal, extractedAt, new List<string> { "summary" });
+            if (layered is not null) await layered.AppendEpisodeAsync(sessionId, summary, episodeEntry, ct);
         }
 
         if (sections.TryGetValue("PROFILE", out var profile) && IsMeaningful(profile))
         {
             store.Append(store.ProfilePath, $"\n## Обновление {today:yyyy-MM-dd}\n{profile}");
+
+            // Store as durable fact with metadata
+            var factEntry = new MemoryEntry("session_extract", MemoryConfidence.Medium, 0, MemorySensitivity.Internal, extractedAt, new List<string> { "user_fact", "profile" });
+            if (layered is not null) await layered.StoreFactAsync("profile_update", profile, factEntry, ct);
         }
 
         if (sections.TryGetValue("ENTITIES", out var entities) && IsMeaningful(entities))
         {
             store.Append(store.EntitiesPath, $"\n## Обновление {today:yyyy-MM-dd}\n{entities}");
+
+            var entityEntry = new MemoryEntry("session_extract", MemoryConfidence.Medium, 0, MemorySensitivity.Internal, extractedAt, new List<string> { "entity" });
+            if (layered is not null) await layered.StoreFactAsync("entities_update", entities, entityEntry, ct);
         }
 
         if (sections.TryGetValue("PREFERENCES", out var prefs) && IsMeaningful(prefs))
         {
             store.Append(store.PreferencesPath, $"\n## Обновление {today:yyyy-MM-dd}\n{prefs}");
+
+            var prefsEntry = new MemoryEntry("session_extract", MemoryConfidence.Medium, 0, MemorySensitivity.Internal, extractedAt, new List<string> { "preference" });
+            if (layered is not null) await layered.StoreFactAsync("preferences_update", prefs, prefsEntry, ct);
         }
+
+        // Cleanup expired facts
+        if (layered is not null) await layered.CleanupExpiredAsync(ct);
     }
 
     private static bool IsMeaningful(string text)

@@ -547,7 +547,7 @@ public sealed class AgentCore : IConfigReload
     {
         // [Loop] Memory update — сохраняем итоги сессии
         _logger.LogDebug("[Loop] {Step} started — session={SessionId}", LoopStep.MemoryUpdate, SessionId);
-        await _memory.PersistSessionAsync(Transcript, ct);
+        await _memory.PersistSessionAsync(Transcript, SessionId, ct);
         _sessions.EndSession(SessionId);
         _logger.LogDebug("[Loop] {Step} finished", LoopStep.MemoryUpdate);
     }

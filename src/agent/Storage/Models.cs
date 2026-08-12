@@ -178,6 +178,24 @@ public sealed record TaskState(
     DateTime UpdatedAt);
 
 /// <summary>
+///     Metadata for layered memory entries (sidecar JSON for Markdown memory files).
+///     Stored as {filename}.meta.json alongside each Markdown memory file.
+/// </summary>
+/// <remarks>
+///     Used by DurableFactsService and MemoryStore.WriteWithMetadata.
+/// </remarks>
+public sealed record MemoryEntryMetadata
+{
+    public string Key { get; set; } = "";
+    public string Source { get; set; } = "unknown";
+    public string Confidence { get; set; } = "Medium";
+    public int TtlMinutes { get; set; } = 0;
+    public string Sensitivity { get; set; } = "Internal";
+    public List<string>? Tags { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
 ///     Запрос на подтверждение выполнения tool (human-in-the-loop approval).
 ///     Таблица: approval_requests.
 /// </summary>

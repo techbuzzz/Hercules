@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Hercules.Config;
 
 namespace Hercules.Storage;
@@ -173,5 +174,17 @@ public sealed class MemoryStore
         return File.Exists(path)
             ? await File.ReadAllTextAsync(path, ct)
             : fallback;
+    }
+
+    /// <summary>
+    ///     Write content with a JSON sidecar containing MemoryEntryMetadata.
+    ///     The sidecar is stored as {path}.meta.json.
+    /// </summary>
+    public async Task WriteWithMetadataAsync(string path, string content, MemoryEntryMetadata meta, CancellationToken ct = default)
+    {
+        await File.WriteAllTextAsync(path, content.Trim() + "\n", ct);
+        var metaPath = path + ".meta.json";
+        var jsonOpts = new JsonSerializerOptions { WriteIndented = true };
+        await File.WriteAllTextAsync(metaPath, JsonSerializer.Serialize(meta, jsonOpts), ct);
     }
 }
