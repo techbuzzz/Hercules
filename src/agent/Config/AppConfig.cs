@@ -79,6 +79,65 @@ public sealed class Phase2Config
     ///     Настройки манифеста навыка (task_020): версия Hercules, разрешённые уровни риска.
     /// </summary>
     public SkillManifestConfig SkillManifest { get; set; } = new();
+
+    /// <summary>
+    ///     Task 023: Настройки детерминированного fallback-маршрутизатора (без embedding).
+    ///     Используется для offline/edge-деплоев, где embedding-провайдер недоступен.
+    /// </summary>
+    public DeterministicRoutingConfig DeterministicRouting { get; set; } = new();
+}
+
+/// <summary>
+///     Task 023: Режим fallback для DeterministicRouter.
+/// </summary>
+public enum DeterministicFallbackMode
+{
+    /// <summary>Не использовать DeterministicRouter никогда.</summary>
+    Never,
+
+    /// <summary>Использовать DeterministicRouter когда embedding недоступен или semantic routing выключен.</summary>
+    OnNoEmbedding,
+
+    /// <summary>Всегда использовать DeterministicRouter (полный offline-режим).</summary>
+    Always
+}
+
+/// <summary>
+///     Task 023: Конфигурация детерминированного маршрутизатора (без embedding).
+///     Поддерживает keyword triggers, tags и declared input types.
+/// </summary>
+public sealed class DeterministicRoutingConfig
+{
+    /// <summary>
+    ///     Режим использования DeterministicRouter: Never / OnNoEmbedding / Always.
+    ///     Default: OnNoEmbedding (embeds legacy KeywordFallback behaviour).
+    /// </summary>
+    public DeterministicFallbackMode FallbackMode { get; set; } = DeterministicFallbackMode.OnNoEmbedding;
+
+    /// <summary>
+    ///     Включить маршрутизацию по tags (tag intersection).
+    ///     Default: true.
+    /// </summary>
+    public bool EnableTagMatching { get; set; } = true;
+
+    /// <summary>
+    ///     Включить маршрутизацию по declared input types.
+    ///     Default: true.
+    /// </summary>
+    public bool EnableInputTypeMatching { get; set; } = true;
+
+    /// <summary>
+    ///     Веса для компонентов детерминированного scoring.
+    ///     keyword: вес keyword matching (по phrase_receivers).
+    ///     tag: вес tag intersection.
+    ///     type: вес input type matching.
+    /// </summary>
+    public Dictionary<string, double> ScoringWeights { get; set; } = new()
+    {
+        ["keyword"] = 0.60,
+        ["tag"]     = 0.25,
+        ["type"]    = 0.15,
+    };
 }
 
 /// <summary>

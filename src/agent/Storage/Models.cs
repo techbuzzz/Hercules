@@ -77,6 +77,24 @@ public sealed class SkillMeta
     /// </summary>
     public double? LastEvaluationScore { get; set; }
 
+    /// <summary>
+    ///     Task 023: Декларативные типы ввода навыка.
+    ///     Используется DeterministicRouter для маршрутизации без embedding в edge/offline-деплоях.
+    ///     Примеры: "code", "writing", "qa", "analysis", "translation", "data", "math".
+    ///     Сериализуется как "input_types" в skill.meta.json.
+    /// </summary>
+    [JsonPropertyName("input_types")]
+    public List<string> InputTypes { get; set; } = new();
+
+    /// <summary>
+    ///     Task 023: Теги навыка для детерминированной маршрутизации.
+    ///     Используется DeterministicRouter (без embedding) для offline/edge-деплоев.
+    ///     Примеры: "python", "api", "debug", "web", "cli".
+    ///     Сериализуется как "tags" в skill.meta.json.
+    /// </summary>
+    [JsonPropertyName("tags")]
+    public List<string> Tags { get; set; } = new();
+
     // ─── Task 20: Skill Manifest & Compatibility ────────────────────────────────────
 
     /// <summary>

@@ -16,6 +16,7 @@ using Hercules.Skills.Eval;
 using Hercules.Skills.Marketplace;
 using Hercules.Skills.Routing;
 using Hercules.Skills.Routing.ScoringComponents;
+using Hercules.Skills.Routing.Deterministic;
 using Hercules.Storage;
 using Hercules.Tasks;
 using Hercules.Telegram;
@@ -264,12 +265,19 @@ builder.Services.AddSingleton<ISkillScoringEngine>(sp =>
         },
         sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>(),
         sp.GetService<EmbeddingScorer>()));
+// Task 023: Deterministic router (offline-safe keyword + tag + type matching)
+builder.Services.AddSingleton<IDeterministicRouter>(sp =>
+    new DeterministicRouter(
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<Phase2Config>().DeterministicRouting));
+
 builder.Services.AddSingleton<EmbeddingSkillRouter>(sp =>
     new EmbeddingSkillRouter(
         sp.GetRequiredService<SkillManager>(),
         sp.GetRequiredService<Phase2Config>(),
         sp.GetRequiredService<SkillRouter>(),
-        sp.GetService<ISkillScoringEngine>()));
+        sp.GetService<ISkillScoringEngine>(),
+        sp.GetService<IDeterministicRouter>()));
 
 // Phase 2: Skill marketplace + agent templates (task_021)
 builder.Services.AddSingleton<SkillMarketplace>(sp =>

@@ -33,7 +33,7 @@ public class EmbeddingSkillRouterTests : IDisposable
         };
 
         var legacyRouter = new SkillRouter(_skillManager);
-        _router = new EmbeddingSkillRouter(_skillManager, phase2Config, legacyRouter, scoringEngine: null);
+        _router = new EmbeddingSkillRouter(_skillManager, phase2Config, legacyRouter, scoringEngine: null, deterministicRouter: null);
     }
 
     public void Dispose()
@@ -103,7 +103,7 @@ public class EmbeddingSkillRouterTests : IDisposable
             SemanticRoutingEnabled = false,
             SimilarityThreshold = 0.1,
             KeywordFallback = true
-        }, new SkillRouter(_skillManager), scoringEngine: null);
+        }, new SkillRouter(_skillManager), scoringEngine: null, deterministicRouter: null);
 
         var result2 = await freshRouter.RouteAsync("напиши код");
         Assert.True(result2.IsSkill);
@@ -141,7 +141,7 @@ public class EmbeddingSkillRouterTests : IDisposable
         };
         var legacyRouter = new SkillRouter(_skillManager);
         var highThresholdRouter = new EmbeddingSkillRouter(
-            _skillManager, highThresholdConfig, legacyRouter, scoringEngine: null);
+            _skillManager, highThresholdConfig, legacyRouter, scoringEngine: null, deterministicRouter: null);
 
         _skillManager.CreateManual("Тест", ["тест"], "Промпт");
 
