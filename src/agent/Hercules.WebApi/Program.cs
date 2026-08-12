@@ -23,6 +23,7 @@ using Hercules.Telegram;
 using Hercules.Tools;
 using Hercules.Tools.Approval;
 using Hercules.Tools.Policy;
+using Hercules.Tools.Registry;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
 using Hercules.WebApi.Auth;
@@ -77,6 +78,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.A2A);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Mesh);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ToolPolicy);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ToolRegistry);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Approval);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Memory);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Budget);
@@ -154,6 +156,8 @@ builder.Services.AddSingleton<ToolPolicyEngine>(sp =>
         sp.GetRequiredService<IApprovalService>(),
         sp.GetRequiredService<IAuditService>()));
 builder.Services.AddSingleton<ToolRegistry>();
+builder.Services.AddSingleton<IToolRegistryService, ToolRegistryService>();
+builder.Services.AddHostedService<ToolHealthService>();
 builder.Services.AddSingleton<McpClient>();
 
 // WASM sandbox (v3) — Wasmtime-based code execution с capability-based isolation.
@@ -435,7 +439,9 @@ app.MapGet("/", () => Results.Ok(new
         "GET /agent.manifest.json", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
         "GET /api/mesh/agents/{id}", "DELETE /api/mesh/agents/{id}",
         "GET /api/mesh/capabilities", "GET /api/mesh/capabilities/{name}",
-        "GET /api/mesh/capabilities/search", "POST /api/mesh/intent"
+        "GET /api/mesh/capabilities/search", "POST /api/mesh/intent",
+        "GET /api/tools", "GET /api/tools/{name}", "GET /api/tools/{name}/health",
+        "GET /api/tools/categories", "POST /api/tools/{name}/enable", "POST /api/tools/{name}/disable"
     }
 }));
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", time = DateTime.UtcNow }));
@@ -457,9 +463,24 @@ app.MapSkillHarness();
 app.MapSelfImprovement();
 app.MapSkillManifest();
 app.MapTasks();
+app.MapToolRegistry();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");
 Console.WriteLine($"💾 Данные: {appConfig.Storage.DataRoot}");
+
+// Tool registry discovery (task_024)
+try
+{
+    var registry = app.Services.GetRequiredService<IToolRegistryService>();
+    var policyEngine = app.Services.GetService<ToolPolicyEngine>();
+    var logger = app.Services.GetService<ILogger<Program>>();
+    var discovered = ToolDiscovery.Discover(appConfig, registry, policyEngine, logger);
+    Console.WriteLine($"[ToolRegistry] {discovered} tools discovered from file system");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[ToolRegistry] Discovery failed: {ex.Message}");
+}
 
 app.Run();

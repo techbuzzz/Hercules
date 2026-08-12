@@ -22,6 +22,7 @@ public sealed class AppConfig
     public MarketplaceConfig Marketplace { get; set; } = new();
     public MeshConfig Mesh { get; set; } = new();
     public ToolPolicyConfig ToolPolicy { get; set; } = new();
+    public ToolRegistryConfig ToolRegistry { get; set; } = new();
     public ApprovalConfig Approval { get; set; } = new();
     public MemoryConfig Memory { get; set; } = new();
     public BudgetConfig Budget { get; set; } = new();
@@ -45,6 +46,33 @@ public sealed class ToolPolicyConfig
     public List<string> DeniedTools { get; set; } = new();
     public string AgentPermissions { get; set; } = "Read|Write|Network|Memory";
     public int DefaultTimeoutSeconds { get; set; } = 30;
+}
+
+/// <summary>
+///     Конфигурация реестра инструментов (task_024).
+///     Allow/deny patterns, health check interval, tool discovery directory.
+/// </summary>
+public sealed class ToolRegistryConfig
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Директория с tool declarations (data/Tools/*.tool.json).</summary>
+    public string ToolsDir { get; set; } = "data/Tools";
+
+    /// <summary>Allow patterns (glob). Пусто = все разрешены.</summary>
+    public List<string> AllowedPatterns { get; set; } = new() { "*" };
+
+    /// <summary>Deny patterns (glob, evaluated after allow).</summary>
+    public List<string> DeniedPatterns { get; set; } = new();
+
+    /// <summary>Интервал health check в секундах (0 = выключен).</summary>
+    public int HealthCheckIntervalSeconds { get; set; } = 60;
+
+    /// <summary>Дефолтный timeout для tools без override.</summary>
+    public int DefaultTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Число последовательных ошибок до Unhealthy статуса.</summary>
+    public int ConsecutiveFailureThreshold { get; set; } = 3;
 }
 
 /// <summary>

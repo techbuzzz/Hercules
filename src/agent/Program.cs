@@ -24,6 +24,7 @@ using Hercules.Telegram;
 using Hercules.Tools;
 using Hercules.Tools.Approval;
 using Hercules.Tools.Policy;
+using Hercules.Tools.Registry;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
 using HerculesBus;
@@ -137,6 +138,9 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<IApprovalService>(),
             sp.GetRequiredService<IAuditService>()));
     services.AddSingleton<ToolRegistry>();
+    services.AddSingleton(appConfig.ToolRegistry);
+    services.AddSingleton<IToolRegistryService, ToolRegistryService>();
+    services.AddHostedService<ToolHealthService>();
     services.AddSingleton<McpClient>();
 
     // WASM sandbox (v3)
@@ -356,6 +360,20 @@ builder.ConfigureServices((context, services) =>
 using var host = builder.Build();
 
 var appConfig = host.Services.GetRequiredService<AppConfig>();
+
+// Tool registry discovery (task_024)
+try
+{
+    var registry = host.Services.GetRequiredService<IToolRegistryService>();
+    var policyEngine = host.Services.GetService<ToolPolicyEngine>();
+    var logger = host.Services.GetService<ILogger>();
+    var discovered = ToolDiscovery.Discover(appConfig, registry, policyEngine, logger);
+    Console.WriteLine($"[ToolRegistry] {discovered} tools discovered from file system");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[ToolRegistry] Discovery failed: {ex.Message}");
+}
 
 // --- Выбор режима запуска ---
 using var cts = new CancellationTokenSource();
