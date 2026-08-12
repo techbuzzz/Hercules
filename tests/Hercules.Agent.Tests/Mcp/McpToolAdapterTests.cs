@@ -156,7 +156,7 @@ public class McpToolAdapterTests
         var result = await adapter.ExecuteAsync("{}");
 
         Assert.False(result.Success);
-        Assert.Contains("something went wrong", result.Output);
+        Assert.Contains("something went wrong", result.Error ?? "");
     }
 
     [Fact]
@@ -168,7 +168,9 @@ public class McpToolAdapterTests
         var result = await adapter.ExecuteAsync("not valid json");
 
         Assert.False(result.Success);
-        Assert.Contains("Invalid arguments JSON", result.Output);
+        // ToolResult.Fail puts text in Error property, not Output
+        Assert.NotNull(result.Error);
+        Assert.Contains("Invalid", result.Error);
     }
 
     [Fact]
@@ -222,7 +224,7 @@ public class McpToolAdapterTests
         var result = await adapter.ExecuteAsync("{}", cts.Token);
 
         Assert.False(result.Success);
-        Assert.Contains("cancelled", result.Output);
+        Assert.Contains("cancelled", result.Error ?? "");
     }
 
     [Fact]
