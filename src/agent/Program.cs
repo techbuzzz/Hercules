@@ -8,6 +8,7 @@ using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
+using Hercules.Observability;
 using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Telegram;
@@ -58,6 +59,9 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton(appConfig.A2A);
     services.AddSingleton(appConfig.Mesh);
     services.AddSingleton(appConfig.ToolPolicy);
+
+    // OpenTelemetry (task_013) — tracing + metrics
+    services.AddHerculesOtel(appConfig.Otel);
 
     // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
     services.AddSingleton<LlmClientFactory>();

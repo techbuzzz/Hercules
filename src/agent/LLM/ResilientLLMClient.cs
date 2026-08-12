@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Net;
 using System.Runtime.CompilerServices;
 using Hercules.Config;
+using Hercules.Observability;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.LLM;
@@ -15,15 +17,22 @@ public sealed class ResilientLLMClient : ILLMClient
     private readonly ILLMClientFactory _factory;
     private readonly ILogger<ResilientLLMClient> _logger;
     private readonly RoleRouter _roleRouter;
+    private readonly IOtelService? _otel;
     private volatile LlmConfig _cfg;
     private volatile List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
 
-    public ResilientLLMClient(LlmConfig cfg, ILLMClientFactory factory, RoleRouter roleRouter, ILogger<ResilientLLMClient> logger)
+    public ResilientLLMClient(
+        LlmConfig cfg,
+        ILLMClientFactory factory,
+        RoleRouter roleRouter,
+        ILogger<ResilientLLMClient> logger,
+        IOtelService? otel = null)
     {
         _cfg = cfg;
         _roleRouter = roleRouter;
         _factory = factory;
         _logger = logger;
+        _otel = otel;
         _mainChain = [];
         ProviderName = "";
         ModelName = "";
@@ -129,9 +138,28 @@ public sealed class ResilientLLMClient : ILLMClient
                     // Access lazy.Value inside try — Lazy<T> factory throws propagate here
                     client = lazy.Value;
                     usedClient = client;
+
+                    // [task_013] Trace and metrics for LLM call
+                    var llmSw = System.Diagnostics.Stopwatch.StartNew();
+                    using Activity? llmActivity = _otel?.StartActivity($"LLM.{name}", ActivityKind.Client);
+                    _otel?.SetTag(llmActivity, "llm.provider", name);
+                    _otel?.SetTag(llmActivity, "llm.model", client.ModelName);
+
                     LlmResponse resp = await client.CompleteAsync(messages, ct);
+                    llmSw.Stop();
+
                     ProviderName = client.ProviderName;
                     ModelName = client.ModelName;
+
+                    // [task_013] Record metrics
+                    OtelMetrics.LlmCallCounter.Add(1,
+                        new KeyValuePair<string, object?>("provider", client.ProviderName),
+                        new KeyValuePair<string, object?>("model", client.ModelName));
+                    OtelMetrics.LlmCallDurationHistogram.Record(llmSw.ElapsedMilliseconds);
+                    OtelMetrics.LlmInputTokensHistogram.Record(resp.InputTokens);
+                    OtelMetrics.LlmOutputTokensHistogram.Record(resp.OutputTokens);
+
+                    _otel?.StopActivity(llmActivity);
                     return resp;
                 }
                 catch (OperationCanceledException)

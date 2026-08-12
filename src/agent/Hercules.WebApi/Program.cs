@@ -8,6 +8,7 @@ using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
+using Hercules.Observability;
 using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Tools;
@@ -70,6 +71,10 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Approval);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Memory);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Budget);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Otel);
+
+    // OpenTelemetry (task_013) — tracing + metrics
+    builder.Services.AddHerculesOtel(appConfig.Otel);
 builder.Services.AddSingleton(webCfg);
 
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
@@ -310,6 +315,7 @@ app.MapBudget();
 app.MapAudit();
 app.MapLlm();
 app.MapApprovals();
+app.MapObservability();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");

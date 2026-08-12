@@ -8,6 +8,7 @@ using Hercules.Config;
 using Hercules.Contracts;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.Observability;
 using Hercules.Storage;
 using Hercules.Tools;
 using Hercules.Tools.Approval;
@@ -83,12 +84,14 @@ public sealed class AgentCore : IConfigReload
     private readonly IApprovalService? _approvals;
     private readonly IGuardrailService? _guardrails;
     private readonly BudgetGuard? _budgetGuard;
+    private readonly IOtelService? _otel;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
     private AgentConfig _cfg;
     private string _contextBlock = "";
     private string _lastInput = "";
+    private Activity? _currentHandleActivity;
 
     public AgentCore(
         ILLMClient llm,
@@ -103,7 +106,8 @@ public sealed class AgentCore : IConfigReload
         ToolPolicyEngine? policy = null,
         IApprovalService? approvals = null,
         IGuardrailService? guardrails = null,
-        BudgetGuard? budgetGuard = null)
+        BudgetGuard? budgetGuard = null,
+        IOtelService? otel = null)
     {
         _llm = llm;
         _router = router;
@@ -118,6 +122,7 @@ public sealed class AgentCore : IConfigReload
         _approvals = approvals;
         _guardrails = guardrails;
         _budgetGuard = budgetGuard;
+        _otel = otel;
     }
 
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
@@ -162,7 +167,38 @@ public sealed class AgentCore : IConfigReload
         BoundedExecutionOptions? options,
         CancellationToken externalCt = default)
     {
+        var handleSw = Stopwatch.StartNew();
+
+        // [task_013] Start agent-handle Activity (enclosing span for the whole request)
+        _currentHandleActivity = _otel?.StartActivity("AgentCore.Handle", ActivityKind.Server);
+        _otel?.SetTag(_currentHandleActivity, "hercules.session_id", SessionId);
+        _otel?.SetTag(_currentHandleActivity, "hercules.input_length", input.Length.ToString());
+
+        // [task_013] Ensure activity is stopped on every exit path
+        AgentResponse? result = null;
+        try
+        {
+            result = await HandleAsyncCore(input, options, externalCt, handleSw);
+        }
+        finally
+        {
+            _otel?.StopActivity(_currentHandleActivity);
+        }
+
+        return result!;
+    }
+
+    /// <summary>Inner body of HandleAsync — extracted for OTel finally-block cleanliness.</summary>
+    private async Task<AgentResponse> HandleAsyncCore(
+        string input,
+        BoundedExecutionOptions? options,
+        CancellationToken externalCt,
+        Stopwatch handleSw)
+    {
         CommandCount++;
+
+        // [task_013] Record handle call metric
+        OtelMetrics.HandleCounter.Add(1);
 
         // [task_012] Guardrail pre-check: hard-cap violations stop immediately
         if (_guardrails is not null && _budgetGuard is not null)
@@ -172,6 +208,9 @@ public sealed class AgentCore : IConfigReload
             if (degradation is not null)
             {
                 _logger.LogWarning("[BudgetGuard] Hard-cap pre-check failed — returning degradation response");
+                _otel?.SetErrorStatus(_currentHandleActivity, "guardrail_blocked");
+                handleSw.Stop();
+                OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
                 return new AgentResponse
                 {
                     Answer = degradation,
@@ -208,6 +247,19 @@ public sealed class AgentCore : IConfigReload
         _lastInput = input;
         var systemPrompt = BuildSystemPrompt(route.MatchedSkill);
         routeSw.Stop();
+
+        // [task_013] Record skill route activity and metric
+        using Activity? routeActivity = _otel?.StartActivity("AgentCore.SkillRoute", _currentHandleActivity?.Context ?? default, ActivityKind.Internal);
+        _otel?.SetTag(routeActivity, "skill.name", route.MatchedSkill?.Meta.Name ?? "(direct)");
+        _otel?.SetTag(routeActivity, "skill.id", route.MatchedSkill?.Meta.Id ?? "");
+        if (route.IsSkill)
+        {
+            OtelMetrics.SkillHitCounter.Add(1,
+                new KeyValuePair<string, object?>("skill.id", route.MatchedSkill!.Meta.Id),
+                new KeyValuePair<string, object?>("skill.name", route.MatchedSkill.Meta.Name));
+        }
+        _otel?.StopActivity(routeActivity);
+
         _logger.LogDebug("[Loop] {Step} finished in {ElapsedMs}ms — skill={SkillName}",
             LoopStep.SkillRoute, routeSw.ElapsedMilliseconds, route.MatchedSkill?.Meta.Name ?? "(direct)");
 
@@ -227,6 +279,9 @@ public sealed class AgentCore : IConfigReload
                 timeoutSeconds);
             // [task_012] Record elapsed time for guardrails
             _guardrails?.RecordElapsedTime(SessionId, wallClockTimeout is not null ? (long)wallClockTimeout.Value.TotalMilliseconds : 0);
+            _otel?.SetErrorStatus(_currentHandleActivity, "timeout");
+            handleSw.Stop();
+            OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
             return new AgentResponse
             {
                 Answer = "Запрос превысил максимальное время выполнения. Попробуйте упростить запрос или увеличить лимит.",
@@ -238,6 +293,9 @@ public sealed class AgentCore : IConfigReload
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Loop] {Step} failed: {Error}", LoopStep.LlmCall, ex.Message);
+            _otel?.SetErrorStatus(_currentHandleActivity, ex.Message);
+            handleSw.Stop();
+            OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
             return new AgentResponse
             {
                 Answer = $"Ошибка обращения к LLM: {ex.Message}",
@@ -279,6 +337,12 @@ public sealed class AgentCore : IConfigReload
         {
             _skills.RecordUsage(route.MatchedSkill!.Meta.Id, confidence != "low", confidence);
         }
+
+        // [task_013] Record final handle duration
+        _otel?.SetTag(_currentHandleActivity, "hercules.mode", mode);
+        _otel?.SetTag(_currentHandleActivity, "hercules.confidence", confidence);
+        handleSw.Stop();
+        OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
 
         // 5-6. Пороги (skill creation/improvement)
         return BuildResponse(answer, confidence, llmResp.Provider, route.MatchedSkill, toolUsed, mode);
@@ -374,6 +438,12 @@ public sealed class AgentCore : IConfigReload
             // [task_012] Record tool call for budget guardrails
             _guardrails?.RecordToolCall(SessionId);
 
+            // [task_013] Trace tool execution
+            var toolSw = System.Diagnostics.Stopwatch.StartNew();
+            using Activity? toolActivity = _otel?.StartActivity($"Tool.{toolName}", _currentHandleActivity?.Context ?? default, ActivityKind.Internal);
+            _otel?.SetTag(toolActivity, "tool.name", toolName);
+            _otel?.SetTag(toolActivity, "tool.iteration", iter.ToString());
+
             _logger.LogDebug("[Loop] {Step} started — tool={ToolName} iter={Iter}",
                 LoopStep.ToolExecute, toolName, iter);
 
@@ -381,6 +451,13 @@ public sealed class AgentCore : IConfigReload
             if (ctx.IsWallClockExpired)
             {
                 _logger.LogWarning("[Loop] {Step} — wall-clock timeout reached at iter={Iter}", LoopStep.ToolExecute, iter);
+                _otel?.SetErrorStatus(toolActivity, "wall_clock_timeout");
+                toolSw.Stop();
+                OtelMetrics.ToolCallDurationHistogram.Record(toolSw.ElapsedMilliseconds);
+                OtelMetrics.ToolCallCounter.Add(1,
+                    new KeyValuePair<string, object?>("tool", toolName),
+                    new KeyValuePair<string, object?>("status", "timeout"));
+                _otel?.StopActivity(toolActivity, System.Diagnostics.ActivityStatusCode.Error);
                 messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
                 messages.Add(new ChatTurn(ChatRole.System,
                     "[system] Execution timeout reached. Provide a final answer now."));
@@ -390,13 +467,44 @@ public sealed class AgentCore : IConfigReload
             if (ctx.CancellationRequested)
             {
                 _logger.LogWarning("[Loop] {Step} — cancelled by policy before execution", LoopStep.ToolExecute);
+                _otel?.SetErrorStatus(toolActivity, "cancelled_by_policy");
+                toolSw.Stop();
+                OtelMetrics.ToolCallDurationHistogram.Record(toolSw.ElapsedMilliseconds);
+                OtelMetrics.ToolCallCounter.Add(1,
+                    new KeyValuePair<string, object?>("tool", toolName),
+                    new KeyValuePair<string, object?>("status", "cancelled"));
+                _otel?.StopActivity(toolActivity, System.Diagnostics.ActivityStatusCode.Error);
                 messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
                 messages.Add(new ChatTurn(ChatRole.System,
                     "[system] Execution cancelled by policy. Provide a final answer now."));
                 break;
             }
 
-            ToolResult toolResult = await tool.ExecuteAsync(argsJson, ct);
+            ToolResult toolResult;
+            try
+            {
+                toolResult = await tool.ExecuteAsync(argsJson, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Loop] Tool '{Name}' threw: {Error}", toolName, ex.Message);
+                _otel?.SetErrorStatus(toolActivity, ex.Message);
+                toolSw.Stop();
+                OtelMetrics.ToolCallDurationHistogram.Record(toolSw.ElapsedMilliseconds);
+                OtelMetrics.ToolCallCounter.Add(1,
+                    new KeyValuePair<string, object?>("tool", toolName),
+                    new KeyValuePair<string, object?>("status", "error"));
+                _otel?.StopActivity(toolActivity, System.Diagnostics.ActivityStatusCode.Error);
+                throw;
+            }
+
+            toolSw.Stop();
+            OtelMetrics.ToolCallCounter.Add(1,
+                new KeyValuePair<string, object?>("tool", toolName),
+                new KeyValuePair<string, object?>("status", toolResult.Success ? "ok" : "fail"));
+            OtelMetrics.ToolCallDurationHistogram.Record(toolSw.ElapsedMilliseconds);
+            _otel?.SetTag(toolActivity, "tool.success", toolResult.Success.ToString());
+            _otel?.StopActivity(toolActivity);
             var resultContract = new ToolResultContract
             {
                 Success = toolResult.Success,

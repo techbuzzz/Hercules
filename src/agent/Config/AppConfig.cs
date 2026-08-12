@@ -62,6 +62,9 @@ public sealed class AppConfig
 
     /// <summary>Конфигурация бюджетов и guardrails (task_012).</summary>
     public BudgetConfig Budget { get; set; } = new();
+
+    /// <summary>Конфигурация OpenTelemetry (task_013). Трассировка, метрики, structured logs.</summary>
+    public OtelConfig Otel { get; set; } = new();
 }
 
 /// <summary>
@@ -500,4 +503,29 @@ public sealed class BudgetConfig
 
     /// <summary>Включить guardrails. false = все проверки отключены.</summary>
     public bool Enabled { get; set; } = true;
+}
+
+/// <summary>
+///     Конфигурация OpenTelemetry (task_013).
+///     Трассировка, метрики, structured logs. Console exporter по умолчанию; OTLP — опционально.
+/// </summary>
+public sealed class OtelConfig
+{
+    /// <summary>Включить OpenTelemetry (трассировка + метрики). false = всё отключено.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Имя сервиса для trace/metric identity (добавляется ко всем span/metric).</summary>
+    public string ServiceName { get; set; } = "hercules";
+
+    /// <summary>
+    ///     OTLP endpoint (например, http://localhost:4317).
+    ///     null/пусто = OTLP экспортёр не подключается (только console exporter).
+    /// </summary>
+    public string? OtlpEndpoint { get; set; }
+
+    /// <summary>
+    ///     Sampling ratio (0.0..1.0). 1.0 = все span'ы записываются; 0.1 = 10%.
+    ///     Для продакта рекомендуется 0.1–0.5 для снижения стоимости хранения.
+    /// </summary>
+    public double SamplingRatio { get; set; } = 1.0;
 }
