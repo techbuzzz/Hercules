@@ -73,6 +73,8 @@ builder.Services.AddSingleton<ResilientLLMClient>(sp =>
         sp.GetRequiredService<RoleRouter>(),
         sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
 builder.Services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
+builder.Services.AddSingleton<ProviderHealthChecker>();
+builder.Services.AddSingleton<ProviderCapabilityDetector>();
 
 // Code execution (Stage 2, v2)
 builder.Services.AddSingleton<SandboxOptions>(sp =>
@@ -235,6 +237,9 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/reflect", "GET /api/stats",
         "GET /api/budget", "GET /api/budget/monthly",
         "GET /api/audit", "GET /api/audit/{target}",
+        "GET /api/llm/health", "GET /api/llm/health/{provider}",
+        "GET /api/llm/capabilities", "GET /api/llm/capabilities/{provider}",
+        "GET /api/llm/config",
         "GET /api/config", "PUT /api/config", "PATCH /api/config",
         "GET /agent.manifest.json", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
         "GET /api/mesh/agents/{id}", "DELETE /api/mesh/agents/{id}",
@@ -254,6 +259,7 @@ app.MapConfig();
 app.MapMesh();
 app.MapBudget();
 app.MapAudit();
+app.MapLlm();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");

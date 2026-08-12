@@ -179,6 +179,32 @@ public sealed class LlmConfig
     public YandexGptConfig YandexGpt { get; set; } = new();
     public OllamaConfig OllamaCloud { get; set; } = new();
     public OllamaConfig OllamaLocal { get; set; } = new();
+    public OpenAICompatibleConfig OpenAICompatible { get; set; } = new();
+}
+
+/// <summary>
+///     Конфигурация OpenAI-совместимого провайдера (LM Studio, generic third-party).
+///     Использует стандартный OpenAI SDK с кастомным endpoint.
+/// </summary>
+public sealed class OpenAICompatibleConfig
+{
+    /// <summary>OpenAI-совместимый endpoint (например, http://localhost:1234/v1 для LM Studio).</summary>
+    public string Endpoint { get; set; } = "http://localhost:1234/v1";
+
+    /// <summary>API-ключ. Пусто = без аутентификации (для LM Studio local).</summary>
+    public string ApiKey { get; set; } = "";
+
+    /// <summary>Имя модели по умолчанию (например, llama3.1, mixtral-8x7b).</summary>
+    public string Model { get; set; } = "llama3.1";
+
+    public float Temperature { get; set; } = 0.6f;
+    public int MaxTokens { get; set; } = 2000;
+
+    /// <summary>Human-readable имя провайдера для UI и логов.</summary>
+    public string DisplayName { get; set; } = "OpenAI-Compatible";
+
+    /// <summary>Краткое описание для UI.</summary>
+    public string Description { get; set; } = "OpenAI-compatible endpoint (LM Studio, etc.)";
 }
 
 /// <summary>Параметры YandexGPT (OpenAI-совместимый endpoint).</summary>

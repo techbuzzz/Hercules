@@ -15,6 +15,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Hercules.Agent.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- AI-абстракции: единый интерфейс IChatClient для всех LLM-провайдеров -->
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.8.3" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.3" />

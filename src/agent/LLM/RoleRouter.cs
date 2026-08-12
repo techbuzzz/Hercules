@@ -10,12 +10,12 @@ namespace Hercules.LLM;
 public sealed class RoleRouter
 {
     private readonly Dictionary<string, ILLMClient> _cache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly LlmClientFactory _factory;
+    private readonly ILLMClientFactory _factory;
     private string _defaultProvider;
     private ILLMClient? _mainFallback;
     private Dictionary<string, RoleConfig> _roles;
 
-    public RoleRouter(AppConfig appConfig, LlmClientFactory factory)
+    public RoleRouter(AppConfig appConfig, ILLMClientFactory factory)
     {
         _factory = factory;
         _roles = appConfig.Roles ?? new Dictionary<string, RoleConfig>(StringComparer.OrdinalIgnoreCase);

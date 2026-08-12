@@ -1,3 +1,4 @@
+using System.Net;
 using System.Runtime.CompilerServices;
 using Hercules.Config;
 using Microsoft.Extensions.Logging;
@@ -11,13 +12,13 @@ namespace Hercules.LLM;
 /// </summary>
 public sealed class ResilientLLMClient : ILLMClient
 {
-    private readonly LlmClientFactory _factory;
+    private readonly ILLMClientFactory _factory;
     private readonly ILogger<ResilientLLMClient> _logger;
     private readonly RoleRouter _roleRouter;
     private volatile LlmConfig _cfg;
     private volatile List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
 
-    public ResilientLLMClient(LlmConfig cfg, LlmClientFactory factory, RoleRouter roleRouter, ILogger<ResilientLLMClient> logger)
+    public ResilientLLMClient(LlmConfig cfg, ILLMClientFactory factory, RoleRouter roleRouter, ILogger<ResilientLLMClient> logger)
     {
         _cfg = cfg;
         _roleRouter = roleRouter;
@@ -33,6 +34,22 @@ public sealed class ResilientLLMClient : ILLMClient
     public string ProviderName { get; private set; }
 
     public string ModelName { get; private set; }
+
+    /// <summary>Retry constants.</summary>
+    private const int MaxRetryAttempts = 3;
+    private const int BaseDelayMs = 500;
+    private const int MaxDelayMs = 8000;
+    private const double JitterFraction = 0.25;
+
+    /// <summary>HTTP status codes considered retryable.</summary>
+    private static readonly HashSet<HttpStatusCode> RetryableCodes =
+    [
+        HttpStatusCode.TooManyRequests,       // 429
+        HttpStatusCode.InternalServerError,   // 500
+        HttpStatusCode.BadGateway,            // 502
+        HttpStatusCode.ServiceUnavailable,    // 503
+        HttpStatusCode.GatewayTimeout         // 504
+    ];
 
     public Task<LlmResponse> CompleteAsync(string role, IReadOnlyList<ChatTurn> messages, CancellationToken ct = default)
     {
@@ -102,21 +119,55 @@ public sealed class ResilientLLMClient : ILLMClient
         Exception? last = null;
         foreach ((var name, Lazy<ILLMClient> lazy) in _mainChain)
         {
-            try
+            last = null;
+            ILLMClient? client = null;
+            for (var attempt = 0; attempt < MaxRetryAttempts; attempt++)
             {
-                LlmResponse resp = await lazy.Value.CompleteAsync(messages, ct);
-                ProviderName = lazy.Value.ProviderName;
-                ModelName = lazy.Value.ModelName;
-                return resp;
+                ILLMClient? usedClient = null;
+                try
+                {
+                    // Access lazy.Value inside try — Lazy<T> factory throws propagate here
+                    client = lazy.Value;
+                    usedClient = client;
+                    LlmResponse resp = await client.CompleteAsync(messages, ct);
+                    ProviderName = client.ProviderName;
+                    ModelName = client.ModelName;
+                    return resp;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    last = ex;
+                    var canRetry = attempt < MaxRetryAttempts - 1 && IsRetryable(ex);
+                    if (canRetry)
+                    {
+                        var delay = ComputeBackoff(attempt);
+                        _logger.LogWarning(
+                            "Provider '{Name}' attempt {Attempt}/{Max} failed ({Error}). Retrying in {Delay}ms...",
+                            name, attempt + 1, MaxRetryAttempts, ex.Message, delay);
+                        try
+                        {
+                            await Task.Delay(delay, ct);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Provider '{Name}' unavailable: {Message}. Trying next...", name, ex.Message);
+                        break;
+                    }
+                }
             }
-            catch (OperationCanceledException)
+
+            if (last is not null)
             {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                last = ex;
-                _logger.LogWarning("Provider '{Name}' unavailable: {Message}. Trying next...", name, ex.Message);
+                _logger.LogWarning("Provider '{Name}' exhausted retries. Trying next...", name);
             }
         }
 
@@ -218,5 +269,41 @@ public sealed class ResilientLLMClient : ILLMClient
                 yield return enumerator.Current;
             }
         }
+    }
+
+    /// <summary>Check if an exception is retryable (HTTP status or network).</summary>
+    internal static bool IsRetryable(Exception ex)
+    {
+        // Http Pipeline: HttpRequestException or derived with status code
+        if (ex is HttpRequestException hre && hre.StatusCode.HasValue)
+        {
+            return RetryableCodes.Contains(hre.StatusCode.Value);
+        }
+
+        // OpenAI SDK wraps HTTP status in inner exceptions
+        var current = ex.InnerException;
+        while (current is not null)
+        {
+            if (current is HttpRequestException ihre && ihre.StatusCode.HasValue)
+            {
+                return RetryableCodes.Contains(ihre.StatusCode.Value);
+            }
+
+            current = current.InnerException;
+        }
+
+        // Network-level errors are retryable
+        return ex is not OperationCanceledException;
+    }
+
+    /// <summary>Compute exponential backoff with jitter.</summary>
+    private static int ComputeBackoff(int attempt)
+    {
+        var exponential = BaseDelayMs * (int)Math.Pow(2, attempt);
+        var capped = Math.Min(exponential, MaxDelayMs);
+        var jitter = capped * JitterFraction;
+        var rand = Random.Shared.NextDouble();
+        var result = (int)(capped - jitter + 2 * jitter * rand);
+        return Math.Max(100, result);
     }
 }

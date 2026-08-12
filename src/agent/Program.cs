@@ -63,6 +63,8 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<RoleRouter>(),
             sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
     services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
+    services.AddSingleton<ProviderHealthChecker>();
+    services.AddSingleton<ProviderCapabilityDetector>();
 
     // Code execution (Stage 2, v2)
     services.AddSingleton<SandboxOptions>(sp =>
