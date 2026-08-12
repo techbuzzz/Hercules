@@ -6,15 +6,33 @@ import Layout from "../layouts/Layout.astro";
   <div class="mb-4 flex items-center justify-between">
     <div>
       <h1 class="text-xl font-semibold text-white">Навыки</h1>
-      <p class="text-sm text-gray-400">Просмотр, создание и улучшение навыков агента.</p>
+      <p class="text-sm text-gray-400">Просмотр, создание, оценка и управление жизненным циклом навыков.</p>
     </div>
-    <button
-      id="new-skill-btn"
-      type="button"
-      class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
-    >
-      + Новый навык
-    </button>
+    <div class="flex gap-2">
+      <button
+        id="show-deprecated-btn"
+        type="button"
+        class="rounded-xl border border-white/10 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/5"
+      >
+        Deprecated
+      </button>
+      <button
+        id="new-skill-btn"
+        type="button"
+        class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
+      >
+        + Новый навык
+      </button>
+    </div>
+  </div>
+
+  <!-- Deprecated skills panel -->
+  <div id="deprecated-panel" class="mb-6 hidden rounded-xl border border-amber-500/30 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h2 class="font-medium text-amber-300">Deprecated навыки</h2>
+      <button id="hide-deprecated" type="button" class="text-xs text-gray-400 hover:text-gray-200">Скрыть</button>
+    </div>
+    <div id="deprecated-list" class="flex flex-col gap-2"></div>
   </div>
 
   <!-- Форма создания/редактирования -->
@@ -49,6 +67,9 @@ import Layout from "../layouts/Layout.astro";
   <div id="skills-grid" class="grid gap-4 sm:grid-cols-2">
     <div class="text-sm text-gray-500">Загрузка навыков…</div>
   </div>
+
+  <!-- Toast notifications -->
+  <div id="toast" class="fixed bottom-6 right-6 hidden max-w-sm rounded-xl border px-4 py-3 text-sm shadow-xl"></div>
 </Layout>
 
 <script>
@@ -65,9 +86,23 @@ import Layout from "../layouts/Layout.astro";
   const fPrompt = document.getElementById("f-prompt") as HTMLTextAreaElement;
   const fStatus = document.getElementById("f-status")!;
   const fSave = document.getElementById("f-save") as HTMLButtonElement;
+  const deprecatedPanel = document.getElementById("deprecated-panel")!;
+  const deprecatedList = document.getElementById("deprecated-list")!;
+  const toast = document.getElementById("toast")!;
 
   function esc(s: string) {
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function toastShow(msg: string, type: "ok" | "err" = "ok") {
+    toast.textContent = msg;
+    toast.className = `fixed bottom-6 right-6 max-w-sm rounded-xl border px-4 py-3 text-sm shadow-xl ${
+      type === "ok"
+        ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"
+        : "border-rose-500/50 bg-rose-500/10 text-rose-200"
+    }`;
+    toast.classList.remove("hidden");
+    setTimeout(() => toast.classList.add("hidden"), 4000);
   }
 
   function rateColor(r: number) {
@@ -80,12 +115,16 @@ import Layout from "../layouts/Layout.astro";
   function cardHtml(s: SkillDto): string {
     const rate = Math.round((s.successRate ?? 0) * 100);
     const triggers = s.triggers.map((t) => `<span class="mono rounded bg-white/5 px-2 py-0.5 text-[11px] text-gray-300">${esc(t)}</span>`).join("");
+    const evalScore = (s as any).lastEvaluationScore != null
+      ? `<span class="mono rounded bg-violet-500/15 px-1.5 py-0.5 text-[11px] text-violet-300">оценка: ${((s as any).lastEvaluationScore * 100).toFixed(0)}%</span>`
+      : "";
     return `
       <div class="flex flex-col gap-3 rounded-xl border border-white/10 bg-[#101012] p-4 transition-colors hover:border-white/20">
         <div class="flex items-start justify-between gap-2">
           <div>
             <h3 class="font-semibold text-white">${esc(s.name)}</h3>
             ${s.description ? `<p class="mt-0.5 text-xs text-gray-400">${esc(s.description)}</p>` : ""}
+            ${evalScore}
           </div>
           <span class="mono shrink-0 rounded bg-violet-500/15 px-2 py-0.5 text-[11px] text-violet-300">v${s.version}</span>
         </div>
@@ -97,9 +136,29 @@ import Layout from "../layouts/Layout.astro";
         <div class="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
           <div class="h-full rounded-full ${barColor(rate)}" style="width:${Math.max(rate, 2)}%"></div>
         </div>
-        <div class="flex gap-2 pt-1">
+        <div class="flex flex-wrap gap-1.5 pt-1">
           <button type="button" data-edit="${s.id}" class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">Редактировать</button>
           <button type="button" data-improve="${s.id}" class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200 transition-colors hover:bg-amber-500/20">Улучшить (ИИ)</button>
+          <button type="button" data-evaluate="${s.id}" class="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-200 transition-colors hover:bg-sky-500/20">Оценить</button>
+          <button type="button" data-deprecate="${s.id}" class="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-300 transition-colors hover:bg-amber-500/15">Deprecated</button>
+        </div>
+      </div>`;
+  }
+
+  function deprecatedCardHtml(s: SkillDto): string {
+    const reason = (s as any).deprecationReason || "";
+    const at = (s as any).deprecatedAt ? new Date((s as any).deprecatedAt).toLocaleDateString("ru") : "";
+    return `
+      <div class="flex items-center justify-between gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+        <div>
+          <span class="font-medium text-amber-200">${esc(s.name)}</span>
+          <span class="ml-2 text-xs text-gray-500">v${s.version}</span>
+          ${reason ? `<p class="mt-0.5 text-xs text-gray-400">${esc(reason)}</p>` : ""}
+          ${at ? `<p class="text-xs text-gray-600">deprecated: ${at}</p>` : ""}
+        </div>
+        <div class="flex shrink-0 gap-1.5">
+          <button type="button" data-rollback="${s.id}" class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">Откат</button>
+          <button type="button" data-undeprecate="${s.id}" class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200 transition-colors hover:bg-emerald-500/20">Восстановить</button>
         </div>
       </div>`;
   }
@@ -120,12 +179,42 @@ import Layout from "../layouts/Layout.astro";
     }
   }
 
+  async function loadDeprecated() {
+    try {
+      const d = await api.getDeprecatedSkills();
+      if (d.count === 0) {
+        deprecatedList.innerHTML = `<div class="text-xs text-gray-500">Нет deprecated навыков.</div>`;
+      } else {
+        deprecatedList.innerHTML = d.skills.map(deprecatedCardHtml).join("");
+        bindDeprecated();
+      }
+      deprecatedPanel.classList.remove("hidden");
+    } catch (e) {
+      toastShow("Ошибка загрузки deprecated: " + (e instanceof Error ? e.message : e), "err");
+    }
+  }
+
   function bindCards() {
     grid.querySelectorAll<HTMLButtonElement>("[data-edit]").forEach((b) =>
       b.addEventListener("click", () => openEdit(b.dataset.edit!))
     );
     grid.querySelectorAll<HTMLButtonElement>("[data-improve]").forEach((b) =>
       b.addEventListener("click", () => improve(b.dataset.improve!, b))
+    );
+    grid.querySelectorAll<HTMLButtonElement>("[data-evaluate]").forEach((b) =>
+      b.addEventListener("click", () => evaluate(b.dataset.evaluate!, b))
+    );
+    grid.querySelectorAll<HTMLButtonElement>("[data-deprecate]").forEach((b) =>
+      b.addEventListener("click", () => deprecate(b.dataset.deprecate!))
+    );
+  }
+
+  function bindDeprecated() {
+    deprecatedList.querySelectorAll<HTMLButtonElement>("[data-rollback]").forEach((b) =>
+      b.addEventListener("click", () => rollback(b.dataset.rollback!))
+    );
+    deprecatedList.querySelectorAll<HTMLButtonElement>("[data-undeprecate]").forEach((b) =>
+      b.addEventListener("click", () => undeprecate(b.dataset.undeprecate!))
     );
   }
 
@@ -149,7 +238,7 @@ import Layout from "../layouts/Layout.astro";
       const d = await api.getSkill(id);
       fId.value = d.meta.id;
       fName.value = d.meta.name;
-      fName.disabled = true; // имя навыка не меняем
+      fName.disabled = true;
       fTriggers.value = d.meta.triggers.join(", ");
       fDesc.value = d.meta.description || "";
       fPrompt.value = d.prompt || "";
@@ -161,19 +250,69 @@ import Layout from "../layouts/Layout.astro";
     }
   }
 
+  async function evaluate(id: string, btn: HTMLButtonElement) {
+    const old = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Оценка…";
+    try {
+      const r = await api.evaluateSkill(id);
+      toastShow(`Оценка завершена: ${r.passed ? "PASS" : "FAIL"} (${(r.score * 100).toFixed(0)}%)`, r.passed ? "ok" : "err");
+      await load();
+    } catch (e) {
+      toastShow("Ошибка оценки: " + (e instanceof Error ? e.message : e), "err");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = old;
+    }
+  }
+
+  async function deprecate(id: string) {
+    const reason = prompt("Причина депрекации:");
+    if (reason === null) return;
+    try {
+      await api.deprecateSkill(id, reason);
+      toastShow("Навык помечен как deprecated.");
+      await load();
+      await loadDeprecated();
+    } catch (e) {
+      toastShow("Ошибка: " + (e instanceof Error ? e.message : e), "err");
+    }
+  }
+
+  async function rollback(id: string) {
+    if (!confirm("Откатить навык к предыдущей версии?")) return;
+    try {
+      await api.rollbackSkill(id);
+      toastShow("Навык откащен.");
+      await load();
+      await loadDeprecated();
+    } catch (e) {
+      toastShow("Ошибка отката: " + (e instanceof Error ? e.message : e), "err");
+    }
+  }
+
+  async function undeprecate(id: string) {
+    try {
+      await api.undeprecateSkill(id);
+      toastShow("Deprecated-статус снят.");
+      await load();
+      await loadDeprecated();
+    } catch (e) {
+      toastShow("Ошибка: " + (e instanceof Error ? e.message : e), "err");
+    }
+  }
+
   async function improve(id: string, btn: HTMLButtonElement) {
     if (!confirm("Запустить улучшение навыка с помощью ИИ? Будет создана новая версия.")) return;
     const old = btn.textContent;
     btn.disabled = true;
     btn.textContent = "Улучшение…";
     try {
-      await fetch(`${(await import("../lib/api")).API_BASE}/api/skills/${id}/improve`, {
-        method: "POST",
-        headers: { "X-Api-Key": (await import("../lib/api")).API_KEY },
-      }).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); });
+      await api.improveSkill(id);
+      toastShow("Навык улучшен!");
       await load();
     } catch (e) {
-      alert("Ошибка улучшения: " + (e instanceof Error ? e.message : e));
+      toastShow("Ошибка улучшения: " + (e instanceof Error ? e.message : e), "err");
       btn.disabled = false;
       btn.textContent = old;
     }
@@ -201,6 +340,8 @@ import Layout from "../layouts/Layout.astro";
 
   document.getElementById("new-skill-btn")!.addEventListener("click", openCreate);
   document.getElementById("f-cancel")!.addEventListener("click", () => formBox.classList.add("hidden"));
+  document.getElementById("show-deprecated-btn")!.addEventListener("click", loadDeprecated);
+  document.getElementById("hide-deprecated")!.addEventListener("click", () => deprecatedPanel.classList.add("hidden"));
 
   load();
 </script>

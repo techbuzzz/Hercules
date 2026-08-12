@@ -137,6 +137,12 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<SkillMarketplace>();
     services.AddSingleton<AgentTemplateManager>();
 
+    // Skill lifecycle (task_005)
+    services.AddSingleton<SkillLifecyclePolicy>();
+    services.AddSingleton<SkillDeprecationManager>();
+    services.AddSingleton<SkillEvaluationEngine>();
+    services.AddSingleton<SkillLifecycleService>();
+
     // Агент
     services.AddSingleton<SkillManager>();
     services.AddSingleton<SkillRouter>();

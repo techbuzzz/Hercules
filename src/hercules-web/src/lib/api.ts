@@ -54,6 +54,63 @@ export interface ChatResponseDto {
   proposeImproveSkillName: string | null;
 }
 
+export interface SkillEvaluationResultDto {
+  skillId: string;
+  score: number;
+  passed: boolean;
+  perTestResults: { testName: string; passed: boolean; details: string }[];
+  evaluatedAt: string;
+}
+
+export interface DeprecatedSkillsDto {
+  count: number;
+  skills: SkillDto[];
+}
+
+export interface AuditEntryDto {
+  id: number;
+  actor: string;
+  action: string;
+  target: string;
+  details: string;
+  sessionId: string;
+  createdAt: string;
+}
+
+export interface AuditLogDto {
+  count: number;
+  entries: AuditEntryDto[];
+}
+
+export interface BudgetDailyDto {
+  date: string;
+  calls: number;
+  costUsd: number;
+}
+
+export interface BudgetSummaryDto {
+  totalCalls: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCostUsd: number;
+}
+
+export interface BudgetDto {
+  periodDays: number;
+  summary: BudgetSummaryDto;
+  daily: BudgetDailyDto[];
+}
+
+export interface BudgetMonthlyDto {
+  month: string;
+  totalCalls: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCostUsd: number;
+  limitUsd: number | null;
+  isOverBudget: boolean;
+}
+
 export interface StatsDto {
   totalInteractions: number;
   skillBased: number;
@@ -150,5 +207,78 @@ export const api = {
       body: JSON.stringify(patch),
     });
     return handle<ConfigDto>(res);
+  },
+
+  // ---- Skill lifecycle ----
+
+  async evaluateSkill(id: string): Promise<SkillEvaluationResultDto> {
+    const res = await fetch(`${API_BASE}/api/skills/${encodeURIComponent(id)}/evaluate`, {
+      method: "POST",
+      headers: headers(false),
+    });
+    return handle<SkillEvaluationResultDto>(res);
+  },
+
+  async deprecateSkill(id: string, reason: string): Promise<SkillDto> {
+    const res = await fetch(`${API_BASE}/api/skills/${encodeURIComponent(id)}/deprecate`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ reason }),
+    });
+    return handle<SkillDto>(res);
+  },
+
+  async rollbackSkill(id: string): Promise<SkillDto> {
+    const res = await fetch(`${API_BASE}/api/skills/${encodeURIComponent(id)}/rollback`, {
+      method: "POST",
+      headers: headers(false),
+    });
+    return handle<SkillDto>(res);
+  },
+
+  async undeprecateSkill(id: string): Promise<SkillDto> {
+    const res = await fetch(`${API_BASE}/api/skills/${encodeURIComponent(id)}/undeprecate`, {
+      method: "POST",
+      headers: headers(false),
+    });
+    return handle<SkillDto>(res);
+  },
+
+  async improveSkill(id: string): Promise<SkillDto> {
+    const res = await fetch(`${API_BASE}/api/skills/${encodeURIComponent(id)}/improve`, {
+      method: "POST",
+      headers: headers(false),
+    });
+    return handle<SkillDto>(res);
+  },
+
+  async getDeprecatedSkills(): Promise<DeprecatedSkillsDto> {
+    const res = await fetch(`${API_BASE}/api/skills/deprecated`, { headers: headers(false) });
+    return handle<DeprecatedSkillsDto>(res);
+  },
+
+  // ---- Budget ----
+
+  async getBudget(days = 30): Promise<BudgetDto> {
+    const res = await fetch(`${API_BASE}/api/budget?days=${days}`, { headers: headers(false) });
+    return handle<BudgetDto>(res);
+  },
+
+  async getBudgetMonthly(limitUsd?: number): Promise<BudgetMonthlyDto> {
+    const url = limitUsd != null ? `${API_BASE}/api/budget/monthly?limit=${limitUsd}` : `${API_BASE}/api/budget/monthly`;
+    const res = await fetch(url, { headers: headers(false) });
+    return handle<BudgetMonthlyDto>(res);
+  },
+
+  // ---- Audit ----
+
+  async getAudit(limit = 100): Promise<AuditLogDto> {
+    const res = await fetch(`${API_BASE}/api/audit?limit=${limit}`, { headers: headers(false) });
+    return handle<AuditLogDto>(res);
+  },
+
+  async getAuditByTarget(target: string, limit = 50): Promise<AuditLogDto> {
+    const res = await fetch(`${API_BASE}/api/audit/${encodeURIComponent(target)}?limit=${limit}`, { headers: headers(false) });
+    return handle<AuditLogDto>(res);
   },
 };

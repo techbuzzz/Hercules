@@ -1,6 +1,6 @@
 ---
 // Дашборд статистики: ключевые метрики, соотношение навык/прямой,
-// активность по дням (CSS-столбцы) и отчёт рефлексии.
+// активность по дням (CSS-столбцы), бюджет, аудит и отчёт рефлексии.
 ---
 
 <div class="flex flex-col gap-6">
@@ -37,11 +37,67 @@
     </div>
   </div>
 
+  <!-- Бюджет -->
+  <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">Бюджет LLM (30 дней)</h3>
+      <button
+        id="budget-refresh"
+        type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5"
+      >
+        Обновить
+      </button>
+    </div>
+    <div id="budget-cards" class="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3">
+        <div class="text-lg font-semibold text-white" id="b-calls">—</div>
+        <div class="text-xs text-gray-400">Вызовов LLM</div>
+      </div>
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3">
+        <div class="text-lg font-semibold text-emerald-400" id="b-tokens-in">—</div>
+        <div class="text-xs text-gray-400">Входных токенов</div>
+      </div>
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3">
+        <div class="text-lg font-semibold text-sky-400" id="b-tokens-out">—</div>
+        <div class="text-xs text-gray-400">Выходных токенов</div>
+      </div>
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3">
+        <div class="text-lg font-semibold text-amber-400" id="b-cost">—</div>
+        <div class="text-xs text-gray-400">Стоимость (USD)</div>
+      </div>
+    </div>
+    <div id="budget-chart" class="flex h-20 items-end gap-1"></div>
+    <div id="budget-empty" class="text-xs text-gray-500">Нет данных о бюджете.</div>
+    <div id="budget-monthly" class="mt-3 rounded-lg border border-white/5 bg-[#0a0a0b] p-3 text-xs text-gray-400 hidden">
+      <span id="budget-monthly-text"></span>
+    </div>
+    <div id="budget-error" class="mt-2 hidden text-xs text-rose-400"></div>
+  </div>
+
   <!-- Активность по дням -->
   <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
     <h3 class="mb-4 text-sm font-medium text-gray-300">Активность по дням</h3>
     <div id="byday" class="flex h-44 items-end gap-1.5"></div>
     <div id="byday-empty" class="text-xs text-gray-500">Нет данных.</div>
+  </div>
+
+  <!-- Аудит -->
+  <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">Аудит (последние 50 событий)</h3>
+      <button
+        id="audit-refresh"
+        type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5"
+      >
+        Обновить
+      </button>
+    </div>
+    <div id="audit-list" class="max-h-64 overflow-y-auto">
+      <div id="audit-empty" class="text-xs text-gray-500">Нет записей аудита.</div>
+    </div>
+    <div id="audit-error" class="mt-2 hidden text-xs text-rose-400"></div>
   </div>
 
   <!-- Рефлексия -->
@@ -71,6 +127,12 @@
     const e = $("stats-error");
     e.classList.remove("hidden");
     e.textContent = "Ошибка: " + msg;
+  }
+
+  function fmtNum(n: number): string {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+    return String(n);
   }
 
   async function loadStats() {
@@ -121,6 +183,85 @@
     }
   }
 
+  async function loadBudget() {
+    const errEl = $("budget-error");
+    errEl.classList.add("hidden");
+    try {
+      const b = await api.getBudget(30);
+      $("b-calls").textContent = fmtNum(b.summary.totalCalls);
+      $("b-tokens-in").textContent = fmtNum(b.summary.totalInputTokens);
+      $("b-tokens-out").textContent = fmtNum(b.summary.totalOutputTokens);
+      $("b-cost").textContent = "$" + b.summary.totalCostUsd.toFixed(4);
+
+      // Daily chart
+      const host = $("budget-chart");
+      const empty = $("budget-empty");
+      host.innerHTML = "";
+      const daily = b.daily || [];
+      if (daily.length === 0) {
+        empty.classList.remove("hidden");
+      } else {
+        empty.classList.add("hidden");
+        const maxCost = Math.max(0.0001, ...daily.map((d) => d.costUsd));
+        for (const d of daily.slice(-14)) {
+          const col = document.createElement("div");
+          const h = Math.max(2, (d.costUsd / maxCost) * 100);
+          col.className = "group relative flex flex-1 flex-col items-center justify-end";
+          col.innerHTML = `
+            <div class="w-full max-w-[20px] rounded-t bg-amber-500/70" style="height:${h}%"></div>
+            <div class="mono text-[9px] text-gray-600">${d.date.slice(5)}</div>
+            <div class="pointer-events-none absolute -top-7 hidden rounded bg-black px-2 py-1 text-[10px] text-gray-200 group-hover:block">$${d.costUsd.toFixed(4)}</div>
+          `;
+          host.appendChild(col);
+        }
+      }
+
+      // Monthly
+      const m = await api.getBudgetMonthly();
+      const monthlyEl = $("budget-monthly");
+      const monthlyText = $("budget-monthly-text");
+      monthlyEl.classList.remove("hidden");
+      const overBudget = m.limitUsd != null && m.isOverBudget;
+      const costColor = overBudget ? "text-rose-400" : "text-emerald-400";
+      monthlyText.innerHTML = `<span class="text-gray-300">${m.month}</span> — ` +
+        `<span class="${costColor}">$${m.totalCostUsd.toFixed(4)}</span> ` +
+        (m.limitUsd != null ? `<span class="text-gray-500">из $${m.limitUsd.toFixed(2)}</span>` : "") +
+        (overBudget ? ` <span class="text-rose-400 font-medium">⚠ Превышен!</span>` : "");
+    } catch (e) {
+      errEl.textContent = "Не удалось загрузить бюджет: " + (e instanceof Error ? e.message : e);
+      errEl.classList.remove("hidden");
+    }
+  }
+
+  async function loadAudit() {
+    const errEl = $("audit-error");
+    errEl.classList.add("hidden");
+    try {
+      const a = await api.getAudit(50);
+      const host = $("audit-list");
+      if (a.count === 0) {
+        host.innerHTML = `<div id="audit-empty" class="text-xs text-gray-500">Нет записей аудита.</div>`;
+        return;
+      }
+      host.innerHTML = a.entries.map((e) => {
+        const time = new Date(e.createdAt).toLocaleString("ru", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+        return `<div class="flex gap-3 border-b border-white/5 py-2 text-xs">
+          <span class="mono shrink-0 text-gray-600">${time}</span>
+          <span class="shrink-0 rounded bg-violet-500/15 px-1.5 py-0.5 text-violet-300">${esc(e.actor)}</span>
+          <span class="shrink-0 rounded bg-sky-500/15 px-1.5 py-0.5 text-sky-300">${esc(e.action)}</span>
+          <span class="truncate text-gray-400">${esc(e.target || "-")}</span>
+        </div>`;
+      }).join("");
+    } catch (e) {
+      errEl.textContent = "Не удалось загрузить аудит: " + (e instanceof Error ? e.message : e);
+      errEl.classList.remove("hidden");
+    }
+  }
+
+  function esc(s: string) {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
   $("reflect-btn").addEventListener("click", async () => {
     const out = $("reflect-out");
     const btn = $("reflect-btn") as HTMLButtonElement;
@@ -136,5 +277,10 @@
     }
   });
 
+  $("budget-refresh").addEventListener("click", loadBudget);
+  $("audit-refresh").addEventListener("click", loadAudit);
+
   loadStats();
+  loadBudget();
+  loadAudit();
 </script>
