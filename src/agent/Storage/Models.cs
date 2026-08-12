@@ -114,3 +114,65 @@ public sealed record InteractionLog(
     string? SkillId,
     string Provider,
     DateTime CreatedAt);
+
+/// <summary>
+///     Запись одного бюджетного списания (один LLM-вызов).
+///     Хранится в SQLite. Ключ — session_id + created_at.
+/// </summary>
+public sealed record BudgetEntry(
+    long Id,
+    string SessionId,
+    string Provider,     // "yandexgpt", "ollama-cloud", etc.
+    string Model,
+    int InputTokens,
+    int OutputTokens,
+    decimal CostUsd,
+    DateTime CreatedAt);
+
+/// <summary>
+///     Сводка по бюджету за период.
+/// </summary>
+public sealed record BudgetSummary(
+    int TotalCalls,
+    int TotalInputTokens,
+    int TotalOutputTokens,
+    decimal TotalCostUsd);
+
+/// <summary>
+///     Один аудит-лог: фиксация действия агента или пользователя.
+/// </summary>
+public sealed record AuditLogEntry(
+    long Id,
+    string Actor,        // "agent", "user", "system"
+    string Action,       // "skill_created", "skill_deleted", "config_changed", etc.
+    string? Target,      // skill_id, session_id, etc.
+    string? Details,     // JSON payload
+    string? SessionId,
+    DateTime CreatedAt);
+
+/// <summary>
+///     Результат оценки навыка (SkillEvaluationEngine).
+///     Хранится в SQLite для истории и анализа трендов.
+/// </summary>
+public sealed record SkillEvaluationRecord(
+    long Id,
+    string SkillId,
+    double Score,        // 0..1
+    bool Passed,
+    string? TestResults,  // JSON array: [{test, passed, duration_ms, error?}]
+    string EvaluatorProvider,
+    DateTime CreatedAt);
+
+/// <summary>
+///     Устойчивое состояние задачи (для durable task lifecycle).
+///     Таблица: task_states.
+/// </summary>
+public sealed record TaskState(
+    long Id,
+    string TaskId,
+    string Status,       // pending | in_progress | done | blocked | failed
+    string? Result,
+    string? Error,
+    string? Metadata,    // JSON: tags, priority, assignee, etc.
+    DateTime CreatedAt,
+    DateTime UpdatedAt);

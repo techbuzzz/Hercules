@@ -120,6 +120,10 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<MemoryStore>();
     services.AddSingleton<SqliteSessionStore>();
 
+    // Hybrid storage services (task_003)
+    services.AddSingleton<IBudgetService, BudgetService>();
+    services.AddSingleton<IAuditLog, AuditLogService>();
+
     // Phase 2: Skill packager
     services.AddSingleton<SkillPackager>();
 

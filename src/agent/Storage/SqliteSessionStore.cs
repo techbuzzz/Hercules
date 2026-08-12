@@ -94,9 +94,57 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
                                blocked_patterns TEXT,
                                created_at      TEXT NOT NULL
                            );
+                           -- task_003: budget tracking
+                           CREATE TABLE IF NOT EXISTS budget_entries (
+                               id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                               session_id      TEXT NOT NULL,
+                               provider        TEXT NOT NULL,
+                               model           TEXT NOT NULL,
+                               input_tokens    INTEGER NOT NULL DEFAULT 0,
+                               output_tokens   INTEGER NOT NULL DEFAULT 0,
+                               cost_usd        REAL NOT NULL DEFAULT 0,
+                               created_at      TEXT NOT NULL
+                           );
+                           -- task_003: audit log
+                           CREATE TABLE IF NOT EXISTS audit_log (
+                               id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                               actor           TEXT NOT NULL,
+                               action          TEXT NOT NULL,
+                               target          TEXT,
+                               details         TEXT,
+                               session_id      TEXT,
+                               created_at      TEXT NOT NULL
+                           );
+                           -- task_003: skill evaluation history
+                           CREATE TABLE IF NOT EXISTS skill_evaluations (
+                               id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                               skill_id            TEXT NOT NULL,
+                               score               REAL NOT NULL,
+                               passed              INTEGER NOT NULL,
+                               test_results        TEXT,
+                               evaluator_provider  TEXT NOT NULL,
+                               created_at          TEXT NOT NULL
+                           );
+                           -- task_003: durable task state
+                           CREATE TABLE IF NOT EXISTS task_states (
+                               id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                               task_id         TEXT NOT NULL UNIQUE,
+                               status          TEXT NOT NULL,
+                               result          TEXT,
+                               error           TEXT,
+                               metadata        TEXT,
+                               created_at      TEXT NOT NULL,
+                               updated_at      TEXT NOT NULL
+                           );
                            CREATE INDEX IF NOT EXISTS ix_interactions_session ON interactions(session_id);
                            CREATE INDEX IF NOT EXISTS ix_interactions_created ON interactions(created_at);
                            CREATE INDEX IF NOT EXISTS ix_sandbox_executions_session ON sandbox_executions(session_id);
+                           CREATE INDEX IF NOT EXISTS ix_budget_session ON budget_entries(session_id);
+                           CREATE INDEX IF NOT EXISTS ix_budget_created ON budget_entries(created_at);
+                           CREATE INDEX IF NOT EXISTS ix_audit_created ON audit_log(created_at);
+                           CREATE INDEX IF NOT EXISTS ix_audit_target ON audit_log(target);
+                           CREATE INDEX IF NOT EXISTS ix_eval_skill ON skill_evaluations(skill_id);
+                           CREATE INDEX IF NOT EXISTS ix_task_taskid ON task_states(task_id);
                            """;
         using SqliteCommand cmd = _conn.CreateCommand();
         cmd.CommandText = sql;
@@ -493,6 +541,372 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
     public double GetRecentSandboxFailureRate(int window = 5)
     {
         return GetRecentSandboxFailureRateAsync(window).GetAwaiter().GetResult();
+    }
+
+    // ---- Budget tracking (task_003) ----
+
+    public async Task LogBudgetEntryAsync(
+        string sessionId,
+        string provider,
+        string model,
+        int inputTokens,
+        int outputTokens,
+        decimal costUsd,
+        CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          INSERT INTO budget_entries (session_id, provider, model, input_tokens, output_tokens, cost_usd, created_at)
+                          VALUES ($s, $p, $m, $it, $ot, $c, $t)
+                          """;
+        cmd.Parameters.AddWithValue("$s", sessionId);
+        cmd.Parameters.AddWithValue("$p", provider);
+        cmd.Parameters.AddWithValue("$m", model);
+        cmd.Parameters.AddWithValue("$it", inputTokens);
+        cmd.Parameters.AddWithValue("$ot", outputTokens);
+        cmd.Parameters.AddWithValue("$c", costUsd);
+        cmd.Parameters.AddWithValue("$t", DateTime.UtcNow.ToString("o"));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public void LogBudgetEntry(string sessionId, string provider, string model, int inputTokens, int outputTokens, decimal costUsd)
+    {
+        LogBudgetEntryAsync(sessionId, provider, model, inputTokens, outputTokens, costUsd).GetAwaiter().GetResult();
+    }
+
+    public async Task<BudgetSummary> GetBudgetSummaryAsync(DateTime? since = null, CancellationToken ct = default)
+    {
+        var sinceStr = since?.ToString("o") ?? "1970-01-01";
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          SELECT
+                              COUNT(*),
+                              COALESCE(SUM(input_tokens), 0),
+                              COALESCE(SUM(output_tokens), 0),
+                              COALESCE(SUM(cost_usd), 0.0)
+                          FROM budget_entries
+                          WHERE created_at >= $since
+                          """;
+        cmd.Parameters.AddWithValue("$since", sinceStr);
+        using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+        if (await r.ReadAsync(ct))
+        {
+            return new BudgetSummary(
+                r.GetInt32(0),
+                r.GetInt32(1),
+                r.GetInt32(2),
+                (decimal)r.GetDouble(3));
+        }
+
+        return new BudgetSummary(0, 0, 0, 0m);
+    }
+
+    public BudgetSummary GetBudgetSummary(DateTime? since = null)
+    {
+        return GetBudgetSummaryAsync(since).GetAwaiter().GetResult();
+    }
+
+    public async Task<List<(string Date, int Calls, decimal CostUsd)>> GetDailyBudgetAsync(int days = 30, CancellationToken ct = default)
+    {
+        var list = new List<(string, int, decimal)>();
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          SELECT
+                              substr(created_at, 1, 10) AS day,
+                              COUNT(*) AS calls,
+                              COALESCE(SUM(cost_usd), 0.0) AS cost
+                          FROM budget_entries
+                          GROUP BY day
+                          ORDER BY day DESC
+                          LIMIT $days
+                          """;
+        cmd.Parameters.AddWithValue("$days", days);
+        using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add((r.GetString(0), r.GetInt32(1), (decimal)r.GetDouble(2)));
+        }
+
+        list.Reverse();
+        return list;
+    }
+
+    public List<(string Date, int Calls, decimal CostUsd)> GetDailyBudget(int days = 30)
+    {
+        return GetDailyBudgetAsync(days).GetAwaiter().GetResult();
+    }
+
+    // ---- Audit log (task_003) ----
+
+    public async Task LogAuditAsync(
+        string actor,
+        string action,
+        string? target,
+        string? details,
+        string? sessionId,
+        CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          INSERT INTO audit_log (actor, action, target, details, session_id, created_at)
+                          VALUES ($a, $ac, $t, $d, $s, $ct)
+                          """;
+        cmd.Parameters.AddWithValue("$a", actor);
+        cmd.Parameters.AddWithValue("$ac", action);
+        cmd.Parameters.AddWithValue("$t", (object?)target ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$d", (object?)details ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$s", (object?)sessionId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$ct", DateTime.UtcNow.ToString("o"));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public void LogAudit(string actor, string action, string? target = null, string? details = null, string? sessionId = null)
+    {
+        LogAuditAsync(actor, action, target, details, sessionId).GetAwaiter().GetResult();
+    }
+
+    public async Task<List<AuditLogEntry>> GetAuditLogAsync(int limit = 100, CancellationToken ct = default)
+    {
+        var list = new List<AuditLogEntry>();
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          SELECT id, actor, action, target, details, session_id, created_at
+                          FROM audit_log
+                          ORDER BY id DESC
+                          LIMIT $n
+                          """;
+        cmd.Parameters.AddWithValue("$n", limit);
+        using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new AuditLogEntry(
+                r.GetInt64(0),
+                r.GetString(1),
+                r.GetString(2),
+                r.IsDBNull(3) ? null : r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetString(4),
+                r.IsDBNull(5) ? null : r.GetString(5),
+                DateTime.Parse(r.GetString(6))));
+        }
+
+        return list;
+    }
+
+    public List<AuditLogEntry> GetAuditLog(int limit = 100)
+    {
+        return GetAuditLogAsync(limit).GetAwaiter().GetResult();
+    }
+
+    public async Task<List<AuditLogEntry>> GetAuditLogByTargetAsync(string target, int limit = 50, CancellationToken ct = default)
+    {
+        var list = new List<AuditLogEntry>();
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          SELECT id, actor, action, target, details, session_id, created_at
+                          FROM audit_log
+                          WHERE target = $t
+                          ORDER BY id DESC
+                          LIMIT $n
+                          """;
+        cmd.Parameters.AddWithValue("$t", target);
+        cmd.Parameters.AddWithValue("$n", limit);
+        using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new AuditLogEntry(
+                r.GetInt64(0),
+                r.GetString(1),
+                r.GetString(2),
+                r.IsDBNull(3) ? null : r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetString(4),
+                r.IsDBNull(5) ? null : r.GetString(5),
+                DateTime.Parse(r.GetString(6))));
+        }
+
+        return list;
+    }
+
+    public List<AuditLogEntry> GetAuditLogByTarget(string target, int limit = 50)
+    {
+        return GetAuditLogByTargetAsync(target, limit).GetAwaiter().GetResult();
+    }
+
+    // ---- Skill evaluation history (task_003) ----
+
+    public async Task SaveEvaluationResultAsync(
+        string skillId,
+        double score,
+        bool passed,
+        string? testResults,
+        string evaluatorProvider,
+        CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          INSERT INTO skill_evaluations (skill_id, score, passed, test_results, evaluator_provider, created_at)
+                          VALUES ($sk, $sc, $p, $tr, $ev, $t)
+                          """;
+        cmd.Parameters.AddWithValue("$sk", skillId);
+        cmd.Parameters.AddWithValue("$sc", score);
+        cmd.Parameters.AddWithValue("$p", passed ? 1 : 0);
+        cmd.Parameters.AddWithValue("$tr", (object?)testResults ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$ev", evaluatorProvider);
+        cmd.Parameters.AddWithValue("$t", DateTime.UtcNow.ToString("o"));
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public void SaveEvaluationResult(string skillId, double score, bool passed, string? testResults, string evaluatorProvider)
+    {
+        SaveEvaluationResultAsync(skillId, score, passed, testResults, evaluatorProvider).GetAwaiter().GetResult();
+    }
+
+    public async Task<List<SkillEvaluationRecord>> GetSkillEvaluationHistoryAsync(string skillId, int limit = 20, CancellationToken ct = default)
+    {
+        var list = new List<SkillEvaluationRecord>();
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          SELECT id, skill_id, score, passed, test_results, evaluator_provider, created_at
+                          FROM skill_evaluations
+                          WHERE skill_id = $sk
+                          ORDER BY id DESC
+                          LIMIT $n
+                          """;
+        cmd.Parameters.AddWithValue("$sk", skillId);
+        cmd.Parameters.AddWithValue("$n", limit);
+        using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new SkillEvaluationRecord(
+                r.GetInt64(0),
+                r.GetString(1),
+                r.GetDouble(2),
+                r.GetInt32(3) == 1,
+                r.IsDBNull(4) ? null : r.GetString(4),
+                r.GetString(5),
+                DateTime.Parse(r.GetString(6))));
+        }
+
+        return list;
+    }
+
+    public List<SkillEvaluationRecord> GetSkillEvaluationHistory(string skillId, int limit = 20)
+    {
+        return GetSkillEvaluationHistoryAsync(skillId, limit).GetAwaiter().GetResult();
+    }
+
+    // ---- Durable task state (task_003 / task_018) ----
+
+    public async Task SaveTaskStateAsync(
+        string taskId,
+        string status,
+        string? result,
+        string? error,
+        string? metadata,
+        CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow.ToString("o");
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          INSERT INTO task_states (task_id, status, result, error, metadata, created_at, updated_at)
+                          VALUES ($id, $st, $r, $e, $m, $ca, $ua)
+                          ON CONFLICT(task_id) DO UPDATE SET
+                              status = excluded.status,
+                              result = excluded.result,
+                              error  = excluded.error,
+                              metadata = excluded.metadata,
+                              updated_at = excluded.updated_at
+                          """;
+        cmd.Parameters.AddWithValue("$id", taskId);
+        cmd.Parameters.AddWithValue("$st", status);
+        cmd.Parameters.AddWithValue("$r", (object?)result ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$e", (object?)error ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$m", (object?)metadata ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$ca", now);
+        cmd.Parameters.AddWithValue("$ua", now);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public void SaveTaskState(string taskId, string status, string? result = null, string? error = null, string? metadata = null)
+    {
+        SaveTaskStateAsync(taskId, status, result, error, metadata).GetAwaiter().GetResult();
+    }
+
+    public async Task<TaskState?> LoadTaskStateAsync(string taskId, CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          SELECT id, task_id, status, result, error, metadata, created_at, updated_at
+                          FROM task_states WHERE task_id = $id
+                          """;
+        cmd.Parameters.AddWithValue("$id", taskId);
+        using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+        if (await r.ReadAsync(ct))
+        {
+            return new TaskState(
+                r.GetInt64(0),
+                r.GetString(1),
+                r.GetString(2),
+                r.IsDBNull(3) ? null : r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetString(4),
+                r.IsDBNull(5) ? null : r.GetString(5),
+                DateTime.Parse(r.GetString(6)),
+                DateTime.Parse(r.GetString(7)));
+        }
+
+        return null;
+    }
+
+    public TaskState? LoadTaskState(string taskId)
+    {
+        return LoadTaskStateAsync(taskId).GetAwaiter().GetResult();
+    }
+
+    public async Task<List<TaskState>> ListTaskStatesAsync(string? statusFilter = null, int limit = 100, CancellationToken ct = default)
+    {
+        var list = new List<TaskState>();
+        using SqliteCommand cmd = _conn.CreateCommand();
+        if (statusFilter is null)
+        {
+            cmd.CommandText = """
+                              SELECT id, task_id, status, result, error, metadata, created_at, updated_at
+                              FROM task_states
+                              ORDER BY updated_at DESC
+                              LIMIT $n
+                              """;
+        }
+        else
+        {
+            cmd.CommandText = """
+                              SELECT id, task_id, status, result, error, metadata, created_at, updated_at
+                              FROM task_states
+                              WHERE status = $st
+                              ORDER BY updated_at DESC
+                              LIMIT $n
+                              """;
+            cmd.Parameters.AddWithValue("$st", statusFilter);
+        }
+
+        cmd.Parameters.AddWithValue("$n", limit);
+        using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new TaskState(
+                r.GetInt64(0),
+                r.GetString(1),
+                r.GetString(2),
+                r.IsDBNull(3) ? null : r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetString(4),
+                r.IsDBNull(5) ? null : r.GetString(5),
+                DateTime.Parse(r.GetString(6)),
+                DateTime.Parse(r.GetString(7))));
+        }
+
+        return list;
+    }
+
+    public List<TaskState> ListTaskStates(string? statusFilter = null, int limit = 100)
+    {
+        return ListTaskStatesAsync(statusFilter, limit).GetAwaiter().GetResult();
     }
 }
 

@@ -134,6 +134,10 @@ builder.Services.AddSingleton<FileSkillRepository>();
 builder.Services.AddSingleton<MemoryStore>();
 builder.Services.AddSingleton<SqliteSessionStore>();
 
+// Hybrid storage services (task_003)
+builder.Services.AddSingleton<IBudgetService, BudgetService>();
+builder.Services.AddSingleton<IAuditLog, AuditLogService>();
+
 // Phase 2: Skill packager (export/import .skillpkg)
 builder.Services.AddSingleton<SkillPackager>();
 
@@ -229,6 +233,8 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/skills/deprecated",
         "GET /api/memory/profile", "PUT /api/memory/profile", "POST /api/memory/reset",
         "GET /api/reflect", "GET /api/stats",
+        "GET /api/budget", "GET /api/budget/monthly",
+        "GET /api/audit", "GET /api/audit/{target}",
         "GET /api/config", "PUT /api/config", "PATCH /api/config",
         "GET /agent.manifest.json", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
         "GET /api/mesh/agents/{id}", "DELETE /api/mesh/agents/{id}",
@@ -246,6 +252,8 @@ app.MapMemory();
 app.MapStats();
 app.MapConfig();
 app.MapMesh();
+app.MapBudget();
+app.MapAudit();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");
