@@ -11,6 +11,7 @@ using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Observability;
 using Hercules.Redaction;
+using Hercules.Reflection;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
 using Hercules.Storage;
@@ -222,6 +223,13 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<BaselineManager>();
     services.AddSingleton<SkillTestGenerator>();
     services.AddSingleton<IEvalHarnessService, EvalHarnessService>();
+
+    // Self-improvement (task_017)
+    services.AddSingleton(appConfig.SelfImprovement);
+    services.AddSingleton<global::Hercules.Reflection.ProposalStore>();
+    services.AddSingleton<global::Hercules.Reflection.ProposalDiffer>();
+    services.AddSingleton<global::Hercules.Reflection.MaintenanceWorkflow>();
+    services.AddSingleton<global::Hercules.Reflection.SelfImprovementService>();
 
     // Audit and privacy (task_014)
     services.AddSingleton(appConfig.Audit);

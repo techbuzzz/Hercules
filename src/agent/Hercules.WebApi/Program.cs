@@ -78,6 +78,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Audit);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Secrets);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Eval);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SelfImprovement);
 
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
@@ -247,6 +248,12 @@ builder.Services.AddSingleton<ISecretMaskingService>(sp =>
         sp.GetRequiredService<SecretsConfig>(),
         sp.GetRequiredService<IRedactionService>()));
 
+// Self-improvement (task_017)
+builder.Services.AddSingleton<Hercules.Reflection.ProposalStore>();
+builder.Services.AddSingleton<Hercules.Reflection.ProposalDiffer>();
+builder.Services.AddSingleton<Hercules.Reflection.MaintenanceWorkflow>();
+builder.Services.AddSingleton<Hercules.Reflection.SelfImprovementService>();
+
 // Агент
 builder.Services.AddSingleton<SkillManager>();
 builder.Services.AddSingleton<SkillRouter>();
@@ -338,6 +345,10 @@ app.MapGet("/", () => Results.Ok(new
         "POST /api/skills/{id}/eval/harness", "POST /api/skills/{id}/eval/baseline",
         "GET /api/skills/{id}/eval/baseline", "GET /api/skills/{id}/eval/history",
         "GET /api/eval/baselines",
+        "POST /api/maintenance/run", "POST /api/maintenance/run-all",
+        "GET /api/maintenance/proposals", "GET /api/maintenance/proposals/{id}",
+        "POST /api/maintenance/proposals/{id}/approve",
+        "POST /api/maintenance/proposals/{id}/reject",
         "GET /agent.manifest.json", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
         "GET /api/mesh/agents/{id}", "DELETE /api/mesh/agents/{id}",
         "GET /api/mesh/capabilities", "GET /api/mesh/capabilities/{name}",
@@ -360,6 +371,7 @@ app.MapLlm();
 app.MapApprovals();
 app.MapObservability();
 app.MapSkillHarness();
+app.MapSelfImprovement();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");

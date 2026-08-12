@@ -1,0 +1,44 @@
+import xml.etree.ElementTree as ET
+
+path = r'C:\Sources\GitHub\Hercules\tests\Hercules.Agent.Tests\TestResults\37cb8bef-c053-4e47-a46e-e7b3cef337ea\coverage.cobertura.xml'
+tree = ET.parse(path)
+root = tree.getroot()
+
+# Get line rate
+line_rate = root.attrib.get('line-rate')
+branch_rate = root.attrib.get('branch-rate')
+print(f"Line rate: {float(line_rate or 0)*100:.1f}%")
+print(f"Branch rate: {float(branch_rate or 0)*100:.1f}%")
+
+packages = root.findall('.//package')
+total_lines = 0
+total_covered = 0
+class_data = {}
+for pkg in packages:
+    for cls in pkg.findall('.//class'):
+        name = cls.attrib.get('name', '')
+        filename = cls.attrib.get('filename', '')
+        if 'Hercules.dll' not in filename and 'Hercules.' not in name:
+            continue
+        lr = float(cls.attrib.get('line-rate', 0))
+        br = float(cls.attrib.get('branch-rate', 0))
+        lines = cls.find('lines')
+        covered = total_cov = 0
+        if lines is not None:
+            for line in lines.findall('line'):
+                cov = int(line.attrib.get('hits', 0))
+                total_cov += 1
+                covered += 1 if cov > 0 else 0
+        total_lines += total_cov
+        total_covered += covered
+        short = name.split('.')[-1] if '.' in name else name
+        pct = covered/total_cov*100 if total_cov else 0
+        class_data[short] = (pct, covered, total_cov)
+
+items = sorted(class_data.items(), key=lambda x: x[1][0])
+print(f"\nPer-class coverage (lowest first):")
+for name, (pct, cov, tot) in items[:50]:
+    bar = '#' * max(1, int(pct/5))
+    print(f"{pct:5.1f}% {bar:<20} {name:<55} {cov:4d}/{tot:4d}")
+overall = total_covered/total_lines*100 if total_lines else 0
+print(f"\nOverall: {total_covered}/{total_lines} = {overall:.1f}%")

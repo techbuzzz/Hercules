@@ -242,9 +242,69 @@ public sealed class SkillManager(
     /// <summary>Навыки, которые стоит улучшить (success_rate ниже порога при достаточном числе использований).</summary>
     public List<Skill> SkillsNeedingImprovement()
     {
+        return SkillsNeedingImprovement(_cfg.SkillImprovementThreshold);
+    }
+
+    /// <summary>
+    ///     Навыки, которые стоит улучшить (custom threshold).
+    ///     Используется MaintenanceWorkflow с его собственным порогом.
+    /// </summary>
+    public List<Skill> SkillsNeedingImprovement(double threshold)
+    {
         return repo.LoadAll()
-            .Where(s => s.Meta.TotalUses >= _cfg.SkillEvaluationWindow && s.Meta.SuccessRate < _cfg.SkillImprovementThreshold)
+            .Where(s => s.Meta.TotalUses >= _cfg.SkillEvaluationWindow && s.Meta.SuccessRate < threshold)
             .ToList();
+    }
+
+    /// <summary>
+    ///     Обновить навык (для self-improvement). Сохраняет текущую версию в историю
+    ///     и создаёт новую (SaveNewVersion semantics: version++, description→v{N}.md).
+    /// </summary>
+    public Skill? Update(string id, Skill updated)
+    {
+        Skill? current = repo.Load(id);
+        if (current is null)
+        {
+            return null;
+        }
+
+        repo.SaveNewVersion(current, updated.Description, updated.Prompt);
+        return repo.Load(id);
+    }
+
+    /// <summary>
+    ///     Восстановить предыдущую версию навыка (для rollback).
+    ///     Копирует content из skill.{id}.v{version}.md → skill.{id}.md
+    ///     и skill.{id}.v{version}.prompt.md → skill.{id}.prompt.md.
+    /// </summary>
+    public Skill? RestoreVersion(string id, int version)
+    {
+        var versionDescPath = Path.Combine(repo.SkillsDirectory, $"skill.{id}.v{version}.md");
+        var versionPromptPath = Path.Combine(repo.SkillsDirectory, $"skill.{id}.v{version}.prompt.md");
+
+        if (!File.Exists(versionDescPath))
+        {
+            return null;
+        }
+
+        var currentDescPath = Path.Combine(repo.SkillsDirectory, $"skill.{id}.md");
+        var currentPromptPath = Path.Combine(repo.SkillsDirectory, $"skill.{id}.prompt.md");
+
+        File.Copy(versionDescPath, currentDescPath, overwrite: true);
+        if (File.Exists(versionPromptPath))
+        {
+            File.Copy(versionPromptPath, currentPromptPath, overwrite: true);
+        }
+
+        // Update meta: rollback version number
+        var skill = repo.Load(id);
+        if (skill is not null)
+        {
+            skill.Meta.Version = version;
+            repo.Save(skill);
+        }
+
+        return repo.Load(id);
     }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json.Serialization;
 using Hercules.Tools.Policy;
 
@@ -12,68 +13,22 @@ public sealed class AppConfig
     public StorageConfig Storage { get; set; } = new();
     public AgentConfig Agent { get; set; } = new();
     public TelegramConfig Telegram { get; set; } = new();
-
-    /// <summary>
-    ///     Параметры sandbox для исполнения LLM-сгенерированного кода (Stage 2, v2).
-    /// </summary>
     public CodeExecutionConfig CodeExecution { get; set; } = new();
-
-    /// <summary>
-    ///     Параметры HTTP-инструмента (Stage 3). Allow-list доменов, rate limits, timeouts.
-    /// </summary>
     public HttpConfig Http { get; set; } = new();
-
-    /// <summary>
-    ///     Параметры MCP-клиента (Stage 3). Список MCP-серверов для подключения.
-    /// </summary>
     public McpConfig Mcp { get; set; } = new();
-
-    /// <summary>
-    ///     Параметры A2A-клиента (Stage 3). Endpoints других агентов.
-    /// </summary>
     public A2AConfig A2A { get; set; } = new();
-
-    /// <summary>
-    ///     Конфигурация именованных ролей LLM (multi-role routing, v2).
-    ///     Ключ — имя роли ("main", "code_writer", "reflector", ...).
-    ///     Значение — провайдер + модель + temperature.
-    ///     Если секция пуста — все роли используют Llm.Provider (обратная совместимость).
-    /// </summary>
     public Dictionary<string, RoleConfig> Roles { get; set; } = new();
-
-    /// <summary>
-    ///     Конфигурация Phase 2: семантическая маршрутизация и компонуемые навыки.
-    /// </summary>
     public Phase2Config Phase2 { get; set; } = new();
-
-    /// <summary>
-    ///     Конфигурация Phase 3: inter-agent протокол, capability registry, discovery.
-    /// </summary>
     public MeshConfig Mesh { get; set; } = new();
-
-    /// <summary>Конфигурация tool policy engine (task_009).</summary>
     public ToolPolicyConfig ToolPolicy { get; set; } = new();
-
-    /// <summary>Конфигурация approval gates (task_010).</summary>
     public ApprovalConfig Approval { get; set; } = new();
-
-    /// <summary>Конфигурация layered memory (task_011).</summary>
     public MemoryConfig Memory { get; set; } = new();
-
-    /// <summary>Конфигурация бюджетов и guardrails (task_012).</summary>
     public BudgetConfig Budget { get; set; } = new();
-
-    /// <summary>Конфигурация OpenTelemetry (task_013). Трассировка, метрики, structured logs.</summary>
     public OtelConfig Otel { get; set; } = new();
-
-    /// <summary>Конфигурация аудита и приватности (task_014). Audit records, PII redaction.</summary>
     public AuditConfig Audit { get; set; } = new();
-
-    /// <summary>Конфигурация секретов и конфиденциальных данных (task_015). Environment variables, secret redaction.</summary>
     public SecretsConfig Secrets { get; set; } = new();
-
-    /// <summary>Конфигурация eval harness (task_016). Baseline comparison, regression blocking.</summary>
     public EvalConfig Eval { get; set; } = new();
+    public SelfImprovementConfig SelfImprovement { get; set; } = new();
 }
 
 /// <summary>
@@ -82,41 +37,11 @@ public sealed class AppConfig
 /// </summary>
 public sealed class ToolPolicyConfig
 {
-    /// <summary>
-    ///     Режим dry-run: политика только логирует, но не блокирует.
-    ///     Полезно для initial rollout и отладки.
-    /// </summary>
     public bool DryRun { get; set; } = false;
-
-    /// <summary>
-    ///     Разрешить выполнение tool'ов, не зарегистрированных в policy registry.
-    ///     false = unknown tools всегда denied.
-    /// </summary>
     public bool AllowUnknownTools { get; set; } = false;
-
-    /// <summary>
-    ///     Minimal side-effect level, начиная с которого tool требует approval.
-    ///     None=0, Read=1, Local=2, External=3, Critical=4.
-    ///     Tool с уровнем >= этого значения требует human-in-the-loop подтверждения.
-    /// </summary>
     public SideEffectLevel MinSideEffectLevelForApproval { get; set; } = SideEffectLevel.External;
-
-    /// <summary>
-    ///     Explicit deny list (glob patterns). ["*"] = deny all.
-    ///     Применяется до side-effect check.
-    /// </summary>
     public List<string> DeniedTools { get; set; } = new();
-
-    /// <summary>
-    ///     Default permissions агента (comma-separated: Read|Write|Network|Memory).
-    ///     tools без явно объявленных permissions используют это значение.
-    /// </summary>
     public string AgentPermissions { get; set; } = "Read|Write|Network|Memory";
-
-    /// <summary>
-    ///     Default timeout для tools без собственного timeout (секунды).
-    ///     0 = без ограничения.
-    /// </summary>
     public int DefaultTimeoutSeconds { get; set; } = 30;
 }
 
@@ -125,47 +50,28 @@ public sealed class ToolPolicyConfig
 /// </summary>
 public sealed class Phase2Config
 {
-    /// <summary>Включить семантическую маршрутизацию (embedding-based). Если false — используется только keyword-matching.</summary>
     public bool SemanticRoutingEnabled { get; set; } = false;
-
-    /// <summary>Embedding-провайдер: "stub-hash" | "yandexgpt" | "ollama". По умолчанию — stub (offline).</summary>
     public string EmbeddingProvider { get; set; } = "stub-hash";
-
-    /// <summary>Минимальный порог cosine-similarity для семантического матча (0..1).</summary>
     public double SimilarityThreshold { get; set; } = 0.35;
-
-    /// <summary>Использовать keyword-matching как fallback, если embedding < порога.</summary>
     public bool KeywordFallback { get; set; } = true;
-
-    /// <summary>Папка для импортированных пакетов навыков (маркетплейс). По умолчанию — data/Skills/marketplace/.</summary>
     public string MarketplaceDir { get; set; } = "marketplace";
-
-    /// <summary>Папка для деклараций инструментов (data/Tools/). По умолчанию — Tools.</summary>
     public string ToolsDir { get; set; } = "Tools";
-
-    /// <summary>Папка для шаблонов агентов (data/Templates/). По умолчанию — Templates.</summary>
     public string TemplatesDir { get; set; } = "Templates";
 }
 
 /// <summary>
-///     Параметры одной LLM-роли. Если Provider пуст — наследуется из Llm.Provider.
+///     Параметры одной LLM-роли.
 /// </summary>
 public sealed class RoleConfig
 {
-    /// <summary>Имя провайдера: yandexgpt | ollama-cloud | ollama-local. Пусто → наследовать.</summary>
     public string Provider { get; set; } = "";
-
-    /// <summary>Имя модели (если пусто — дефолт провайдера).</summary>
     public string Model { get; set; } = "";
-
     public float Temperature { get; set; } = 0.6f;
-
     public int MaxTokens { get; set; } = 2000;
 }
 
 /// <summary>
 ///     Параметры sandbox для исполнения LLM-кода (Stage 2).
-///     Маппится из appsettings.json:CodeExecution.
 /// </summary>
 public sealed class CodeExecutionConfig
 {
@@ -177,74 +83,56 @@ public sealed class CodeExecutionConfig
     public bool AllowNetwork { get; set; } = false;
     public int MaxCodeSizeKb { get; set; } = 100;
     public int SessionTtlSeconds { get; set; } = 3600;
-
-    /// <summary>Override temp root. Пусто → использовать дефолт платформы.</summary>
     public string TempRoot { get; set; } = "";
 }
 
-/// <summary>HTTP-инструмент: безопасные исходящие запросы с allow-list.</summary>
+/// <summary>
+///     HTTP-инструмент: безопасные исходящие запросы с allow-list.
+/// </summary>
 public sealed class HttpConfig
 {
-    /// <summary>Allow-list доменов. ["*"] = все домены. ["api.github.com"] = только этот домен.</summary>
     public List<string> AllowedDomains { get; set; } = ["*"];
-
-    /// <summary>Глобальный rate limit (запросов в минуту). 0 = без лимита.</summary>
     public int RateLimitPerMinute { get; set; } = 60;
-
-    /// <summary>Timeout на запрос (секунды).</summary>
     public int TimeoutSeconds { get; set; } = 10;
-
-    /// <summary>Максимальный размер ответа (КБ). Превышение → truncated.</summary>
     public int MaxResponseSizeKb { get; set; } = 256;
 }
 
-/// <summary>MCP-клиент: подключение к Model Context Protocol серверам.</summary>
+/// <summary>
+///     MCP-клиент: подключение к Model Context Protocol серверам.
+/// </summary>
 public sealed class McpConfig
 {
-    /// <summary>Список MCP-серверов для автоподключения при старте.</summary>
     public List<McpServerConfig> Servers { get; set; } = new();
 }
 
-/// <summary>Конфигурация одного MCP-сервера.</summary>
+/// <summary>
+///     Конфигурация одного MCP-сервера.
+/// </summary>
 public sealed class McpServerConfig
 {
-    /// <summary>Имя сервера (для логов и namespace в tool registry).</summary>
     public string Name { get; set; } = "";
-
-    /// <summary>"stdio" | "http".</summary>
     public string Transport { get; set; } = "stdio";
-
-    /// <summary>Команда для stdio транспорта (например, "mcp-server-filesystem").</summary>
     public string? Command { get; set; }
-
-    /// <summary>Аргументы команды.</summary>
     public List<string> Args { get; set; } = new();
-
-    /// <summary>Endpoint URL для http транспорта.</summary>
     public string? Endpoint { get; set; }
 }
 
-/// <summary>A2A-клиент: Agent-to-Agent протокол (JSON-RPC 2.0).</summary>
+/// <summary>
+///     A2A-клиент: Agent-to-Agent протокол (JSON-RPC 2.0).
+/// </summary>
 public sealed class A2AConfig
 {
-    /// <summary>Список endpoints других агентов (имя → URL).</summary>
     public Dictionary<string, string> Endpoints { get; set; } = new();
-
-    /// <summary>Таймаут на delegate-задачу (секунды).</summary>
     public int TimeoutSeconds { get; set; } = 30;
 }
 
 /// <summary>
-///     Конфигурация LLM-провайдеров. Поддерживает основной провайдер и список fallback.
+///     Конфигурация LLM-провайдеров.
 /// </summary>
 public sealed class LlmConfig
 {
-    /// <summary>Имя активного (основного) провайдера: yandexgpt | ollama-cloud | ollama-local.</summary>
     public string Provider { get; set; } = "yandexgpt";
-
-    /// <summary>Порядок fallback-провайдеров, если основной недоступен.</summary>
     public List<string> Fallback { get; set; } = ["ollama-cloud", "ollama-local"];
-
     public YandexGptConfig YandexGpt { get; set; } = new();
     public OllamaConfig OllamaCloud { get; set; } = new();
     public OllamaConfig OllamaLocal { get; set; } = new();
@@ -252,119 +140,75 @@ public sealed class LlmConfig
 }
 
 /// <summary>
-///     Конфигурация OpenAI-совместимого провайдера (LM Studio, generic third-party).
-///     Использует стандартный OpenAI SDK с кастомным endpoint.
+///     Конфигурация OpenAI-совместимого провайдера.
 /// </summary>
 public sealed class OpenAICompatibleConfig
 {
-    /// <summary>OpenAI-совместимый endpoint (например, http://localhost:1234/v1 для LM Studio).</summary>
     public string Endpoint { get; set; } = "http://localhost:1234/v1";
-
-    /// <summary>API-ключ. Пусто = без аутентификации (для LM Studio local).</summary>
     public string ApiKey { get; set; } = "";
-
-    /// <summary>Имя модели по умолчанию (например, llama3.1, mixtral-8x7b).</summary>
     public string Model { get; set; } = "llama3.1";
-
     public float Temperature { get; set; } = 0.6f;
     public int MaxTokens { get; set; } = 2000;
-
-    /// <summary>Human-readable имя провайдера для UI и логов.</summary>
     public string DisplayName { get; set; } = "OpenAI-Compatible";
-
-    /// <summary>Краткое описание для UI.</summary>
     public string Description { get; set; } = "OpenAI-compatible endpoint (LM Studio, etc.)";
 }
 
-/// <summary>Параметры YandexGPT (OpenAI-совместимый endpoint).</summary>
+/// <summary>
+///     Параметры YandexGPT (OpenAI-совместимый endpoint).
+/// </summary>
 public sealed class YandexGptConfig
 {
-    /// <summary>OpenAI-совместимый endpoint YandexGPT.</summary>
     public string Endpoint { get; set; } = "https://llm.api.cloud.yandex.net/v1";
-
-    /// <summary>IAM-токен или API-ключ сервисного аккаунта.</summary>
     public string ApiKey { get; set; } = "";
-
-    /// <summary>Идентификатор каталога Yandex Cloud (folder id).</summary>
     public string FolderId { get; set; } = "";
-
-    /// <summary>Имя модели. Для Yandex используется URI gpt://{folderId}/{model}/latest.</summary>
     public string Model { get; set; } = "yandexgpt";
-
     public float Temperature { get; set; } = 0.6f;
     public int MaxTokens { get; set; } = 2000;
 }
 
-/// <summary>Параметры Ollama (Cloud или Local), OpenAI-совместимый интерфейс.</summary>
+/// <summary>
+///     Параметры Ollama (Cloud или Local).
+/// </summary>
 public sealed class OllamaConfig
 {
-    /// <summary>OpenAI-совместимый endpoint Ollama (например, http://localhost:11434/v1).</summary>
     public string Endpoint { get; set; } = "http://localhost:11434/v1";
-
-    /// <summary>API-ключ (нужен для Ollama Cloud; для локального можно оставить пустым).</summary>
     public string ApiKey { get; set; } = "";
-
     public string Model { get; set; } = "llama3.1";
     public float Temperature { get; set; } = 0.6f;
     public int MaxTokens { get; set; } = 2000;
 }
 
-/// <summary>Пути к хранилищам данных.</summary>
+/// <summary>
+///     Пути к хранилищам данных.
+/// </summary>
 public sealed class StorageConfig
 {
-    /// <summary>Корневая папка данных агента.</summary>
     public string DataRoot { get; set; } = "data";
-
     public string SkillsDir { get; set; } = "Skills";
     public string MemoryDir { get; set; } = "Memory";
     public string SqliteFile { get; set; } = "sessions.db";
-
-    /// <summary>Phase 2 настройки (маркетплейс, инструменты, шаблоны). Если null — используются дефолты.</summary>
     public Phase2Config? Phase2 { get; set; }
 }
 
-/// <summary>Пороговые значения поведения агента.</summary>
+/// <summary>
+///     Пороговые значения поведения агента.
+/// </summary>
 public sealed class AgentConfig
 {
-    /// <summary>Системный промпт по умолчанию.</summary>
     public string SystemPrompt { get; set; } =
         "Ты — Hercules, самообучающийся ассистент. Отвечай кратко, по делу и на русском языке.";
-
-    /// <summary>Сколько повторов однотипного запроса до предложения создать навык.</summary>
     public int SkillCreationThreshold { get; set; } = 3;
-
-    /// <summary>Порог success_rate, ниже которого предлагается улучшение навыка.</summary>
     public double SkillImprovementThreshold { get; set; } = 0.6;
-
-    /// <summary>Сколько последних использований учитывается при оценке навыка.</summary>
     public int SkillEvaluationWindow { get; set; } = 5;
-
-    /// <summary>Запуск рефлексии каждые N команд (помимо завершения сессии).</summary>
     public int ReflectionEveryNCommands { get; set; } = 10;
-
-    // ---- Bounded execution (task_008) ----
-
-    /// <summary>
-    ///     Максимальное число tool-call итераций внутри одного запроса.
-    ///     Защита от infinite loops. Старое hardcoded значение было 3.
-    /// </summary>
     public int MaxToolIterations { get; set; } = 3;
-
-    /// <summary>
-    ///     Wall-clock timeout на один запрос (секунды).
-    ///     При превышении агент возвращает graceful degradation ответ.
-    ///     0 = без ограничения.
-    /// </summary>
     public int MaxWallClockTimeoutSeconds { get; set; } = 120;
-
-    /// <summary>
-    ///     Максимальная глубина рекурсии (вложенные tool-call → tool-call).
-    ///     0 = без ограничения.
-    /// </summary>
     public int MaxRecursionDepth { get; set; } = 2;
 }
 
-/// <summary>Параметры Telegram-бота.</summary>
+/// <summary>
+///     Параметры Telegram-бота.
+/// </summary>
 public sealed class TelegramConfig
 {
     public bool Enabled { get; set; } = false;
@@ -373,279 +217,164 @@ public sealed class TelegramConfig
 
 /// <summary>
 ///     Конфигурация Phase 3: inter-agent mesh.
-///     Discovery, capability registry, intent routing, transport.
 /// </summary>
 public sealed class MeshConfig
 {
-    /// <summary>Включить mesh-функциональность (manifest, registry, intent routing).</summary>
     public bool Enabled { get; set; } = false;
-
-    /// <summary>AgentId этого агента в mesh (e.g. "hercules-main").</summary>
     public string AgentId { get; set; } = "hercules-main";
-
-    /// <summary>Human-readable имя для UI и registry.</summary>
     public string DisplayName { get; set; } = "Hercules";
-
-    /// <summary>Описание агента для манифеста.</summary>
     public string Description { get; set; } = "Self-improving micro-agent";
-
-    /// <summary>Endpoint этого агента для inter-agent вызовов (e.g. "http://localhost:5000").</summary>
     public string Endpoint { get; set; } = "http://localhost:5000";
-
-    /// <summary>Путь к SQLite-файлу capability registry (относительно DataRoot или абсолютный).</summary>
     public string RegistryDb { get; set; } = "mesh_registry.db";
-
-    /// <summary>Таймаут inter-agent вызовов (мс).</summary>
     public int IntentTimeoutMs { get; set; } = 30_000;
-
-    /// <summary>
-    ///     Минимальная уверенность локального навыка, при которой intent обрабатывается локально.
-    ///     Если ниже — intent пересылается peer'у (если есть).
-    /// </summary>
     public double LocalConfidenceThreshold { get; set; } = 0.5;
-
-    /// <summary>
-    ///     Статический список известных peer-агентов для discovery.
-    ///     Формат: [{ "agentId": "...", "endpoint": "http://..." }, ...].
-    ///     При запуске агенты из этого списка автоматически регистрируются в CapabilityRegistry.
-    /// </summary>
     public List<MeshPeerConfig> Peers { get; set; } = new();
+    public List<ManifestCapabilityConfig>? Capabilities { get; set; }
 }
 
-/// <summary>Конфигурация одного peer-агента для статического discovery.</summary>
+/// <summary>
+///     Конфигурация одного peer-агента для статического discovery.
+/// </summary>
 public sealed class MeshPeerConfig
 {
     public string AgentId { get; set; } = "";
     public string Endpoint { get; set; } = "";
-
-    /// <summary>Опционально: сразу задать capabilities (если peer-агент не публикует манифест).</summary>
-    public List<ManifestCapabilityConfig>? Capabilities { get; set; }
 }
 
-/// <summary>Capability в конфигурации peer-агента (упрощённая форма).</summary>
+/// <summary>
+///     Capability в конфигурации peer-агента.
+/// </summary>
 public sealed class ManifestCapabilityConfig
 {
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
-
     [JsonPropertyName("phrase_receivers")] public List<string> PhraseReceivers { get; set; } = new();
 }
 
 /// <summary>
 ///     Конфигурация approval gates (task_010).
-///     Контролирует поведение human-in-the-loop подтверждений.
 /// </summary>
 public sealed class ApprovalConfig
 {
-    /// <summary>Включить approval gates. false = всё auto-approved.</summary>
     public bool Enabled { get; set; } = true;
-
-    /// <summary>TTL pending-запросов в минутах. По истечении — Expired.</summary>
     public int DefaultTtlMinutes { get; set; } = 30;
-
-    /// <summary>Максимальное число pending-запросов одновременно.</summary>
     public int MaxPending { get; set; } = 50;
 }
 
 /// <summary>
 ///     Конфигурация layered memory (task_011).
-///     Controls working memory capacity, episodic context size, fact TTL, and redaction.
 /// </summary>
 public sealed class MemoryConfig
 {
-    /// <summary>Максимальное число записей в working memory перед eviction.</summary>
     public int MaxWorkingMemoryEntries { get; set; } = 100;
-
-    /// <summary>Сколько последних эпизодов включать в context block.</summary>
     public int MaxEpisodesInContext { get; set; } = 5;
-
-    /// <summary>TTL для фактов без явного TTL (минуты). 0 = навсегда.</summary>
     public int DefaultFactTtlMinutes { get; set; } = 0;
-
-    /// <summary>Включить sensitivity-based redaction из LLM context.</summary>
     public bool SensitivityRedactionEnabled { get; set; } = true;
-
-    /// <summary>Максимальный возраст факта перед auto-cleanup (дни). 0 = без cleanup.</summary>
     public int MaxFactAgeDays { get; set; } = 0;
 }
 
 /// <summary>
 ///     Конфигурация бюджетов и guardrails (task_012).
-///     Per-request и per-day лимиты на токены, стоимость, время, вызовы инструментов и ретраи.
 /// </summary>
 public sealed class BudgetConfig
 {
-    // ---- Per-request limits ----
-
-    /// <summary>Максимум токенов на один LLM-вызов (input + output). 0 = без лимита.</summary>
     public int MaxTokensPerRequest { get; set; } = 0;
-
-    /// <summary>Максимум вызовов инструментов на один запрос. 0 = без лимита.</summary>
     public int MaxToolCallsPerRequest { get; set; } = 0;
-
-    /// <summary>Максимум ретраев инструмента на один запрос. 0 = без лимита.</summary>
     public int MaxRetriesPerTool { get; set; } = 0;
-
-    /// <summary>Максимум wall-clock секунд на один запрос. 0 = без лимита.</summary>
     public int MaxWallClockSecondsPerRequest { get; set; } = 0;
-
-    // ---- Per-day limits ----
-
-    /// <summary>Максимум USD на один день. 0 = без лимита.</summary>
     public decimal MaxCostPerDayUsd { get; set; } = 0;
-
-    /// <summary>Максимум токенов (input + output) на один день. 0 = без лимита.</summary>
     public int MaxTokensPerDay { get; set; } = 0;
-
-    /// <summary>Максимум LLM-вызовов на один день. 0 = без лимита.</summary>
     public int MaxCallsPerDay { get; set; } = 0;
-
-    // ---- Enforcement mode ----
-
-    /// <summary>
-    ///     Режим превышения лимита:
-    ///     "soft_warn" — логирует предупреждение, но продолжает выполнение;
-    ///     "hard_cap" — прерывает выполнение и возвращает graceful degradation.
-    ///     По умолчанию "soft_warn" для per-day, "hard_cap" для per-request.
-    /// </summary>
     public string EnforcementMode { get; set; } = "soft_warn";
-
-    /// <summary>Включить guardrails. false = все проверки отключены.</summary>
     public bool Enabled { get; set; } = true;
 }
 
 /// <summary>
 ///     Конфигурация OpenTelemetry (task_013).
-///     Трассировка, метрики, structured logs. Console exporter по умолчанию; OTLP — опционально.
 /// </summary>
 public sealed class OtelConfig
 {
-    /// <summary>Включить OpenTelemetry (трассировка + метрики). false = всё отключено.</summary>
     public bool Enabled { get; set; } = true;
-
-    /// <summary>Имя сервиса для trace/metric identity (добавляется ко всем span/metric).</summary>
     public string ServiceName { get; set; } = "hercules";
-
-    /// <summary>
-    ///     OTLP endpoint (например, http://localhost:4317).
-    ///     null/пусто = OTLP экспортёр не подключается (только console exporter).
-    /// </summary>
     public string? OtlpEndpoint { get; set; }
-
-    /// <summary>
-    ///     Sampling ratio (0.0..1.0). 1.0 = все span'ы записываются; 0.1 = 10%.
-    ///     Для продакта рекомендуется 0.1–0.5 для снижения стоимости хранения.
-    /// </summary>
     public double SamplingRatio { get; set; } = 1.0;
 }
 
 /// <summary>
 ///     Конфигурация аудита и приватности (task_014).
-///     Controls audit log enrichment, PII redaction, and payload hashing.
 /// </summary>
 public sealed class AuditConfig
 {
-    /// <summary>Включить расширенный аудит. false = используется базовый IAuditLog (task_003).</summary>
     public bool Enabled { get; set; } = true;
-
-    /// <summary>Уровни sensitivity, которые подвергаются redaction (high/medium/low). По умолчанию — high и medium.</summary>
     public List<string> RedactSensitivityLevels { get; set; } = new() { "high", "medium" };
-
-    /// <summary>Включить вычисление SHA256-хеша payload для integrity verification.</summary>
     public bool PayloadHashEnabled { get; set; } = true;
-
-    /// <summary>Какие типы actor логируются в аудит: agent/system/user.</summary>
     public List<string> LogActorActions { get; set; } = new() { "agent", "system", "user" };
-
-    /// <summary>Сколько дней хранить аудит-лог. 0 = без ограничения.</summary>
     public int RetentionDays { get; set; } = 90;
-
-    /// <summary>Custom regex-паттерны для redaction (например, {"pattern": "secret=\\w+", "replacement": "secret=***"}).</summary>
     public List<AuditRedactionPattern> RedactionPatterns { get; set; } = new();
 }
 
 /// <summary>
-///     Custom redaction pattern для AuditConfig.RedactionPatterns.
+///     Custom redaction pattern.
 /// </summary>
 public sealed class AuditRedactionPattern
 {
-    /// <summary>Regex pattern для поиска.</summary>
     public string Pattern { get; set; } = "";
-
-    /// <summary>Строка замены.</summary>
     public string Replacement { get; set; } = "***";
 }
 
 /// <summary>
 ///     Конфигурация секретов (task_015).
-///     Управляет загрузкой секретов из environment variables и redaction в экспортах/памяти/telemetry.
 /// </summary>
 public sealed class SecretsConfig
 {
-    /// <summary>
-    ///     Префикс environment variables, которые считаются секретами.
-    ///     Переменные с этим префиксом загружаются при старте и подставляются по ссылке "env:VAR_NAME".
-    /// </summary>
     public string EnvironmentVariablePrefix { get; set; } = "HERCULES_SECRET_";
-
-    /// <summary>
-    ///     Путь к JSON-файлу с зашифрованными секретами (опционально).
-    ///     Если указан — секреты читаются из файла вместо env vars.
-    /// </summary>
     public string? SecretsFile { get; set; }
-
-    /// <summary>
-    ///     Префикс ссылок на секреты в конфигах. Например, "env:" означает "env:API_KEY" → значение переменной API_KEY.
-    /// </summary>
     public string SecretReferencePrefix { get; set; } = "env:";
-
-    /// <summary>
-    ///     Redact секреты при экспорте skill packages.
-    ///     Если true — содержимое навыков redacted перед записью в .skillpkg.
-    /// </summary>
     public bool RedactInExports { get; set; } = true;
-
-    /// <summary>
-    ///     Redact секреты при записи в Markdown memory.
-    ///     Если true — профиль, предпочтения и контекст redacted перед сохранением.
-    /// </summary>
     public bool RedactInMemory { get; set; } = true;
-
-    /// <summary>
-    ///     Redact секреты в OpenTelemetry telemetry (tags, events, span names).
-    ///     Если true — string-значения redacted перед записью в traces/metrics.
-    /// </summary>
     public bool RedactInTelemetry { get; set; } = true;
 }
 
 /// <summary>
 ///     Конфигурация eval harness (task_016).
-///     Baseline comparison, regression blocking, fixture generation.
 /// </summary>
 public sealed class EvalConfig
 {
-    /// <summary>
-    ///     Блокировать автоматический rollout при обнаружении regression.
-    ///     Если true — SkillLifecycleService откатывает изменения и кидает RegressionBlockedException.
-    /// </summary>
     public bool BlockOnRegression { get; set; } = true;
-
-    /// <summary>
-    ///     Максимально допустимое падение score относительно baseline.
-    ///     Если текущий score - baseline < -threshold — это regression.
-    ///     По умолчанию 0.05 (5%).
-    /// </summary>
     public double BaselineComparisonThreshold { get; set; } = 0.05;
-
-    /// <summary>
-    ///     Количество детерминированных fixtures, генерируемых автоматически
-    ///     если у навыка нет test suite.
-    /// </summary>
     public int DefaultFixtureCount { get; set; } = 5;
+    public bool EnableLlmJudgeCases { get; set; } = false;
+}
+
+/// <summary>
+///     Конфигурация safe self-improvement (task_017).
+///     Maintenance workflow, proposal generation, versioned diffs.
+/// </summary>
+public sealed class SelfImprovementConfig
+{
+    /// <summary>
+    ///     Включить maintenance workflow. Если false — self-improvement отключён.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
 
     /// <summary>
-    ///     Включить LLM-judge кейсы при автоматической генерации fixtures.
-    ///     Если true — помимо deterministic fixtures генерируются llm_judge кейсы.
+    ///     Порог success_rate, ниже которого навык — кандидат на улучшение.
     /// </summary>
-    public bool EnableLlmJudgeCases { get; set; } = false;
+    public double MinSuccessRateThreshold { get; set; } = 0.5;
+
+    /// <summary>
+    ///     Требовать approval для применения proposal к production-навыкам.
+    ///     Если true — даже LOW_RISK улучшения проходят через human gate.
+    /// </summary>
+    public bool RequireApprovalForProd { get; set; } = true;
+
+    /// <summary>
+    ///     Максимальное число proposals в день. 0 = без ограничения.
+    /// </summary>
+    public int MaxProposalsPerDay { get; set; } = 5;
+
+    /// <summary>
+    ///     Анонимизировать данные перед отправкой в LLM-анализ (удалять user-specific info).
+    /// </summary>
+    public bool AnonymizeData { get; set; } = true;
 }
