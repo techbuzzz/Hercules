@@ -136,6 +136,20 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
                                created_at      TEXT NOT NULL,
                                updated_at      TEXT NOT NULL
                            );
+                           -- task_010: approval gates
+                           CREATE TABLE IF NOT EXISTS approval_requests (
+                               id              TEXT PRIMARY KEY,
+                               session_id      TEXT NOT NULL,
+                               tool_name       TEXT NOT NULL,
+                               arguments_json  TEXT NOT NULL,
+                               policy_decision TEXT NOT NULL,
+                               reason          TEXT NOT NULL,
+                               requested_at    TEXT NOT NULL,
+                               requested_by    TEXT,
+                               status          TEXT NOT NULL DEFAULT 'Pending',
+                               approved_at     TEXT,
+                               denied_at       TEXT
+                           );
                            CREATE INDEX IF NOT EXISTS ix_interactions_session ON interactions(session_id);
                            CREATE INDEX IF NOT EXISTS ix_interactions_created ON interactions(created_at);
                            CREATE INDEX IF NOT EXISTS ix_sandbox_executions_session ON sandbox_executions(session_id);
@@ -145,6 +159,8 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
                            CREATE INDEX IF NOT EXISTS ix_audit_target ON audit_log(target);
                            CREATE INDEX IF NOT EXISTS ix_eval_skill ON skill_evaluations(skill_id);
                            CREATE INDEX IF NOT EXISTS ix_task_taskid ON task_states(task_id);
+                           CREATE INDEX IF NOT EXISTS ix_approval_session ON approval_requests(session_id);
+                           CREATE INDEX IF NOT EXISTS ix_approval_status ON approval_requests(status);
                            """;
         using SqliteCommand cmd = _conn.CreateCommand();
         cmd.CommandText = sql;
@@ -907,6 +923,133 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
     public List<TaskState> ListTaskStates(string? statusFilter = null, int limit = 100)
     {
         return ListTaskStatesAsync(statusFilter, limit).GetAwaiter().GetResult();
+    }
+
+    // --- task_010: approval gates ---
+
+    public async Task SaveApprovalRequestAsync(ApprovalRequest req, CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          INSERT OR REPLACE INTO approval_requests
+                            (id, session_id, tool_name, arguments_json, policy_decision, reason, requested_at, requested_by, status, approved_at, denied_at)
+                          VALUES ($id, $s, $t, $a, $p, $r, $ra, $rb, $st, $aa, $da)
+                          """;
+        cmd.Parameters.AddWithValue("$id", req.Id);
+        cmd.Parameters.AddWithValue("$s", req.SessionId);
+        cmd.Parameters.AddWithValue("$t", req.ToolName);
+        cmd.Parameters.AddWithValue("$a", req.ArgumentsJson);
+        cmd.Parameters.AddWithValue("$p", req.PolicyDecision);
+        cmd.Parameters.AddWithValue("$r", req.Reason);
+        cmd.Parameters.AddWithValue("$ra", req.RequestedAt.ToString("o"));
+        cmd.Parameters.AddWithValue("$rb", (object?)req.RequestedBy ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$st", req.Status);
+        cmd.Parameters.AddWithValue("$aa", req.ApprovedAt?.ToString("o") ?? (object?)DBNull.Value);
+        cmd.Parameters.AddWithValue("$da", req.DeniedAt?.ToString("o") ?? (object?)DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<List<ApprovalRequest>> GetPendingApprovalsAsync(string? sessionId = null, CancellationToken ct = default)
+    {
+        var list = new List<ApprovalRequest>();
+        using SqliteCommand cmd = _conn.CreateCommand();
+        if (sessionId is null)
+        {
+            cmd.CommandText = """
+                              SELECT id, session_id, tool_name, arguments_json, policy_decision, reason,
+                                     requested_at, requested_by, status, approved_at, denied_at
+                              FROM approval_requests
+                              WHERE status = 'Pending'
+                              ORDER BY requested_at ASC
+                              """;
+        }
+        else
+        {
+            cmd.CommandText = """
+                              SELECT id, session_id, tool_name, arguments_json, policy_decision, reason,
+                                     requested_at, requested_by, status, approved_at, denied_at
+                              FROM approval_requests
+                              WHERE status = 'Pending' AND session_id = $s
+                              ORDER BY requested_at ASC
+                              """;
+            cmd.Parameters.AddWithValue("$s", sessionId);
+        }
+
+        using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new ApprovalRequest(
+                r.GetString(0),  // id
+                r.GetString(1),  // session_id
+                r.GetString(2),  // tool_name
+                r.GetString(3),  // arguments_json
+                r.GetString(4),  // policy_decision
+                r.GetString(5),  // reason
+                DateTime.Parse(r.GetString(6)),  // requested_at
+                r.IsDBNull(7) ? null : r.GetString(7),  // requested_by
+                r.GetString(8),  // status
+                r.IsDBNull(9) ? null : DateTime.Parse(r.GetString(9)),  // approved_at
+                r.IsDBNull(10) ? null : DateTime.Parse(r.GetString(10))  // denied_at
+            ));
+        }
+
+        return list;
+    }
+
+    public async Task<List<ApprovalRequest>> GetApprovalRequestsAsync(string? sessionId = null, int limit = 100, CancellationToken ct = default)
+    {
+        var list = new List<ApprovalRequest>();
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = sessionId is null
+            ? """
+              SELECT id, session_id, tool_name, arguments_json, policy_decision, reason,
+                     requested_at, requested_by, status, approved_at, denied_at
+              FROM approval_requests ORDER BY requested_at DESC LIMIT $n
+              """
+            : """
+              SELECT id, session_id, tool_name, arguments_json, policy_decision, reason,
+                     requested_at, requested_by, status, approved_at, denied_at
+              FROM approval_requests WHERE session_id = $s ORDER BY requested_at DESC LIMIT $n
+              """;
+        if (sessionId is not null) cmd.Parameters.AddWithValue("$s", sessionId);
+        cmd.Parameters.AddWithValue("$n", limit);
+        using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new ApprovalRequest(
+                r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5),
+                DateTime.Parse(r.GetString(6)),
+                r.IsDBNull(7) ? null : r.GetString(7),
+                r.GetString(8),
+                r.IsDBNull(9) ? null : DateTime.Parse(r.GetString(9)),
+                r.IsDBNull(10) ? null : DateTime.Parse(r.GetString(10))));
+        }
+
+        return list;
+    }
+
+    public async Task UpdateApprovalStatusAsync(string id, string status, DateTime? approvedAt = null, DateTime? deniedAt = null, CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          UPDATE approval_requests
+                          SET status = $st, approved_at = $aa, denied_at = $da
+                          WHERE id = $id
+                          """;
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.Parameters.AddWithValue("$st", status);
+        cmd.Parameters.AddWithValue("$aa", approvedAt?.ToString("o") ?? (object?)DBNull.Value);
+        cmd.Parameters.AddWithValue("$da", deniedAt?.ToString("o") ?? (object?)DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task ExpireOldApprovalsAsync(int ttlMinutes, CancellationToken ct = default)
+    {
+        var cutoff = DateTime.UtcNow.AddMinutes(-ttlMinutes).ToString("o");
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = "UPDATE approval_requests SET status = 'Expired' WHERE status = 'Pending' AND requested_at < $cutoff";
+        cmd.Parameters.AddWithValue("$cutoff", cutoff);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 }
 

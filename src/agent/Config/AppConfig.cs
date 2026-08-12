@@ -53,6 +53,9 @@ public sealed class AppConfig
 
     /// <summary>Конфигурация tool policy engine (task_009).</summary>
     public ToolPolicyConfig ToolPolicy { get; set; } = new();
+
+    /// <summary>Конфигурация approval gates (task_010).</summary>
+    public ApprovalConfig Approval { get; set; } = new();
 }
 
 /// <summary>
@@ -408,4 +411,20 @@ public sealed class ManifestCapabilityConfig
     public string Description { get; set; } = "";
 
     [JsonPropertyName("phrase_receivers")] public List<string> PhraseReceivers { get; set; } = new();
+}
+
+/// <summary>
+///     Конфигурация approval gates (task_010).
+///     Контролирует поведение human-in-the-loop подтверждений.
+/// </summary>
+public sealed class ApprovalConfig
+{
+    /// <summary>Включить approval gates. false = всё auto-approved.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>TTL pending-запросов в минутах. По истечении — Expired.</summary>
+    public int DefaultTtlMinutes { get; set; } = 30;
+
+    /// <summary>Максимальное число pending-запросов одновременно.</summary>
+    public int MaxPending { get; set; } = 50;
 }

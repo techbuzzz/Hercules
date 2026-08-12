@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hercules.Config;
+using Hercules.Tools.Approval;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.Tools.Policy;
@@ -18,6 +19,7 @@ public sealed class ToolPolicyEngine : IConfigReload
     private readonly ToolPolicyConfig _config;
     private readonly ILogger<ToolPolicyEngine> _logger;
     private readonly ToolPermissionSet _permissions;
+    private readonly IApprovalService? _approvalService;
 
     /// <summary>
     ///     Реестр descriptors для известных tools.
@@ -25,11 +27,16 @@ public sealed class ToolPolicyEngine : IConfigReload
     /// </summary>
     private readonly Dictionary<string, ToolDescriptor> _registry = new(StringComparer.OrdinalIgnoreCase);
 
-    public ToolPolicyEngine(ToolPolicyConfig config, ToolPermissionSet permissions, ILogger<ToolPolicyEngine> logger)
+    public ToolPolicyEngine(
+        ToolPolicyConfig config,
+        ToolPermissionSet permissions,
+        ILogger<ToolPolicyEngine> logger,
+        IApprovalService? approvalService = null)
     {
         _config = config;
         _permissions = permissions;
         _logger = logger;
+        _approvalService = approvalService;
     }
 
     /// <summary>
@@ -126,6 +133,18 @@ public sealed class ToolPolicyEngine : IConfigReload
                 return ToolPolicyResult.Denied($"Missing permissions: {missing}");
             }
 
+            // task_010: register approval request and return with request ID
+            if (_approvalService is not null)
+            {
+                var reason = $"Tool '{toolName}' has side_effect_level={descriptor.SideEffectLevel} " +
+                             $"which requires human approval (threshold={_config.MinSideEffectLevelForApproval})";
+                var approvalResult = _approvalService
+                    .RequestAsync(ctx.SessionId ?? "default", toolName, ctx.ArgumentsJson, reason)
+                    .GetAwaiter().GetResult();
+                return ToolPolicyResult.NeedsApproval(
+                    $"{reason}. Approval request id={approvalResult.RequestId}, status={approvalResult.Status}");
+            }
+
             return ToolPolicyResult.NeedsApproval(
                 $"Tool '{toolName}' has side_effect_level={descriptor.SideEffectLevel} " +
                 $"which requires human approval (threshold={_config.MinSideEffectLevelForApproval})");
@@ -142,6 +161,17 @@ public sealed class ToolPolicyEngine : IConfigReload
         // 6. Critical tool check (always needs approval)
         if (descriptor.SideEffectLevel == SideEffectLevel.Critical)
         {
+            // task_010: register approval request for critical tools
+            if (_approvalService is not null)
+            {
+                var reason = $"Tool '{toolName}' is marked Critical";
+                var approvalResult = _approvalService
+                    .RequestAsync(ctx.SessionId ?? "default", toolName, ctx.ArgumentsJson, reason)
+                    .GetAwaiter().GetResult();
+                return ToolPolicyResult.NeedsApproval(
+                    $"{reason}. Approval request id={approvalResult.RequestId}, status={approvalResult.Status}");
+            }
+
             return ToolPolicyResult.NeedsApproval($"Tool '{toolName}' is marked Critical");
         }
 

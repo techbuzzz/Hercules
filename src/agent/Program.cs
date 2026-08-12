@@ -10,6 +10,7 @@ using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Telegram;
 using Hercules.Tools;
+using Hercules.Tools.Approval;
 using Hercules.Tools.Policy;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
@@ -105,11 +106,19 @@ builder.ConfigureServices((context, services) =>
         var perms = ToolPermissionExtensions.ParseFromString(cfg.AgentPermissions);
         return new ToolPermissionSet(perms);
     });
+    // Approval gates (task_010)
+    services.AddSingleton(appConfig.Approval);
+    services.AddSingleton<IApprovalService>(sp =>
+        new ApprovalService(
+            sp.GetRequiredService<ApprovalConfig>(),
+            sp.GetRequiredService<SqliteSessionStore>(),
+            sp.GetRequiredService<ILogger<ApprovalService>>()));
     services.AddSingleton<ToolPolicyEngine>(sp =>
         new ToolPolicyEngine(
             sp.GetRequiredService<ToolPolicyConfig>(),
             sp.GetRequiredService<ToolPermissionSet>(),
-            sp.GetRequiredService<ILogger<ToolPolicyEngine>>()));
+            sp.GetRequiredService<ILogger<ToolPolicyEngine>>(),
+            sp.GetRequiredService<IApprovalService>()));
     services.AddSingleton<ToolRegistry>();
     services.AddSingleton<McpClient>();
 

@@ -176,3 +176,20 @@ public sealed record TaskState(
     string? Metadata,    // JSON: tags, priority, assignee, etc.
     DateTime CreatedAt,
     DateTime UpdatedAt);
+
+/// <summary>
+///     Запрос на подтверждение выполнения tool (human-in-the-loop approval).
+///     Таблица: approval_requests.
+/// </summary>
+public sealed record ApprovalRequest(
+    string Id,
+    string SessionId,
+    string ToolName,
+    string ArgumentsJson,
+    string PolicyDecision,   // "RequiresApproval"
+    string Reason,
+    DateTime RequestedAt,
+    string? RequestedBy,     // "user" or "agent:sessionId"
+    string Status,           // Pending | Approved | Denied | Expired
+    DateTime? ApprovedAt,
+    DateTime? DeniedAt);

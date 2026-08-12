@@ -3,6 +3,7 @@ using Hercules.Agent;
 using Hercules.Mesh;
 using Hercules.Skills;
 using Hercules.Storage;
+using Hercules.Tools.Approval;
 using Spectre.Console;
 
 namespace Hercules.CLI;
@@ -11,7 +12,7 @@ namespace Hercules.CLI;
 ///     REPL-интерфейс командной строки (primary). Реализует команды из ТЗ:
 ///     прямой ввод, /skills, /skills create, /skills improve, /memory show,
 ///     /memory reset, /reflect, /exit, /skills export, /skills import,
-///     /marketplace, /templates, /mesh (Phase 3 + 4).
+///     /marketplace, /templates, /mesh (Phase 3 + 4), /approvals (task_010).
 /// </summary>
 public sealed class ConsoleUI(
     AgentCore agent,
@@ -27,7 +28,8 @@ public sealed class ConsoleUI(
     MeshRouter meshRouter,
     CircuitBreaker circuitBreaker,
     DistributedReflection distributedReflection,
-    SharedMemorySync sharedMemorySync)
+    SharedMemorySync sharedMemorySync,
+    IApprovalService? approvalService = null)
 {
     public async Task RunAsync(CancellationToken ct = default)
     {
@@ -206,6 +208,10 @@ public sealed class ConsoleUI(
                 await HandleMeshCommand(parts, ct);
                 break;
 
+            case "/approvals":
+                await HandleApprovalsCommandAsync(parts, ct);
+                break;
+
             default:
                 AnsiConsole.MarkupLineInterpolated($"[red]Неизвестная команда:[/] {cmd}. Наберите /help.");
                 break;
@@ -273,6 +279,87 @@ public sealed class ConsoleUI(
         await AnsiConsole.Status().StartAsync("Провожу самоанализ...", async _ => { result = await reflection.ReflectAsync(agent.SessionId, ct); });
         AnsiConsole.Write(new Panel(Markup.Escape(result.Markdown)).Header("Reflection Engine").Expand());
         AnsiConsole.MarkupLineInterpolated($"[grey]Сохранено в Skills/{result.FilePath}[/]");
+    }
+
+    private async Task HandleApprovalsCommandAsync(string[] parts, CancellationToken ct)
+    {
+        if (approvalService is null)
+        {
+            AnsiConsole.MarkupLine("[yellow]Approval gates не настроены (ApprovalConfig.Enabled=false или сервис не зарегистрирован).[/]");
+            return;
+        }
+
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "list";
+
+        switch (sub)
+        {
+            case "list":
+            case "":
+            {
+                var pending = approvalService.GetPending();
+                if (pending.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[grey]Нет pending-запросов на подтверждение.[/]");
+                    return;
+                }
+
+                var table = new Table().Border(TableBorder.Rounded).Title($"[yellow]Pending approvals ({pending.Count})[/]");
+                table.AddColumn("Request ID");
+                table.AddColumn("Tool");
+                table.AddColumn("Session");
+                table.AddColumn("Причина");
+                table.AddColumn("Время");
+                foreach (var p in pending)
+                {
+                    table.AddRow(
+                        p.RequestId,
+                        p.ToolName,
+                        p.SessionId,
+                        p.Reason.Length > 50 ? p.Reason[..50] + "…" : p.Reason,
+                        p.RequestedAt.ToLocalTime().ToString("HH:mm:ss"));
+                }
+
+                AnsiConsole.Write(table);
+                AnsiConsole.MarkupLine("\n[grey]Одобрить: /approvals approve {requestId} | Отклонить: /approvals deny {requestId}[/]");
+                break;
+            }
+
+            case "approve":
+            {
+                if (parts.Length < 3)
+                {
+                    AnsiConsole.MarkupLine("[red]Использование: /approvals approve {requestId}[/]");
+                    return;
+                }
+
+                var id = parts[2];
+                var ok = await approvalService.ApproveAsync(id, ct);
+                AnsiConsole.MarkupLine(ok
+                    ? $"[green]✓ Запрос '{id}' одобрен.[/]"
+                    : $"[red]✗ Запрос '{id}' не найден или уже обработан.[/]");
+                break;
+            }
+
+            case "deny":
+            {
+                if (parts.Length < 3)
+                {
+                    AnsiConsole.MarkupLine("[red]Использование: /approvals deny {requestId}[/]");
+                    return;
+                }
+
+                var id = parts[2];
+                var ok = await approvalService.DenyAsync(id, ct);
+                AnsiConsole.MarkupLine(ok
+                    ? $"[green]✓ Запрос '{id}' отклонён.[/]"
+                    : $"[red]✗ Запрос '{id}' не найден или уже обработан.[/]");
+                break;
+            }
+
+            default:
+                AnsiConsole.MarkupLine("[grey]Команды:[/] /approvals list | approve {id} | deny {id}");
+                break;
+        }
     }
 
     private async Task ShutdownAsync(CancellationToken ct)
@@ -739,6 +826,9 @@ public sealed class ConsoleUI(
         table.AddRow("/mesh recommendations", "Рекомендации по новым локальным навыкам");
         table.AddRow("/mesh memory-sync", "Синхронизировать shared-факты с peer'ами");
         table.AddRow("/mesh shared", "Список shared-фактов памяти");
+        table.AddRow("/approvals list", "Pending-запросы на подтверждение");
+        table.AddRow("/approvals approve {id}", "Одобрить tool (по request ID)");
+        table.AddRow("/approvals deny {id}", "Отклонить tool (по request ID)");
         table.AddRow("/memory show", "Показать профиль пользователя");
         table.AddRow("/memory reset", "Сбросить память");
         table.AddRow("/reflect", "Запустить рефлексию вручную");

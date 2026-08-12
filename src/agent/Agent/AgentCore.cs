@@ -9,6 +9,7 @@ using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Storage;
 using Hercules.Tools;
+using Hercules.Tools.Approval;
 using Hercules.Tools.Policy;
 using Microsoft.Extensions.Logging;
 
@@ -78,6 +79,7 @@ public sealed class AgentCore : IConfigReload
     private readonly ToolRegistry? _tools;
     private readonly IJsonRepairService _jsonRepair;
     private readonly ToolPolicyEngine? _policy;
+    private readonly IApprovalService? _approvals;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
@@ -95,7 +97,8 @@ public sealed class AgentCore : IConfigReload
         ILogger<AgentCore> logger,
         IJsonRepairService jsonRepair,
         ToolRegistry? tools = null,
-        ToolPolicyEngine? policy = null)
+        ToolPolicyEngine? policy = null,
+        IApprovalService? approvals = null)
     {
         _llm = llm;
         _router = router;
@@ -107,6 +110,7 @@ public sealed class AgentCore : IConfigReload
         _jsonRepair = jsonRepair;
         _tools = tools;
         _policy = policy;
+        _approvals = approvals;
     }
 
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
@@ -305,12 +309,22 @@ public sealed class AgentCore : IConfigReload
                 if (policyResult.RequiresApproval)
                 {
                     _logger.LogWarning("[Policy] Tool '{Name}' requires approval — {Reason}", toolName, policyResult.DeniedReason);
-                    messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
-                    messages.Add(new ChatTurn(ChatRole.System,
-                        $"[system] Tool '{toolName}' requires human approval: {policyResult.DeniedReason}. " +
-                        "Please confirm the action in the approval interface and retry. " +
-                        "For now, provide a final answer without this tool."));
-                    continue;
+
+                    // task_010: check if the tool was already approved
+                    if (_approvals is not null && _approvals.IsApproved(toolName, SessionId))
+                    {
+                        _logger.LogInformation("[Approval] Tool '{Name}' was pre-approved — proceeding with execution", toolName);
+                    }
+                    else
+                    {
+                        // Not yet approved — return waiting message
+                        messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
+                        messages.Add(new ChatTurn(ChatRole.System,
+                            $"[system] Tool '{toolName}' requires human approval: {policyResult.DeniedReason}. " +
+                            "Please confirm the action in the approval interface (POST /api/approvals/{{id}}/approve) and retry. " +
+                            "For now, provide a final answer without this tool."));
+                        continue;
+                    }
                 }
             }
 

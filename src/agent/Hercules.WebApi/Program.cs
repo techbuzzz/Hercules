@@ -9,6 +9,7 @@ using Hercules.Mesh;
 using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Tools;
+using Hercules.Tools.Approval;
 using Hercules.Tools.Policy;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
@@ -64,6 +65,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.A2A);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Mesh);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ToolPolicy);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Approval);
 builder.Services.AddSingleton(webCfg);
 
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
@@ -115,11 +117,17 @@ builder.Services.AddSingleton(sp =>
     var perms = ToolPermissionExtensions.ParseFromString(cfg.AgentPermissions);
     return new ToolPermissionSet(perms);
 });
+builder.Services.AddSingleton<IApprovalService>(sp =>
+    new ApprovalService(
+        sp.GetRequiredService<ApprovalConfig>(),
+        sp.GetRequiredService<SqliteSessionStore>(),
+        sp.GetRequiredService<ILogger<ApprovalService>>()));
 builder.Services.AddSingleton<ToolPolicyEngine>(sp =>
     new ToolPolicyEngine(
         sp.GetRequiredService<ToolPolicyConfig>(),
         sp.GetRequiredService<ToolPermissionSet>(),
-        sp.GetRequiredService<ILogger<ToolPolicyEngine>>()));
+        sp.GetRequiredService<ILogger<ToolPolicyEngine>>(),
+        sp.GetRequiredService<IApprovalService>()));
 builder.Services.AddSingleton<ToolRegistry>();
 builder.Services.AddSingleton<McpClient>();
 
@@ -257,6 +265,8 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/llm/capabilities", "GET /api/llm/capabilities/{provider}",
         "GET /api/llm/config",
         "GET /api/config", "PUT /api/config", "PATCH /api/config",
+        "GET /api/approvals/pending", "GET /api/approvals/{id}",
+        "POST /api/approvals/{id}/approve", "POST /api/approvals/{id}/deny",
         "GET /agent.manifest.json", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
         "GET /api/mesh/agents/{id}", "DELETE /api/mesh/agents/{id}",
         "GET /api/mesh/capabilities", "GET /api/mesh/capabilities/{name}",
@@ -276,6 +286,7 @@ app.MapMesh();
 app.MapBudget();
 app.MapAudit();
 app.MapLlm();
+app.MapApprovals();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");
