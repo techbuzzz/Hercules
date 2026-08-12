@@ -57,7 +57,7 @@
 | 26 | — | [Least-privilege grants](tasks/task_026.md) | `least-privilege-grants` | pending |
 | 27 | — | [Сборка и сжатие контекста](tasks/task_027.md) | `context-assembly` | done |
 | 28 | — | [Кэширование](tasks/task_028.md) | `caching` | done |
-| 29 | — | [Score качества навыка](tasks/task_029.md) | `skill-quality-score` | pending |
+| 29 | — | [Score качества навыка](tasks/task_029.md) | `skill-quality-score` | done |
 | 30 | 11 | [Шаблоны агентов](tasks/task_030.md) | `agent-templates` | pending |
 | 31 | — | [Симуляция шаблонов](tasks/task_031.md) | `template-simulation` | pending |
 
