@@ -17,6 +17,7 @@ using Hercules.Redaction;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
 using Hercules.Skills.Marketplace;
+using Hercules.Skills.Quality;
 using Hercules.Skills.Routing;
 using Hercules.Skills.Routing.ScoringComponents;
 using Hercules.Skills.Routing.Deterministic;
@@ -92,6 +93,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SelfImprovement);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Tasks);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Phase2);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SkillQuality);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.LeastPrivilege);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Cache);
 
@@ -290,6 +292,7 @@ builder.Services.AddSingleton<ISkillScoringEngine>(sp =>
             sp.GetRequiredService<HistoricalQualityScorer>(),
             sp.GetRequiredService<LatencyScorer>(),
             sp.GetRequiredService<PolicyEligibilityScorer>(),
+            sp.GetRequiredService<SkillQualityScorer>(),
         },
         sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>(),
         sp.GetService<EmbeddingScorer>()));
@@ -309,6 +312,15 @@ builder.Services.AddSingleton<EmbeddingSkillRouter>(sp =>
         sp.GetService<IDeterministicRouter>()));
 
 // Phase 2: Skill marketplace + agent templates (task_021)
+builder.Services.AddSingleton<SkillQualityStore>(sp =>
+    new SkillQualityStore(sp.GetRequiredService<StorageConfig>()));
+builder.Services.AddSingleton<ISkillQualityService>(sp =>
+    new SkillQualityService(
+        sp.GetRequiredService<SkillQualityStore>(),
+        sp.GetRequiredService<SkillQualityConfig>()));
+builder.Services.AddSingleton<SkillQualityScorer>(sp =>
+    new SkillQualityScorer(sp.GetRequiredService<ISkillQualityService>()));
+
 builder.Services.AddSingleton<SkillMarketplace>(sp =>
     new SkillMarketplace(
         sp.GetRequiredService<StorageConfig>(),
@@ -490,6 +502,7 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", time = Date
 app.MapChat();
 app.MapSkills();
 app.MapSkillLifecycle();
+app.MapSkillQuality();
 app.MapMemory();
 app.MapStats();
 app.MapConfig();

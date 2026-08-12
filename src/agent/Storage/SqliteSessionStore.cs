@@ -39,6 +39,9 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         _conn.Dispose();
     }
 
+    /// <summary>Exposes the underlying connection for shared-quality store usage (task_029).</summary>
+    public SqliteConnection Connection => _conn;
+
     public bool IsHealthy()
     {
         try

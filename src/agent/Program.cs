@@ -19,6 +19,7 @@ using Hercules.Reflection;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
 using Hercules.Skills.Marketplace;
+using Hercules.Skills.Quality;
 using Hercules.Skills.Routing;
 using Hercules.Skills.Routing.ScoringComponents;
 using Hercules.Skills.Routing.Deterministic;
@@ -74,6 +75,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton(appConfig.Mesh);
     services.AddSingleton(appConfig.ToolPolicy);
     services.AddSingleton(appConfig.Phase2);
+    services.AddSingleton(appConfig.SkillQuality);
     services.AddSingleton(appConfig.LeastPrivilege);
 
     // OpenTelemetry (task_013) — tracing + metrics
@@ -277,6 +279,7 @@ builder.ConfigureServices((context, services) =>
                 sp.GetRequiredService<HistoricalQualityScorer>(),
                 sp.GetRequiredService<LatencyScorer>(),
                 sp.GetRequiredService<PolicyEligibilityScorer>(),
+                sp.GetRequiredService<SkillQualityScorer>(),
             },
             sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>(),
             sp.GetService<EmbeddingScorer>()));
@@ -298,6 +301,15 @@ builder.ConfigureServices((context, services) =>
             sp.GetService<IDeterministicRouter>()));
 
     // Phase 2: Skill marketplace + agent templates (task_021)
+    services.AddSingleton<SkillQualityStore>(sp =>
+        new SkillQualityStore(sp.GetRequiredService<StorageConfig>()));
+    services.AddSingleton<ISkillQualityService>(sp =>
+        new SkillQualityService(
+            sp.GetRequiredService<SkillQualityStore>(),
+            sp.GetRequiredService<SkillQualityConfig>()));
+    services.AddSingleton<SkillQualityScorer>(sp =>
+        new SkillQualityScorer(sp.GetRequiredService<ISkillQualityService>()));
+
     services.AddSingleton<SkillMarketplace>(sp =>
         new SkillMarketplace(
             sp.GetRequiredService<StorageConfig>(),

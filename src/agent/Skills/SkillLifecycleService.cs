@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Config;
 using Hercules.Skills.Eval;
+using Hercules.Skills.Quality;
 using Hercules.Storage;
 
 namespace Hercules.Skills;
@@ -18,6 +19,8 @@ public sealed class SkillLifecycleService
     private readonly SkillEvaluationEngine _evaluator;
     private readonly EvalConfig _evalConfig;
     private readonly IEvalHarnessService? _harness;
+    private readonly ISkillQualityService? _qualityService;
+    private readonly SkillQualityConfig? _qualityConfig;
 
     public SkillLifecycleService(
         SkillManager manager,
@@ -25,7 +28,9 @@ public sealed class SkillLifecycleService
         SkillLifecyclePolicy policy,
         SkillEvaluationEngine evaluator,
         EvalConfig? evalConfig = null,
-        IEvalHarnessService? harness = null)
+        IEvalHarnessService? harness = null,
+        ISkillQualityService? qualityService = null,
+        SkillQualityConfig? qualityConfig = null)
     {
         _manager = manager ?? throw new ArgumentNullException(nameof(manager));
         _deprecation = deprecation ?? throw new ArgumentNullException(nameof(deprecation));
@@ -33,6 +38,8 @@ public sealed class SkillLifecycleService
         _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
         _evalConfig = evalConfig ?? new EvalConfig();
         _harness = harness;
+        _qualityService = qualityService;
+        _qualityConfig = qualityConfig;
     }
 
     /// <summary>
@@ -122,6 +129,7 @@ public sealed class SkillLifecycleService
     ///     Запустить eval harness с regression check.
     ///     Вызывается после promotion навыка. Если BlockOnRegression=true и обнаружена
     ///     регрессия — откатывает изменения и кидает RegressionBlockedException.
+    ///     Task 029: также проверяет quality score против MinScoreForPromotion.
     /// </summary>
     public async Task<RegressionResult> EvalHarnessAsync(string skillId, CancellationToken ct = default)
     {
@@ -135,6 +143,36 @@ public sealed class SkillLifecycleService
                 CurrentScore = 0,
                 EvaluatedAt = DateTime.UtcNow.ToString("o")
             };
+        }
+
+        // Check quality score before promotion (task_029)
+        if (_qualityService is not null && _qualityConfig is not null)
+        {
+            var skill = _manager.Get(skillId);
+            if (skill is not null)
+            {
+                var qScore = await _qualityService.ComputeScoreAsync(skillId, skill.Meta.Version, ct);
+                if (qScore.IsReliable && qScore.CompositeScore < _qualityConfig.MinScoreForPromotion)
+                {
+                    return new RegressionResult
+                    {
+                        HasRegression = true,
+                        ScoreDelta = qScore.CompositeScore,
+                        PreviousScore = 0,
+                        CurrentScore = qScore.CompositeScore,
+                        BlockedReasons = new List<RegressionDetail>
+                            { new RegressionDetail
+                                {
+                                    TestName = "skill_quality_score",
+                                    PreviousScore = 0,
+                                    CurrentScore = qScore.CompositeScore,
+                                    Reason = $"Quality score {qScore.CompositeScore:F2} < MinScoreForPromotion {_qualityConfig.MinScoreForPromotion}"
+                                }
+                            },
+                        EvaluatedAt = DateTime.UtcNow.ToString("o")
+                    };
+                }
+            }
         }
 
         var result = await _harness.RunHarnessAsync(skillId, ct);

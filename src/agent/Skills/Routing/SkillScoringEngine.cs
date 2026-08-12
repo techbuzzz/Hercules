@@ -1,5 +1,6 @@
 using Hercules.Agent;
 using Hercules.Config;
+using Hercules.Skills.Quality;
 using Hercules.Skills.Routing.ScoringComponents;
 using Hercules.Storage;
 
@@ -63,6 +64,7 @@ public sealed class SkillScoringEngine : ISkillScoringEngine
             else if (scorer is HistoricalQualityScorer hs) hs.Weight = w;
             else if (scorer is LatencyScorer lt) lt.Weight = w;
             else if (scorer is PolicyEligibilityScorer ps) ps.Weight = w;
+            else if (scorer is SkillQualityScorer qs) qs.Weight = w;
 
             _scorers.Add((scorer, w));
         }

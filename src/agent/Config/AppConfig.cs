@@ -36,6 +36,7 @@ public sealed class AppConfig
     public LeastPrivilegeConfig LeastPrivilege { get; set; } = new();
     public ContextConfig Context { get; set; } = new();
     public CacheConfig Cache { get; set; } = new();
+    public SkillQualityConfig SkillQuality { get; set; } = new();
 }
 
 /// <summary>
@@ -501,6 +502,45 @@ public sealed class EvalConfig
     public double BaselineComparisonThreshold { get; set; } = 0.05;
     public int DefaultFixtureCount { get; set; } = 5;
     public bool EnableLlmJudgeCases { get; set; } = false;
+}
+
+/// <summary>
+///     Конфигурация quality score для навыков (task_029).
+///     Управляет весами метрик, минимальным размером выборки и decay.
+/// </summary>
+public sealed class SkillQualityConfig
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    ///     Веса компонентов composite quality score.
+    ///     Сумма не обязана равняться 1 (нормализуется в SkillQualityService).
+    /// </summary>
+    public Dictionary<string, double> ScoreWeights { get; set; } = new()
+    {
+        ["acceptanceRate"]     = 0.25,
+        ["testScore"]         = 0.30,
+        ["userCorrectionRate"] = 0.20,
+        ["fallbackRate"]      = 0.15,
+        ["latency"]           = 0.05,
+        ["cost"]              = 0.05,
+    };
+
+    /// <summary>
+    ///     Минимальное число вызовов навыка для достоверного quality score.
+    ///     При меньшем числе вызовов score = 1.0 (neutral).
+    /// </summary>
+    public int MinSampleSize { get; set; } = 10;
+
+    /// <summary>
+    ///     Коэффициент decay для версий старше текущей: score *= ScoreDecayPerVersion^(versionGap).
+    /// </summary>
+    public double ScoreDecayPerVersion { get; set; } = 0.95;
+
+    /// <summary>
+    ///     Минимальный quality score для promotion. Если computed score &lt; этого значения — promotion блокируется.
+    /// </summary>
+    public double MinScoreForPromotion { get; set; } = 0.40;
 }
 
 /// <summary>
