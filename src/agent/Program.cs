@@ -168,10 +168,25 @@ Console.CancelKeyPress += (_, e) =>
 };
 
 var telegramMode = args.Contains("--telegram") || (appConfig.Telegram.Enabled && args.Contains("--bot"));
+var benchmarkMode = args.Contains("--benchmark");
 
 try
 {
-    if (telegramMode)
+    if (benchmarkMode)
+    {
+        Console.WriteLine("Hercules Benchmark Suite");
+        Console.WriteLine("=======================\n");
+
+        var agent = host.Services.GetRequiredService<AgentCore>();
+        var skills = host.Services.GetRequiredService<SkillManager>();
+        var sessions = host.Services.GetRequiredService<SqliteSessionStore>();
+        var budget = (BudgetService)host.Services.GetRequiredService<IBudgetService>();
+        var memory = host.Services.GetRequiredService<MemoryStore>();
+
+        var runner = new BenchmarkRunner(agent, skills, sessions, budget, memory);
+        await runner.RunAsync(ct: cts.Token);
+    }
+    else if (telegramMode)
     {
         TelegramBotInterface bot = host.Services.GetRequiredService<TelegramBotInterface>();
         Console.WriteLine("Запуск в режиме Telegram-бота. Ctrl+C для остановки.");

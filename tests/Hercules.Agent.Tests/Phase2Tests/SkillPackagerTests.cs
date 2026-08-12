@@ -113,6 +113,41 @@ public class SkillPackagerTests : IDisposable
       var errors = _packager.Validate("/nonexistent/path.skillpkg");
       Assert.NotEmpty(errors);
    }
+
+   [Fact]
+   public void Export_ProducesFileWithSkillpkgExtension()
+   {
+      var skill = _skillManager.CreateManual("ext-test", ["расширение"], "Промпт.");
+
+      var path = _packager.Export(skill.Meta.Id);
+
+      Assert.EndsWith(".skillpkg", path);
+      Assert.True(File.Exists(path));
+   }
+
+   [Fact]
+   public void Validate_ReturnsNoErrors_ForCorruptPackage()
+   {
+      // Проверяем, что Validate обнаруживает невалидный zip
+      var tempZip = Path.Combine(_tempDir, "corrupt.skillpkg");
+      File.WriteAllBytes(tempZip, new byte[] { 0x00, 0x01, 0x02 });
+
+      var errors = _packager.Validate(tempZip);
+
+      Assert.NotEmpty(errors);
+   }
+
+   [Fact]
+   public void Import_SamePackageTwice_RenamesSecond()
+   {
+      var skill = _skillManager.CreateManual("duplicate", ["дубликат"], "Промпт.");
+      var path = _packager.Export(skill.Meta.Id);
+
+      var first = _packager.Import(path);
+      var second = _packager.Import(path);
+
+      Assert.NotEqual(first.Meta.Id, second.Meta.Id);
+   }
 }
 
 /// <summary>

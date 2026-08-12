@@ -228,4 +228,36 @@ public class RuntimeConfigStoreTests
          /* best effort */
       }
    }
+
+   [Fact]
+   public void Constructor_ThrowsOnNullInitial()
+   {
+      var ex = Assert.Throws<ArgumentNullException>(() =>
+         new RuntimeConfigStore(null!, "path.json", NullLogger<RuntimeConfigStore>.Instance));
+      Assert.Equal("initial", ex.ParamName);
+   }
+
+   [Fact]
+   public void Constructor_ThrowsOnNullFilePath()
+   {
+      var ex = Assert.Throws<ArgumentNullException>(() =>
+         new RuntimeConfigStore(new AppConfig(), null!, NullLogger<RuntimeConfigStore>.Instance));
+      Assert.Equal("filePath", ex.ParamName);
+   }
+
+   [Fact]
+   public void Update_ThrowsOnNullConfig()
+   {
+      var path = NewTempFile();
+      try
+      {
+         var store = new RuntimeConfigStore(SampleConfig(), path, NullLogger<RuntimeConfigStore>.Instance);
+         var ex = Assert.Throws<ArgumentNullException>(() => store.Update(null!));
+         Assert.Equal("next", ex.ParamName);
+      }
+      finally
+      {
+         TryDelete(path);
+      }
+   }
 }

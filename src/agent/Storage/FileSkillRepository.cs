@@ -21,7 +21,8 @@ public sealed class FileSkillRepository
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         // Не экранировать кириллицу — файлы метаданных читаются человеком
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        PropertyNameCaseInsensitive = true
     };
 
     private readonly ILogger<FileSkillRepository> _logger;
