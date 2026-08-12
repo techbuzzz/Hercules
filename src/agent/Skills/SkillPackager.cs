@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Hercules.Config;
+using Hercules.Skills.Marketplace;
 using Hercules.Storage;
 
 namespace Hercules.Skills;
@@ -44,6 +45,7 @@ public sealed class SkillPackager
     private readonly FileSkillRepository _repo;
     private readonly ISecretMaskingService? _masking;
     private readonly bool _redactInExports;
+    private readonly IMarketplaceSigningService? _signing;
 
     public SkillPackager(FileSkillRepository repo)
     {
@@ -55,6 +57,20 @@ public sealed class SkillPackager
         _repo = repo ?? throw new ArgumentNullException(nameof(repo));
         _masking = masking;
         _redactInExports = secretsConfig?.RedactInExports ?? true;
+    }
+
+    public SkillPackager(FileSkillRepository repo, IMarketplaceSigningService signing)
+    {
+        _repo = repo ?? throw new ArgumentNullException(nameof(repo));
+        _signing = signing;
+    }
+
+    public SkillPackager(FileSkillRepository repo, SecretsConfig secretsConfig, ISecretMaskingService masking, IMarketplaceSigningService signing)
+    {
+        _repo = repo ?? throw new ArgumentNullException(nameof(repo));
+        _masking = masking;
+        _redactInExports = secretsConfig?.RedactInExports ?? true;
+        _signing = signing;
     }
 
     /// <summary>Имя файла-пакета по умолчанию: {id}-v{version}.skillpkg.</summary>
@@ -162,8 +178,11 @@ public sealed class SkillPackager
         var fileName = PackageFileName(skill.Meta.Id, skill.Meta.Version);
         var packagePath = Path.Combine(outDir, fileName);
 
-        using FileStream archiveStream = File.Create(packagePath);
-        using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create);
+        // Пишем в temp-файл, чтобы потом подписать
+        var tempPath = packagePath + ".tmp";
+        using (FileStream archiveStream = File.Create(tempPath))
+        using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create))
+        {
 
         // skill.folder/ — зеркало folder-структуры внутри ZIP
         string skillFolder = $"skill.{skill.Meta.Id}/";
@@ -238,8 +257,49 @@ public sealed class SkillPackager
             CreatedAt = DateTime.UtcNow.ToString("o")
         };
         WriteEntry(archive, "skill.package.json", JsonSerializer.Serialize(manifest, JsonOpts));
+        }
 
+        // Подписываем и пишем sidecar-файлы
+        WriteIntegritySidecars(tempPath, packagePath);
         return packagePath;
+    }
+
+    private void WriteIntegritySidecars(string tempPath, string finalPath)
+    {
+        byte[] bytes = File.ReadAllBytes(tempPath);
+        var hash = _signing?.ComputeHash(bytes) ?? ComputeHashFallback(bytes);
+
+        // signature.txt (HMAC-SHA256)
+        string? signature = null;
+        if (_signing is not null)
+        {
+            try
+            {
+                signature = _signing.ComputeSignature(hash);
+            }
+            catch (InvalidOperationException)
+            {
+                // Ключ не сконфигурирован — пропускаем подпись
+            }
+        }
+
+        if (signature is not null)
+        {
+            File.WriteAllText(Path.ChangeExtension(finalPath, ".signature.txt"), signature);
+        }
+
+        // hash_sha256.txt
+        File.WriteAllText(Path.ChangeExtension(finalPath, ".hash_sha256.txt"), hash);
+
+        // Перемещаем из temp в final
+        if (File.Exists(finalPath)) File.Delete(finalPath);
+        File.Move(tempPath, finalPath);
+    }
+
+    private static string ComputeHashFallback(byte[] bytes)
+    {
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     /// <summary>
@@ -351,6 +411,7 @@ public sealed class SkillPackager
 
     /// <summary>
     ///     Проверить валидность пакета без импорта. Возвращает список ошибок (пустой = OK).
+    ///     Также проверяет integrity hash и подпись (task_021).
     /// </summary>
     public List<string> Validate(string packagePath)
     {
@@ -375,6 +436,12 @@ public sealed class SkillPackager
             {
                 errors.Add($"Пакет не найден: {packagePath}");
                 return errors;
+            }
+
+            // Integrity check (task_021): hash + signature verification
+            if (File.Exists(packagePath))
+            {
+                ValidateIntegrity(packagePath, errors);
             }
 
             var id = meta?.Id ?? manifest?.Skill.Id ?? "";
@@ -541,6 +608,65 @@ public sealed class SkillPackager
         ZipArchiveEntry entry = archive.CreateEntry(entryName);
         using var writer = new StreamWriter(entry.Open());
         writer.Write(content);
+    }
+
+    /// <summary>
+    ///     Проверить SHA256 hash и HMAC-SHA256 подпись пакета.
+    ///     Добавляет ошибки в список errors.
+    /// </summary>
+    private void ValidateIntegrity(string packagePath, List<string> errors)
+    {
+        var hashFile = Path.ChangeExtension(packagePath, ".hash_sha256.txt");
+        var sigFile = Path.ChangeExtension(packagePath, ".signature.txt");
+
+        if (File.Exists(hashFile))
+        {
+            var expectedHash = File.ReadAllText(hashFile).Trim();
+            var packageBytes = File.ReadAllBytes(packagePath);
+            if (_signing is not null)
+            {
+                if (!_signing.VerifyHash(packageBytes, expectedHash))
+                {
+                    errors.Add("SHA256 hash mismatch — package integrity check failed.");
+                }
+            }
+            else
+            {
+                // Fallback без signing service
+                var actualHash = ComputeHashFallback(packageBytes);
+                if (!string.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add("SHA256 hash mismatch — package integrity check failed.");
+                }
+            }
+        }
+
+        if (File.Exists(sigFile))
+        {
+            var signature = File.ReadAllText(sigFile).Trim();
+            if (_signing is not null)
+            {
+                // Сначала проверяем hash
+                string? hash = null;
+                if (File.Exists(hashFile))
+                {
+                    hash = File.ReadAllText(hashFile).Trim();
+                }
+                else
+                {
+                    hash = ComputeHashFallback(File.ReadAllBytes(packagePath));
+                }
+
+                if (!_signing.VerifySignature(hash, signature))
+                {
+                    errors.Add("HMAC-SHA256 signature verification failed — package may be tampered.");
+                }
+            }
+        }
+        else if (_signing is not null)
+        {
+            // Подпись ожидается, но файла нет — пропускаем (не ошибка, backward-compatible)
+        }
     }
 
     private string GenerateUniqueId(string baseId)

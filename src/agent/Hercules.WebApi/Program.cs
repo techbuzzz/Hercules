@@ -13,6 +13,7 @@ using Hercules.Observability;
 using Hercules.Redaction;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
+using Hercules.Skills.Marketplace;
 using Hercules.Storage;
 using Hercules.Tasks;
 using Hercules.Telegram;
@@ -216,19 +217,27 @@ builder.Services.AddSingleton<IEpisodicStore, EpisodicStore>();
 builder.Services.AddSingleton<LayerMetadataExtractor>();
 builder.Services.AddSingleton<LayeredMemoryManager>();
 
-// Phase 2: Skill packager (export/import .skillpkg)
+// Phase 2: Skill packager (export/import .skillpkg) + signing (task_021)
+builder.Services.AddSingleton(appConfig.Marketplace);
+builder.Services.AddSingleton<IMarketplaceSigningService>(sp =>
+    new MarketplaceSigningService(sp.GetRequiredService<MarketplaceConfig>()));
 builder.Services.AddSingleton<SkillPackager>(sp =>
     new SkillPackager(
         sp.GetRequiredService<FileSkillRepository>(),
         sp.GetRequiredService<SecretsConfig>(),
-        sp.GetRequiredService<ISecretMaskingService>()));
+        sp.GetRequiredService<ISecretMaskingService>(),
+        sp.GetRequiredService<IMarketplaceSigningService>()));
 
 // Phase 2: Semantic routing (embedding-based). Stub provider — offline.
 builder.Services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();
 builder.Services.AddSingleton<EmbeddingSkillRouter>();
 
-// Phase 2: Skill marketplace + agent templates
-builder.Services.AddSingleton<SkillMarketplace>();
+// Phase 2: Skill marketplace + agent templates (task_021)
+builder.Services.AddSingleton<SkillMarketplace>(sp =>
+    new SkillMarketplace(
+        sp.GetRequiredService<StorageConfig>(),
+        sp.GetRequiredService<SkillPackager>(),
+        sp.GetRequiredService<IMarketplaceSigningService>()));
 builder.Services.AddSingleton<AgentTemplateManager>();
 
 // Skill lifecycle: policy, deprecation, evaluation

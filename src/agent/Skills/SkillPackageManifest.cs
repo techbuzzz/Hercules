@@ -101,6 +101,9 @@ public sealed class SkillPackageManifest
     /// <summary>Источник пакета (author, license, repository URL).</summary>
     public SkillPackageSource? Source { get; set; }
 
+    /// <summary>Декларируемые зависимости от других навыков (task_021).</summary>
+    public List<SkillDependency> Dependencies { get; set; } = new();
+
     /// <summary>Дата создания пакета (ISO 8601).</summary>
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("o");
 }
@@ -176,6 +179,25 @@ public sealed class SkillPackageSource
 
     /// <summary>URL репозитория или маркетплейса, откуда импортирован пакет.</summary>
     public string? Repository { get; set; }
+}
+
+/// <summary>
+///     Декларация зависимости навыка от другого навыка.
+///     Используется для разрешения transitive-dependency при импорте.
+/// </summary>
+public sealed class SkillDependency
+{
+    /// <summary>ID зависимого навыка.</summary>
+    public string Id { get; set; } = "";
+
+    /// <summary>
+    ///     Semver range constraint (e.g. "≥1.0.0", "&lt;2.0.0", "^1.2.3").
+    ///     Пусто = любая версия.
+    /// </summary>
+    public string? VersionConstraint { get; set; }
+
+    /// <summary>Обязательная ли зависимость. Default=true — если false, warn но не блокирует.</summary>
+    public bool IsRequired { get; set; } = true;
 }
 
 /// <summary>

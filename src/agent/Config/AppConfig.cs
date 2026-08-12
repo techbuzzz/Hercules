@@ -19,6 +19,7 @@ public sealed class AppConfig
     public A2AConfig A2A { get; set; } = new();
     public Dictionary<string, RoleConfig> Roles { get; set; } = new();
     public Phase2Config Phase2 { get; set; } = new();
+    public MarketplaceConfig Marketplace { get; set; } = new();
     public MeshConfig Mesh { get; set; } = new();
     public ToolPolicyConfig ToolPolicy { get; set; } = new();
     public ApprovalConfig Approval { get; set; } = new();
@@ -415,4 +416,39 @@ public sealed class SkillManifestConfig
     ///     Если пусто — без ограничений.
     /// </summary>
     public List<int> AllowedRiskLevels { get; set; } = new() { 0, 1, 2 };
+}
+
+/// <summary>
+///     Конфигурация маркетплейса навыков (task_021).
+///     Подпись пакетов, импорт по HTTP, лимиты размера.
+/// </summary>
+public sealed class MarketplaceConfig
+{
+    /// <summary>
+    ///     Секретный ключ для HMAC-SHA256 подписи пакетов (base64-encoded).
+    ///     Если null или пусто — подпись не выполняется.
+    /// </summary>
+    public string? SigningKey { get; set; }
+
+    /// <summary>
+    ///     Требовать валидную подпись при импорте.
+    ///     Если true и пакет не подписан — импорт отклоняется.
+    /// </summary>
+    public bool RequireSignature { get; set; } = false;
+
+    /// <summary>
+    ///     Разрешить импорт пакетов по HTTP URL.
+    /// </summary>
+    public bool AllowHttpImport { get; set; } = false;
+
+    /// <summary>
+    ///     Максимальный размер пакета в мегабайтах.
+    /// </summary>
+    public int MaxPackageSizeMb { get; set; } = 50;
+
+    /// <summary>
+    ///     Base URL публичного репозитория шаблонов (опционально).
+    ///     Если задан — /marketplace import-url загружает отсюда.
+    /// </summary>
+    public string? TemplateRepositoryUrl { get; set; }
 }

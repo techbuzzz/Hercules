@@ -14,6 +14,7 @@ using Hercules.Redaction;
 using Hercules.Reflection;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
+using Hercules.Skills.Marketplace;
 using Hercules.Storage;
 using Hercules.Tasks;
 using Hercules.Telegram;
@@ -200,18 +201,26 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<ILogger<BudgetGuard>>()));
 
     // Phase 2: Skill packager
+    services.AddSingleton(appConfig.Marketplace);
+    services.AddSingleton<IMarketplaceSigningService>(sp =>
+        new MarketplaceSigningService(sp.GetRequiredService<MarketplaceConfig>()));
     services.AddSingleton<SkillPackager>(sp =>
         new SkillPackager(
             sp.GetRequiredService<FileSkillRepository>(),
             sp.GetRequiredService<SecretsConfig>(),
-            sp.GetRequiredService<ISecretMaskingService>()));
+            sp.GetRequiredService<ISecretMaskingService>(),
+            sp.GetRequiredService<IMarketplaceSigningService>()));
 
     // Phase 2: Semantic routing
     services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();
     services.AddSingleton<EmbeddingSkillRouter>();
 
-    // Phase 2: Skill marketplace + agent templates
-    services.AddSingleton<SkillMarketplace>();
+    // Phase 2: Skill marketplace + agent templates (task_021)
+    services.AddSingleton<SkillMarketplace>(sp =>
+        new SkillMarketplace(
+            sp.GetRequiredService<StorageConfig>(),
+            sp.GetRequiredService<SkillPackager>(),
+            sp.GetRequiredService<IMarketplaceSigningService>()));
     services.AddSingleton<AgentTemplateManager>();
 
     // Skill lifecycle (task_005)

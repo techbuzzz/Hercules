@@ -3,6 +3,7 @@ using Hercules.Agent;
 using Hercules.Mesh;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
+using Hercules.Skills.Marketplace;
 using Hercules.Storage;
 using Hercules.Tools.Approval;
 using Spectre.Console;
@@ -518,6 +519,64 @@ public sealed class ConsoleUI(
                 AnsiConsole.Write(searchTable);
                 break;
 
+            case "verify" when parts.Length >= 3:
+                try
+                {
+                    var result = marketplace.VerifyPackage(parts[2]);
+                    if (result.IsValid)
+                    {
+                        var sigMark = result.SignatureValid ? "[green]✓[/]" : "[yellow]-[/]";
+                        var hashMark = result.HashValid ? "[green]✓[/]" : "[yellow]-[/]";
+                        AnsiConsole.MarkupLineInterpolated($"[green]✓ Пакет валиден:[/] hash {hashMark} sig {sigMark}");
+                        if (result.Hash is not null)
+                        {
+                            AnsiConsole.MarkupLineInterpolated($"  SHA256: [grey]{result.Hash}[/]");
+                        }
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"[red]✗ Ошибка верификации:[/] {result.Error}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Ошибка:[/] {ex.Message}");
+                }
+                break;
+
+            case "deps" when parts.Length >= 3:
+                try
+                {
+                    var deps = marketplace.GetDependencies(parts[2]);
+                    if (deps.Count == 0)
+                    {
+                        AnsiConsole.MarkupLine("[grey]Нет зависимостей или пакет не найден.[/]");
+                        return;
+                    }
+
+                    var depTable = new Table().Border(TableBorder.Rounded).Title("Зависимости");
+                    depTable.AddColumn("ID");
+                    depTable.AddColumn("Версия");
+                    depTable.AddColumn("Обязат.");
+                    depTable.AddColumn("Установлен");
+                    foreach (var dep in deps)
+                    {
+                        var reqMark = dep.IsRequired ? "[yellow]✓[/]" : "[grey]-[/]";
+                        var instMark = dep.IsSatisfied ? "[green]✓[/]" : "[red]✗[/]";
+                        depTable.AddRow(
+                            Markup.Escape(dep.SkillId),
+                            dep.VersionConstraint ?? "*",
+                            reqMark,
+                            instMark);
+                    }
+                    AnsiConsole.Write(depTable);
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Ошибка:[/] {ex.Message}");
+                }
+                break;
+
             case "install" when parts.Length >= 3:
                 try
                 {
@@ -531,11 +590,37 @@ public sealed class ConsoleUI(
 
                 break;
 
+            case "install-deps" when parts.Length >= 3:
+                try
+                {
+                    var skills = marketplace.InstallWithDeps(parts[2]);
+                    foreach (var s in skills)
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"[green]✓[/] {s.Meta.Name} (id: {s.Meta.Id})");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]Ошибка:[/] {ex.Message}");
+                }
+                break;
+
             case "publish" when parts.Length >= 3:
                 try
                 {
                     var destPath = marketplace.Publish(parts[2]);
                     AnsiConsole.MarkupLineInterpolated($"[green]✓ Опубликован в маркетплейс:[/] [grey]{Markup.Escape(destPath)}[/]");
+                    // Показываем hash после публикации
+                    try
+                    {
+                        var fileName = Path.GetFileName(destPath);
+                        var vr = marketplace.VerifyPackage(fileName);
+                        if (vr.Hash is not null)
+                        {
+                            AnsiConsole.MarkupLineInterpolated($"  SHA256: [grey]{vr.Hash}[/]");
+                        }
+                    }
+                    catch { /* non-critical */ }
                 }
                 catch (Exception ex)
                 {
@@ -544,9 +629,27 @@ public sealed class ConsoleUI(
 
                 break;
 
-            default:
-                AnsiConsole.MarkupLine("[grey]Команды:[/] /marketplace list | search {query} | install {file} | publish {path}");
+            case "import-url" when parts.Length >= 3:
+                _ = HandleImportUrlAsync(parts[2], CancellationToken.None);
                 break;
+
+            default:
+                AnsiConsole.MarkupLine("[grey]Команды:[/] /marketplace list | search {q} | install {f} | install-deps {f} | publish {p} | verify {f} | deps {f} | import-url {url}");
+                break;
+        }
+    }
+
+    private async Task HandleImportUrlAsync(string url, CancellationToken ct)
+    {
+        try
+        {
+            AnsiConsole.MarkupLineInterpolated($"[grey]Загрузка:[/] {url}");
+            var skill = await marketplace.ImportFromUrlAsync(url, httpClient: null, ct);
+            AnsiConsole.MarkupLineInterpolated($"[green]✓ Импортирован:[/] {skill.Meta.Name} (id: {skill.Meta.Id})");
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]Ошибка импорта:[/] {ex.Message}");
         }
     }
 
@@ -882,7 +985,11 @@ public sealed class ConsoleUI(
         table.AddRow("/marketplace list", "Показать пакеты навыков в маркетплейсе");
         table.AddRow("/marketplace search {q}", "Поиск в маркетплейсе");
         table.AddRow("/marketplace install {f}", "Установить пакет из маркетплейса");
+        table.AddRow("/marketplace install-deps {f}", "Установить пакет с зависимостями");
+        table.AddRow("/marketplace verify {f}", "Проверить hash + signature пакета");
+        table.AddRow("/marketplace deps {f}", "Показать зависимости пакета");
         table.AddRow("/marketplace publish {p}", "Опубликовать .skillpkg в маркетплейс");
+        table.AddRow("/marketplace import-url {u}", "Импортировать пакет по HTTP URL");
         table.AddRow("/templates list", "Показать шаблоны агентов");
         table.AddRow("/templates apply {f}", "Применить шаблон (bundle навыков+памяти)");
         table.AddRow("/mesh status", "Состояние mesh-узла (манифест, реестр)");
