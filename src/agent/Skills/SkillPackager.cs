@@ -215,7 +215,24 @@ public sealed class SkillPackager
                 Description = skill.Meta.Description,
                 PhraseReceivers = skill.Meta.PhraseReceivers,
                 Version = skill.Meta.Version,
-                CreatedAt = skill.Meta.CreatedAt
+                CreatedAt = skill.Meta.CreatedAt,
+                // Task 020: manifest fields
+                Owner = skill.Meta.Owner,
+                MinHerculesVersion = skill.Meta.MinHerculesVersion,
+                MaxHerculesVersion = skill.Meta.MaxHerculesVersion,
+                InputSchemaVersion = skill.Meta.InputSchemaVersion,
+                OutputSchemaVersion = skill.Meta.OutputSchemaVersion,
+                Permissions = skill.Meta.Permissions,
+                ModelRequirements = skill.Meta.ModelRequirements,
+                RiskLevel = skill.Meta.RiskLevel,
+                Budget = skill.Meta.Budget is not null
+                    ? new SkillPackageBudget
+                    {
+                        MaxTokensPerCall = skill.Meta.Budget.MaxTokensPerCall,
+                        MaxCallsPerMinute = skill.Meta.Budget.MaxCallsPerMinute,
+                        MaxCostPerCallUsd = skill.Meta.Budget.MaxCostPerCallUsd
+                    }
+                    : null
             },
             Tools = skill.Meta.Tools,
             CreatedAt = DateTime.UtcNow.ToString("o")
@@ -306,7 +323,24 @@ public sealed class SkillPackager
                 PhraseReceivers = manifest.Skill.PhraseReceivers,
                 Version = manifest.Skill.Version,
                 CreatedAt = manifest.Skill.CreatedAt,
-                Tools = manifest.Tools
+                Tools = manifest.Tools,
+                // Task 020: manifest fields
+                Owner = manifest.Skill.Owner,
+                MinHerculesVersion = manifest.Skill.MinHerculesVersion,
+                MaxHerculesVersion = manifest.Skill.MaxHerculesVersion,
+                InputSchemaVersion = manifest.Skill.InputSchemaVersion,
+                OutputSchemaVersion = manifest.Skill.OutputSchemaVersion,
+                Permissions = manifest.Skill.Permissions,
+                ModelRequirements = manifest.Skill.ModelRequirements,
+                RiskLevel = manifest.Skill.RiskLevel,
+                Budget = manifest.Skill.Budget is not null
+                    ? new SkillMetaBudget
+                    {
+                        MaxTokensPerCall = manifest.Skill.Budget.MaxTokensPerCall,
+                        MaxCallsPerMinute = manifest.Skill.Budget.MaxCallsPerMinute,
+                        MaxCostPerCallUsd = manifest.Skill.Budget.MaxCostPerCallUsd
+                    }
+                    : null
             },
             Description = description,
             Prompt = prompt

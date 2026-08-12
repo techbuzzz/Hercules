@@ -58,6 +58,11 @@ public sealed class Phase2Config
     public string MarketplaceDir { get; set; } = "marketplace";
     public string ToolsDir { get; set; } = "Tools";
     public string TemplatesDir { get; set; } = "Templates";
+
+    /// <summary>
+    ///     Настройки манифеста навыка (task_020): версия Hercules, разрешённые уровни риска.
+    /// </summary>
+    public SkillManifestConfig SkillManifest { get; set; } = new();
 }
 
 /// <summary>
@@ -391,4 +396,23 @@ public sealed class SelfImprovementConfig
     ///     Анонимизировать данные перед отправкой в LLM-анализ (удалять user-specific info).
     /// </summary>
     public bool AnonymizeData { get; set; } = true;
+}
+
+/// <summary>
+///     Конфигурация манифеста навыка (task_020).
+///     Текущая версия Hercules, разрешённые уровни риска.
+/// </summary>
+public sealed class SkillManifestConfig
+{
+    /// <summary>
+    ///     Текущая версия Hercules в semver (например "1.0.0").
+    ///     Используется для проверки совместимости навыков при загрузке/импорте.
+    /// </summary>
+    public string CurrentHerculesVersion { get; set; } = "1.0.0";
+
+    /// <summary>
+    ///     Разрешённые уровни риска навыков (0=Low, 1=Medium, 2=High, 3=Critical).
+    ///     Если пусто — без ограничений.
+    /// </summary>
+    public List<int> AllowedRiskLevels { get; set; } = new() { 0, 1, 2 };
 }

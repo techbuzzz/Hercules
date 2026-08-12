@@ -48,7 +48,7 @@
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
 | 19 | 7 | [Формат пакета навыка](tasks/task_019.md) | `skill-package-format` | done |
-| 20 | — | [Манифест навыка и совместимость](tasks/task_020.md) | `skill-manifest` | pending |
+| 20 | — | [Манифест навыка и совместимость](tasks/task_020.md) | `skill-manifest` | done |
 | 21 | 8 | [Маркетплейс навыков](tasks/task_021.md) | `skill-marketplace` | pending |
 | 22 | 9 | [Семантическая маршрутизация](tasks/task_022.md) | `semantic-routing` | pending |
 | 23 | — | [Детерминированный fallback маршрутизатора](tasks/task_023.md) | `deterministic-router` | pending |

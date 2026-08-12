@@ -64,6 +64,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton(appConfig.A2A);
     services.AddSingleton(appConfig.Mesh);
     services.AddSingleton(appConfig.ToolPolicy);
+    services.AddSingleton(appConfig.Phase2);
 
     // OpenTelemetry (task_013) — tracing + metrics
     services.AddHerculesOtel(appConfig.Otel);
@@ -218,6 +219,17 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<SkillDeprecationManager>();
     services.AddSingleton<SkillEvaluationEngine>();
     services.AddSingleton<SkillLifecycleService>();
+
+    // Skill manifest & compatibility (task_020)
+    services.AddSingleton(appConfig.Phase2.SkillManifest);
+    services.AddSingleton<SkillManifestValidator>(sp =>
+    {
+        var cfg = sp.GetRequiredService<SkillManifestConfig>();
+        var allowedLevels = cfg.AllowedRiskLevels.Count > 0
+            ? cfg.AllowedRiskLevels.Select(i => (Hercules.Skills.SkillRiskLevel)i).ToList()
+            : (IReadOnlyList<Hercules.Skills.SkillRiskLevel>?)null;
+        return new SkillManifestValidator(cfg.CurrentHerculesVersion, null, allowedLevels);
+    });
 
     // Eval harness (task_016)
     services.AddSingleton(appConfig.Eval);

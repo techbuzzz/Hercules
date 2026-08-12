@@ -82,6 +82,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Eval);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SelfImprovement);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Tasks);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Phase2);
 
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
@@ -236,6 +237,17 @@ builder.Services.AddSingleton<SkillDeprecationManager>();
 builder.Services.AddSingleton<SkillEvaluationEngine>();
 builder.Services.AddSingleton<SkillLifecycleService>();
 
+// Skill manifest & compatibility (task_020)
+builder.Services.AddSingleton(appConfig.Phase2.SkillManifest);
+builder.Services.AddSingleton<SkillManifestValidator>(sp =>
+{
+    var cfg = sp.GetRequiredService<SkillManifestConfig>();
+    var allowedLevels = cfg.AllowedRiskLevels.Count > 0
+        ? cfg.AllowedRiskLevels.Select(i => (Hercules.Skills.SkillRiskLevel)i).ToList()
+        : (IReadOnlyList<Hercules.Skills.SkillRiskLevel>?)null;
+    return new SkillManifestValidator(cfg.CurrentHerculesVersion, null, allowedLevels);
+});
+
 // Eval harness (task_016)
 builder.Services.AddSingleton<BaselineManager>();
 builder.Services.AddSingleton<SkillTestGenerator>();
@@ -357,6 +369,8 @@ app.MapGet("/", () => Results.Ok(new
         "POST /api/approvals/{id}/approve", "POST /api/approvals/{id}/deny",
         "POST /api/skills/{id}/eval/harness", "POST /api/skills/{id}/eval/baseline",
         "GET /api/skills/{id}/eval/baseline", "GET /api/skills/{id}/eval/history",
+        "GET /api/skills/{id}/manifest", "POST /api/skills/{id}/manifest/validate",
+        "POST /api/skills/manifest/validate-all",
         "GET /api/eval/baselines",
         "POST /api/maintenance/run", "POST /api/maintenance/run-all",
         "GET /api/maintenance/proposals", "GET /api/maintenance/proposals/{id}",
@@ -385,6 +399,7 @@ app.MapApprovals();
 app.MapObservability();
 app.MapSkillHarness();
 app.MapSelfImprovement();
+app.MapSkillManifest();
 app.MapTasks();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");

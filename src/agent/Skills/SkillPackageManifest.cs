@@ -108,6 +108,8 @@ public sealed class SkillPackageManifest
 /// <summary>
 ///     Метаданные навыка внутри пакета. Включает те же поля, что и SkillMeta,
 ///     но без runtime-метрик (SuccessRate, TotalUses) — они не переносятся при экспорте.
+///     Расширен в task_020 полями совместимости: owner, Hercules-version range,
+///     schema versions, permissions, model requirements, risk level, budgets.
 /// </summary>
 public sealed class SkillPackageSkillMeta
 {
@@ -119,6 +121,49 @@ public sealed class SkillPackageSkillMeta
 
     public int Version { get; set; } = 1;
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd");
+
+    // Task 020: Skill Manifest & Compatibility
+    public string? Owner { get; set; }
+
+    [JsonPropertyName("min_hercules_version")]
+    public string? MinHerculesVersion { get; set; }
+
+    [JsonPropertyName("max_hercules_version")]
+    public string? MaxHerculesVersion { get; set; }
+
+    [JsonPropertyName("input_schema_version")]
+    public string? InputSchemaVersion { get; set; }
+
+    [JsonPropertyName("output_schema_version")]
+    public string? OutputSchemaVersion { get; set; }
+
+    /// <summary>Запрошенные permissions навыка.</summary>
+    public List<string> Permissions { get; set; } = new();
+
+    [JsonPropertyName("model_requirements")]
+    public string? ModelRequirements { get; set; }
+
+    /// <summary>Уровень риска: 0=Low, 1=Medium, 2=High, 3=Critical.</summary>
+    [JsonPropertyName("risk_level")]
+    public int RiskLevel { get; set; } = 0;
+
+    /// <summary>Декларативные бюджетные лимиты навыка.</summary>
+    public SkillPackageBudget? Budget { get; set; }
+}
+
+/// <summary>
+///     Бюджетные лимиты внутри пакета (сериализуются в skill.package.json).
+/// </summary>
+public sealed class SkillPackageBudget
+{
+    [JsonPropertyName("max_tokens_per_call")]
+    public int MaxTokensPerCall { get; set; } = 0;
+
+    [JsonPropertyName("max_calls_per_minute")]
+    public int MaxCallsPerMinute { get; set; } = 0;
+
+    [JsonPropertyName("max_cost_per_call_usd")]
+    public decimal MaxCostPerCallUsd { get; set; } = 0;
 }
 
 /// <summary>
