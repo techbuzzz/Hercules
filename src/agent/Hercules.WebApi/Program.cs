@@ -158,7 +158,9 @@ builder.Services.AddSingleton<ToolPolicyEngine>(sp =>
 builder.Services.AddSingleton<ToolRegistry>();
 builder.Services.AddSingleton<IToolRegistryService, ToolRegistryService>();
 builder.Services.AddHostedService<ToolHealthService>();
-builder.Services.AddSingleton<McpClient>();
+builder.Services.AddSingleton<Hercules.Mcp.McpClientService>();
+// McpServerHost (stdio MCP server) is registered in CLI Program.cs only —
+// stdio transport requires console stdin/stdout which are unavailable in WebAPI mode.
 
 // WASM sandbox (v3) — Wasmtime-based code execution с capability-based isolation.
 // Регистрируем IWasmSandbox, CompilerRegistry, WasmTool и адаптер к ITool для AgentCore.
@@ -464,6 +466,7 @@ app.MapSelfImprovement();
 app.MapSkillManifest();
 app.MapTasks();
 app.MapToolRegistry();
+app.MapMcpEndpoints();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");
@@ -481,6 +484,18 @@ try
 catch (Exception ex)
 {
     Console.WriteLine($"[ToolRegistry] Discovery failed: {ex.Message}");
+}
+
+// MCP client initialization (task_025)
+try
+{
+    var mcpService = app.Services.GetRequiredService<Hercules.Mcp.McpClientService>();
+    await mcpService.InitializeAsync();
+    Console.WriteLine($"[MCP] Client initialized: {mcpService.ServerStates.Count} servers configured");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[MCP] Initialization failed: {ex.Message}");
 }
 
 app.Run();

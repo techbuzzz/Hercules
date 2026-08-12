@@ -33,4 +33,7 @@ public interface IToolRegistryService
 
     /// <summary>Зарегистрировать tool из discovery source.</summary>
     void RegisterEntry(ToolRegistryEntry entry);
+
+    /// <summary>Зарегистрировать динамический tool (например, из MCP).</summary>
+    void RegisterTool(ITool tool);
 }

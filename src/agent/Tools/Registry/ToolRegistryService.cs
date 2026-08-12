@@ -132,6 +132,48 @@ public sealed class ToolRegistryService : IToolRegistryService
         }
     }
 
+    /// <summary>
+    ///     Register a dynamically-discovered tool (e.g. from MCP) and create its registry entry.
+    /// </summary>
+    public void RegisterTool(ITool tool)
+    {
+        if (!_config.Enabled)
+        {
+            _logger.LogDebug("[ToolRegistry] Registry disabled — skipping dynamic tool '{Name}'", tool.Name);
+            return;
+        }
+
+        if (!IsNameAllowed(tool.Name))
+        {
+            _logger.LogDebug("[ToolRegistry] Tool '{Name}' denied by patterns — skipping", tool.Name);
+            return;
+        }
+
+        if (_entries.ContainsKey(tool.Name))
+        {
+            _logger.LogWarning("[ToolRegistry] Tool '{Name}' already registered — skipping duplicate", tool.Name);
+            return;
+        }
+
+        var descriptor = _policyEngine?.GetDescriptor(tool.Name);
+        var category = InferCategory(tool.Name, descriptor);
+        var entry = new ToolRegistryEntry
+        {
+            Name = tool.Name,
+            Category = category,
+            Description = tool.Description,
+            Descriptor = descriptor,
+            Enabled = true,
+            HealthState = new ToolHealthState(ToolHealthStatus.Unknown, DateTime.MinValue, null, 0),
+            RegisteredAt = DateTime.UtcNow,
+            Source = "Mcp",
+            SupportsHealthCheck = tool is IHealthCheckableTool
+        };
+        _entries[entry.Name] = entry;
+        _logger.LogInformation("[ToolRegistry] Registered MCP tool '{Name}' (category={Category})",
+            entry.Name, entry.Category);
+    }
+
     private bool IsNameAllowed(string name)
     {
         if (_config.AllowedPatterns.Count == 0 || _config.AllowedPatterns.Contains("*"))

@@ -7,6 +7,7 @@ using Hercules.CodeExecution;
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.Mcp;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Observability;
@@ -141,7 +142,8 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton(appConfig.ToolRegistry);
     services.AddSingleton<IToolRegistryService, ToolRegistryService>();
     services.AddHostedService<ToolHealthService>();
-    services.AddSingleton<McpClient>();
+    services.AddSingleton<Hercules.Mcp.McpClientService>();
+    services.AddHostedService<Hercules.Mcp.McpServerHost>();
 
     // WASM sandbox (v3)
     services.AddSingleton<IWasmSandbox, WasmtimeSandbox>();
@@ -373,6 +375,18 @@ try
 catch (Exception ex)
 {
     Console.WriteLine($"[ToolRegistry] Discovery failed: {ex.Message}");
+}
+
+// MCP client initialization (task_025)
+try
+{
+    var mcpService = host.Services.GetRequiredService<Hercules.Mcp.McpClientService>();
+    await mcpService.InitializeAsync();
+    Console.WriteLine($"[MCP] Client initialized: {mcpService.ServerStates.Count} servers configured");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[MCP] Initialization failed: {ex.Message}");
 }
 
 // --- Выбор режима запуска ---

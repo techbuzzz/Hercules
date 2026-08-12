@@ -224,6 +224,15 @@ public sealed class McpServerConfig
     public string? Command { get; set; }
     public List<string> Args { get; set; } = new();
     public string? Endpoint { get; set; }
+
+    /// <summary>Enable this MCP server (client connections and/or in-process hosting). Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Enable health-check polling for this server. Default: true.</summary>
+    public bool HealthCheckEnabled { get; set; } = true;
+
+    /// <summary>Timeout for tool calls in seconds. Default: 30.</summary>
+    public int TimeoutSeconds { get; set; } = 30;
 }
 
 /// <summary>
