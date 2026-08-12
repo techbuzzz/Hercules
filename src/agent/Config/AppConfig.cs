@@ -68,6 +68,9 @@ public sealed class AppConfig
 
     /// <summary>Конфигурация аудита и приватности (task_014). Audit records, PII redaction.</summary>
     public AuditConfig Audit { get; set; } = new();
+
+    /// <summary>Конфигурация секретов и конфиденциальных данных (task_015). Environment variables, secret redaction.</summary>
+    public SecretsConfig Secrets { get; set; } = new();
 }
 
 /// <summary>
@@ -568,4 +571,46 @@ public sealed class AuditRedactionPattern
 
     /// <summary>Строка замены.</summary>
     public string Replacement { get; set; } = "***";
+}
+
+/// <summary>
+///     Конфигурация секретов (task_015).
+///     Управляет загрузкой секретов из environment variables и redaction в экспортах/памяти/telemetry.
+/// </summary>
+public sealed class SecretsConfig
+{
+    /// <summary>
+    ///     Префикс environment variables, которые считаются секретами.
+    ///     Переменные с этим префиксом загружаются при старте и подставляются по ссылке "env:VAR_NAME".
+    /// </summary>
+    public string EnvironmentVariablePrefix { get; set; } = "HERCULES_SECRET_";
+
+    /// <summary>
+    ///     Путь к JSON-файлу с зашифрованными секретами (опционально).
+    ///     Если указан — секреты читаются из файла вместо env vars.
+    /// </summary>
+    public string? SecretsFile { get; set; }
+
+    /// <summary>
+    ///     Префикс ссылок на секреты в конфигах. Например, "env:" означает "env:API_KEY" → значение переменной API_KEY.
+    /// </summary>
+    public string SecretReferencePrefix { get; set; } = "env:";
+
+    /// <summary>
+    ///     Redact секреты при экспорте skill packages.
+    ///     Если true — содержимое навыков redacted перед записью в .skillpkg.
+    /// </summary>
+    public bool RedactInExports { get; set; } = true;
+
+    /// <summary>
+    ///     Redact секреты при записи в Markdown memory.
+    ///     Если true — профиль, предпочтения и контекст redacted перед сохранением.
+    /// </summary>
+    public bool RedactInMemory { get; set; } = true;
+
+    /// <summary>
+    ///     Redact секреты в OpenTelemetry telemetry (tags, events, span names).
+    ///     Если true — string-значения redacted перед записью в traces/metrics.
+    /// </summary>
+    public bool RedactInTelemetry { get; set; } = true;
 }

@@ -40,7 +40,7 @@ public class OtelServiceTests
         var service = new OtelService(config);
         using var activity = service.StartActivity("test.operation");
         Assert.NotNull(activity);
-        Assert.Equal("test.operation", activity.OperationName);
+        Assert.Equal("test.operation", activity!.OperationName);
     }
 
     [Fact]
@@ -50,9 +50,9 @@ public class OtelServiceTests
         var service = new OtelService(config);
         using var parent = service.StartActivity("parent.operation");
         Assert.NotNull(parent);
-        using var child = service.StartActivity("child.operation", parent.Context);
+        using var child = service.StartActivity("child.operation", parent!.Context);
         Assert.NotNull(child);
-        Assert.Equal(parent.Context.TraceId.ToString(), child.ParentId ?? "");
+        Assert.Equal(parent.Context.TraceId.ToString(), child!.ParentId ?? "");
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class OtelServiceTests
         var service = new OtelService(config);
         using var activity = service.StartActivity("test");
         service.SetTag(activity, "test.key", "test.value");
-        Assert.Equal("test.value", activity.GetTagItem("test.key"));
+        Assert.Equal("test.value", activity!.GetTagItem("test.key"));
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public class OtelServiceTests
         using var activity = service.StartActivity("test");
         service.SetErrorStatus(activity, "something went wrong");
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
-        Assert.Equal("something went wrong", activity.StatusDescription);
+        Assert.Equal("something went wrong", activity!.StatusDescription);
     }
 
     [Fact]
@@ -129,6 +129,6 @@ public class OtelServiceTests
         var service = new OtelService(config);
         using var activity = service.StartActivity("test");
         service.StopActivity(activity, ActivityStatusCode.Ok);
-        Assert.Equal(ActivityStatusCode.Ok, activity.Status);
+        Assert.Equal(ActivityStatusCode.Ok, activity!.Status);
     }
 }

@@ -75,6 +75,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Budget);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Otel);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Audit);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Secrets);
 
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
@@ -170,7 +171,11 @@ builder.Services.AddHostedService<RuntimeConfigHostedService>();
 
 // Хранилища
 builder.Services.AddSingleton<FileSkillRepository>();
-builder.Services.AddSingleton<MemoryStore>();
+builder.Services.AddSingleton<MemoryStore>(sp =>
+    new MemoryStore(
+        sp.GetRequiredService<StorageConfig>(),
+        sp.GetRequiredService<SecretsConfig>(),
+        sp.GetRequiredService<ISecretMaskingService>()));
 builder.Services.AddSingleton<SqliteSessionStore>();
 
 // Hybrid storage services (task_003)
@@ -195,7 +200,11 @@ builder.Services.AddSingleton<LayerMetadataExtractor>();
 builder.Services.AddSingleton<LayeredMemoryManager>();
 
 // Phase 2: Skill packager (export/import .skillpkg)
-builder.Services.AddSingleton<SkillPackager>();
+builder.Services.AddSingleton<SkillPackager>(sp =>
+    new SkillPackager(
+        sp.GetRequiredService<FileSkillRepository>(),
+        sp.GetRequiredService<SecretsConfig>(),
+        sp.GetRequiredService<ISecretMaskingService>()));
 
 // Phase 2: Semantic routing (embedding-based). Stub provider — offline.
 builder.Services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();
@@ -224,6 +233,12 @@ builder.Services.AddSingleton<IAuditService>(sp =>
         sp.GetService<IRedactionService>(),
         sp.GetRequiredService<PayloadHashService>(),
         sp.GetRequiredService<ILogger<AuditService>>()));
+
+// Secrets and redaction (task_015)
+builder.Services.AddSingleton<ISecretMaskingService>(sp =>
+    new SecretMaskingService(
+        sp.GetRequiredService<SecretsConfig>(),
+        sp.GetRequiredService<IRedactionService>()));
 
 // Агент
 builder.Services.AddSingleton<SkillManager>();

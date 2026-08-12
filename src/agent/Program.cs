@@ -153,7 +153,11 @@ builder.ConfigureServices((context, services) =>
 
     // Хранилища
     services.AddSingleton<FileSkillRepository>();
-    services.AddSingleton<MemoryStore>();
+    services.AddSingleton<MemoryStore>(sp =>
+        new MemoryStore(
+            sp.GetRequiredService<StorageConfig>(),
+            sp.GetRequiredService<SecretsConfig>(),
+            sp.GetRequiredService<ISecretMaskingService>()));
     services.AddSingleton<SqliteSessionStore>();
 
     // Layered memory (task_011)
@@ -192,7 +196,11 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<ILogger<BudgetGuard>>()));
 
     // Phase 2: Skill packager
-    services.AddSingleton<SkillPackager>();
+    services.AddSingleton<SkillPackager>(sp =>
+        new SkillPackager(
+            sp.GetRequiredService<FileSkillRepository>(),
+            sp.GetRequiredService<SecretsConfig>(),
+            sp.GetRequiredService<ISecretMaskingService>()));
 
     // Phase 2: Semantic routing
     services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();
@@ -222,6 +230,13 @@ builder.ConfigureServices((context, services) =>
             sp.GetService<IRedactionService>(),
             sp.GetRequiredService<PayloadHashService>(),
             sp.GetRequiredService<ILogger<AuditService>>()));
+
+    // Secrets and redaction (task_015)
+    services.AddSingleton(appConfig.Secrets);
+    services.AddSingleton<ISecretMaskingService>(sp =>
+        new SecretMaskingService(
+            sp.GetRequiredService<SecretsConfig>(),
+            sp.GetRequiredService<IRedactionService>()));
 
     // Агент
     services.AddSingleton<SkillManager>();

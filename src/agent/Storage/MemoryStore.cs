@@ -18,11 +18,21 @@ public sealed class MemoryStore
     private const string EntitiesFile = "entities.md";
 
     private readonly string _dir;
+    private readonly ISecretMaskingService? _masking;
+    private readonly bool _redactInMemory;
 
     public MemoryStore(StorageConfig cfg)
     {
         _dir = Path.Combine(cfg.DataRoot, cfg.MemoryDir);
         Directory.CreateDirectory(_dir);
+    }
+
+    public MemoryStore(StorageConfig cfg, SecretsConfig secretsConfig, ISecretMaskingService masking)
+    {
+        _dir = Path.Combine(cfg.DataRoot, cfg.MemoryDir);
+        Directory.CreateDirectory(_dir);
+        _masking = masking;
+        _redactInMemory = secretsConfig?.RedactInMemory ?? true;
     }
 
 
@@ -75,7 +85,8 @@ public sealed class MemoryStore
 
     public async Task WriteProfileAsync(string content, CancellationToken ct = default)
     {
-        await File.WriteAllTextAsync(ProfilePath, content, ct);
+        var safeContent = _redactInMemory && _masking is not null ? _masking.MaskSecrets(content) : content;
+        await File.WriteAllTextAsync(ProfilePath, safeContent, ct);
     }
 
     public void WriteProfile(string content)
@@ -85,7 +96,8 @@ public sealed class MemoryStore
 
     public async Task WritePreferencesAsync(string content, CancellationToken ct = default)
     {
-        await File.WriteAllTextAsync(PreferencesPath, content, ct);
+        var safeContent = _redactInMemory && _masking is not null ? _masking.MaskSecrets(content) : content;
+        await File.WriteAllTextAsync(PreferencesPath, safeContent, ct);
     }
 
     public void WritePreferences(string content)
@@ -95,7 +107,8 @@ public sealed class MemoryStore
 
     public async Task WriteEntitiesAsync(string content, CancellationToken ct = default)
     {
-        await File.WriteAllTextAsync(EntitiesPath, content, ct);
+        var safeContent = _redactInMemory && _masking is not null ? _masking.MaskSecrets(content) : content;
+        await File.WriteAllTextAsync(EntitiesPath, safeContent, ct);
     }
 
     public void WriteEntities(string content)
@@ -106,10 +119,11 @@ public sealed class MemoryStore
     /// <summary>Добавить блок к файлу профиля/сущностей/предпочтений.</summary>
     public async Task AppendAsync(string path, string markdownBlock, CancellationToken ct = default)
     {
+        var safeBlock = _redactInMemory && _masking is not null ? _masking.MaskSecrets(markdownBlock) : markdownBlock;
         var prefix = File.Exists(path)
             ? "\n"
             : "";
-        var content = prefix + markdownBlock.TrimEnd() + "\n";
+        var content = prefix + safeBlock.TrimEnd() + "\n";
         await File.AppendAllTextAsync(path, content, ct);
     }
 
@@ -121,11 +135,12 @@ public sealed class MemoryStore
     /// <summary>Добавить запись контекста за текущий день.</summary>
     public async Task AppendContextAsync(string summary, DateOnly date, CancellationToken ct = default)
     {
+        var safeSummary = _redactInMemory && _masking is not null ? _masking.MaskSecrets(summary) : summary;
         var path = ContextPath(date);
         var header = File.Exists(path)
             ? ""
             : $"# Контекст за {date:yyyy-MM-dd}\n\n";
-        var entry = $"## Сессия {DateTime.Now:HH:mm:ss}\n\n{summary.TrimEnd()}\n\n";
+        var entry = $"## Сессия {DateTime.Now:HH:mm:ss}\n\n{safeSummary.TrimEnd()}\n\n";
         await File.AppendAllTextAsync(path, header + entry, ct);
     }
 

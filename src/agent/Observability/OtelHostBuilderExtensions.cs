@@ -37,8 +37,12 @@ public static class OtelHostBuilderExtensions
     private static TBuilder AddHerculesOtelCore<TBuilder>(this TBuilder builder, OtelConfig config)
         where TBuilder : IHostApplicationBuilder
     {
-        // Register OtelService as singleton (used by instrumented services)
-        builder.Services.AddSingleton<IOtelService>(new OtelService(config));
+        // Register OtelService as singleton with secret masking support (task_015)
+        builder.Services.AddSingleton<IOtelService>(sp =>
+            new OtelService(
+                config,
+                sp.GetService<SecretsConfig>(),
+                sp.GetService<ISecretMaskingService>()));
 
         if (!config.Enabled)
         {
@@ -119,7 +123,11 @@ public static class OtelHostBuilderExtensions
     /// </summary>
     private static IServiceCollection AddHerculesOtelCore(this IServiceCollection services, OtelConfig config)
     {
-        services.AddSingleton<IOtelService>(new OtelService(config));
+        services.AddSingleton<IOtelService>(sp =>
+            new OtelService(
+                config,
+                sp.GetService<SecretsConfig>(),
+                sp.GetService<ISecretMaskingService>()));
 
         if (!config.Enabled)
         {

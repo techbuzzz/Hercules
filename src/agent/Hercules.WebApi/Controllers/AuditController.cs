@@ -1,5 +1,6 @@
 using System.Globalization;
 using Hercules.Audit;
+using Hercules.Config;
 using Hercules.Storage;
 
 namespace Hercules.WebApi.Controllers;
@@ -65,9 +66,11 @@ public static class AuditController
             });
         }).WithName("AuditSearch");
 
-        // GET /api/audit/export — экспорт в CSV (task_014)
+        // GET /api/audit/export — экспорт в CSV (task_014, task_015: redaction)
         app.MapGet("/api/audit/export", async (
             IAuditService audit,
+            ISecretMaskingService? masking,
+            SecretsConfig? secretsConfig,
             string? actor = null,
             string? action = null,
             string? sessionId = null,
@@ -85,7 +88,17 @@ public static class AuditController
             csv.AppendLine("id,actor,action,target,session_id,request_id,tool_name,policy_decision,permission_used,result,payload_hash,created_at");
             foreach (var e in entries)
             {
-                csv.AppendLine($"{e.Id},{EscapeCsv(e.Actor)},{EscapeCsv(e.Action)},{EscapeCsv(e.Target)},{EscapeCsv(e.SessionId)},{EscapeCsv(e.RequestId)},{EscapeCsv(e.ToolName)},{EscapeCsv(e.PolicyDecision)},{EscapeCsv(e.PermissionUsed)},{EscapeCsv(e.Result)},{EscapeCsv(e.PayloadHash)},{e.CreatedAt:o}");
+                var details = e.Details is not null && masking is not null && secretsConfig?.RedactInExports != false
+                    ? masking.MaskSecrets(e.Details)
+                    : e.Details;
+                var policyDecision = e.PolicyDecision is not null && masking is not null && secretsConfig?.RedactInExports != false
+                    ? masking.MaskSecrets(e.PolicyDecision)
+                    : e.PolicyDecision;
+                var permUsed = e.PermissionUsed is not null && masking is not null && secretsConfig?.RedactInExports != false
+                    ? masking.MaskSecrets(e.PermissionUsed)
+                    : e.PermissionUsed;
+
+                csv.AppendLine($"{e.Id},{EscapeCsv(e.Actor)},{EscapeCsv(e.Action)},{EscapeCsv(e.Target)},{EscapeCsv(e.SessionId)},{EscapeCsv(e.RequestId)},{EscapeCsv(e.ToolName)},{EscapeCsv(policyDecision)},{EscapeCsv(permUsed)},{EscapeCsv(e.Result)},{EscapeCsv(e.PayloadHash)},{e.CreatedAt:o}");
             }
 
             return Results.Text(csv.ToString(), "text/csv");

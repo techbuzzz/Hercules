@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using Hercules.Config;
 using Hercules.Storage;
 
 namespace Hercules.Skills;
@@ -30,10 +31,19 @@ public sealed class SkillPackager
     };
 
     private readonly FileSkillRepository _repo;
+    private readonly ISecretMaskingService? _masking;
+    private readonly bool _redactInExports;
 
     public SkillPackager(FileSkillRepository repo)
     {
         _repo = repo ?? throw new ArgumentNullException(nameof(repo));
+    }
+
+    public SkillPackager(FileSkillRepository repo, SecretsConfig secretsConfig, ISecretMaskingService masking)
+    {
+        _repo = repo ?? throw new ArgumentNullException(nameof(repo));
+        _masking = masking;
+        _redactInExports = secretsConfig?.RedactInExports ?? true;
     }
 
     /// <summary>Имя файла-пакета по умолчанию: {id}-v{version}.skillpkg.</summary>
@@ -86,11 +96,17 @@ public sealed class SkillPackager
         };
         WriteEntry(archive, "skill.package.json", JsonSerializer.Serialize(manifest, JsonOpts));
 
-        // 2. Описание (markdown)
-        WriteEntry(archive, "skill.description.md", skill.Description);
+        // 2. Описание (markdown) — redact secrets before export
+        var description = _redactInExports && _masking is not null
+            ? _masking.MaskSecrets(skill.Description)
+            : skill.Description;
+        WriteEntry(archive, "skill.description.md", description);
 
-        // 3. System prompt
-        WriteEntry(archive, "skill.prompt.md", skill.Prompt);
+        // 3. System prompt — redact secrets before export
+        var prompt = _redactInExports && _masking is not null
+            ? _masking.MaskSecrets(skill.Prompt)
+            : skill.Prompt;
+        WriteEntry(archive, "skill.prompt.md", prompt);
 
         // 4. История использования (опционально)
         if (includeUsage)
