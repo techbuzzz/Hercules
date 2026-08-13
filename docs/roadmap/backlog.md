@@ -24,23 +24,23 @@
 
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
-| 1 | 1 | [Базовый цикл агента](tasks/task_001.md) | `core-agent-loop` | pending |
-| 2 | 2 | [Жизненный цикл навыков](tasks/task_002.md) | `skill-lifecycle` | pending |
-| 3 | 3 | [Гибридное хранилище](tasks/task_003.md) | `hybrid-storage` | pending |
-| 4 | 4 | [Мульти-провайдер LLM](tasks/task_004.md) | `multi-provider-llm` | pending |
+| 1 | 1 | [Базовый цикл агента](tasks/task_001.md) | `core-agent-loop` | done |
+| 2 | 2 | [Жизненный цикл навыков](tasks/task_002.md) | `skill-lifecycle` | done |
+| 3 | 3 | [Гибридное хранилище](tasks/task_003.md) | `hybrid-storage` | done |
+| 4 | 4 | [Мульти-провайдер LLM](tasks/task_004.md) | `multi-provider-llm` | done |
 | 5 | 5 | [Интерфейсы](tasks/task_005.md) | `interfaces` | done |
-| 6 | 6 | [Тесты и бенчмарки](tasks/task_006.md) | `tests-and-benchmarks` | pending |
-| 7 | — | [Типизированные контракты агента](tasks/task_007.md) | `typed-contracts` | pending |
+| 6 | 6 | [Тесты и бенчмарки](tasks/task_006.md) | `tests-and-benchmarks` | done |
+| 7 | — | [Типизированные контракты агента](tasks/task_007.md) | `typed-contracts` | done |
 | 8 | — | [Ограниченный цикл исполнения](tasks/task_008.md) | `bounded-execution` | done |
 | 9 | — | [Граница инструментов и policy engine](tasks/task_009.md) | `tool-boundary-policy` | done |
-| 10 | — | [Гейты подтверждения](tasks/task_010.md) | `approval-gates` | pending |
-| 11 | — | [Слоистая память](tasks/task_011.md) | `layered-memory` | pending |
-| 12 | — | [Бюджеты и guardrails](tasks/task_012.md) | `budget-guardrails` | pending |
-| 13 | — | [Фундамент OpenTelemetry](tasks/task_013.md) | `opentelemetry` | pending |
+| 10 | — | [Гейты подтверждения](tasks/task_010.md) | `approval-gates` | done |
+| 11 | — | [Слоистая память](tasks/task_011.md) | `layered-memory` | done |
+| 12 | — | [Бюджеты и guardrails](tasks/task_012.md) | `budget-guardrails` | done |
+| 13 | — | [Фундамент OpenTelemetry](tasks/task_013.md) | `opentelemetry` | done |
 | 14 | — | [Аудит и приватность](tasks/task_014.md) | `audit-privacy` | done |
-| 15 | — | [Секреты и конфигурация](tasks/task_015.md) | `secrets-config` | pending |
-| 16 | — | [Оценка навыков (eval harness)](tasks/task_016.md) | `eval-harness` | pending |
-| 17 | — | [Безопасное самоулучшение](tasks/task_017.md) | `safe-self-improvement` | pending |
+| 15 | — | [Секреты и конфигурация](tasks/task_015.md) | `secrets-config` | done |
+| 16 | — | [Оценка навыков (eval harness)](tasks/task_016.md) | `eval-harness` | done |
+| 17 | — | [Безопасное самоулучшение](tasks/task_017.md) | `safe-self-improvement` | done |
 | 18 | — | [Устойчивый жизненный цикл задач](tasks/task_018.md) | `durable-task-lifecycle` | done |
 
 ## Phase 2 — Composable skills and tool use (Q4 2026)
@@ -52,22 +52,22 @@
 | 21 | 8 | [Маркетплейс навыков](tasks/task_021.md) | `skill-marketplace` | done |
 | 22 | 9 | [Семантическая маршрутизация](tasks/task_022.md) | `semantic-routing` | done |
 | 23 | — | [Детерминированный fallback маршрутизатора](tasks/task_023.md) | `deterministic-router` | done |
-| 24 | 10 | [Реестр инструментов](tasks/task_024.md) | `tool-registry` | pending |
-| 25 | — | [MCP-адаптер](tasks/task_025.md) | `mcp-adapter` | pending |
-| 26 | — | [Least-privilege grants](tasks/task_026.md) | `least-privilege-grants` | pending |
+| 24 | 10 | [Реестр инструментов](tasks/task_024.md) | `tool-registry` | done |
+| 25 | — | [MCP-адаптер](tasks/task_025.md) | `mcp-adapter` | done |
+| 26 | — | [Least-privilege grants](tasks/task_026.md) | `least-privilege-grants` | done |
 | 27 | — | [Сборка и сжатие контекста](tasks/task_027.md) | `context-assembly` | done |
 | 28 | — | [Кэширование](tasks/task_028.md) | `caching` | done |
 | 29 | — | [Score качества навыка](tasks/task_029.md) | `skill-quality-score` | done |
-| 30 | 11 | [Шаблоны агентов](tasks/task_030.md) | `agent-templates` | pending |
+| 30 | 11 | [Шаблоны агентов](tasks/task_030.md) | `agent-templates` | done |
 | 31 | — | [Симуляция шаблонов](tasks/task_031.md) | `template-simulation` | done |
 
 ## Phase 3 — Inter-agent protocol (Q1 2027)
 
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
-| 32 | 12 | [Манифест агента](tasks/task_032.md) | `agent-manifest` | pending |
-| 33 | — | [A2A Agent Card совместимость](tasks/task_033.md) | `a2a-agent-card` | pending |
-| 34 | 13 | [Capability registry](tasks/task_034.md) | `capability-registry` | pending |
+| 32 | 12 | [Манифест агента](tasks/task_032.md) | `agent-manifest` | done |
+| 33 | — | [A2A Agent Card совместимость](tasks/task_033.md) | `a2a-agent-card` | done |
+| 34 | 13 | [Capability registry](tasks/task_034.md) | `capability-registry` | done |
 | 35 | 14 | [Формат inter-agent сообщений](tasks/task_035.md) | `delegation-envelope` | pending |
 | 36 | — | [Протокол жизненного цикла задач](tasks/task_036.md) | `task-lifecycle-protocol` | pending |
 | 37 | 15 | [Опции транспорта](tasks/task_037.md) | `transports` | pending |
