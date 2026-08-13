@@ -199,7 +199,7 @@ builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
 builder.Services.AddSingleton<Bus>();
 
 // Phase 3: Inter-agent mesh (manifest, capability registry, intent routing, transport)
-builder.Services.AddMeshServices(appConfig.Mesh, appConfig.Storage.DataRoot);
+builder.Services.AddMeshServices(appConfig, appConfig.Storage.DataRoot);
 
 // Reactor подписывается на изменения конфигурации и перезагружает runtime-зависимости
 builder.Services.AddHostedService<RuntimeConfigHostedService>();

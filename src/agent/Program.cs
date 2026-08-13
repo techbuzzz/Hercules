@@ -16,6 +16,7 @@ using Hercules.Mesh;
 using Hercules.Mesh.Verification;
 using Hercules.Observability;
 using Hercules.Redaction;
+using Hercules.Security;
 using Hercules.Simulation;
 using Hercules.Reflection;
 using Hercules.Skills;
@@ -398,6 +399,34 @@ builder.ConfigureServices((context, services) =>
         new SecretMaskingService(
             sp.GetRequiredService<SecretsConfig>(),
             sp.GetRequiredService<IRedactionService>()));
+
+    // Security operations (task_055): fleet identity, certificates, package signing, vulnerability reporting, audit export
+    services.AddSingleton(appConfig.SecurityOps);
+    services.AddSingleton<IFleetIdentityService>(sp =>
+        new FleetIdentityService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<FleetIdentityService>>()));
+    services.AddSingleton<ICertificateService>(sp =>
+        new CertificateService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<CertificateService>>()));
+    services.AddSingleton<IPackageSigningService>(sp =>
+        new PackageSigningService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<PackageSigningService>>()));
+    services.AddSingleton<IVulnerabilityReporter>(sp =>
+        new VulnerabilityReporterService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<VulnerabilityReporterService>>()));
+    services.AddSingleton<ISecurityAuditExporter>(sp =>
+        new SecurityAuditExporterService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<SecurityAuditExporterService>>()));
 
     // Агент
     services.AddSingleton<SkillManager>();

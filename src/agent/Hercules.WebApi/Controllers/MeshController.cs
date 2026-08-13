@@ -241,7 +241,7 @@ public static class MeshController
                 return Results.BadRequest(new { error = "category и content обязательны." });
             }
 
-            var fact = await sync.PublishFactAsync(req.Category, req.Content, req.AllowedAgents, ct);
+            var fact = await sync.PublishFactAsync(req.Category, req.Content, req.AllowedAgents, ct: ct);
             return Results.Created($"/api/mesh/shared-memory/{fact.Id}", fact);
         }).WithName("PublishSharedMemory");
 

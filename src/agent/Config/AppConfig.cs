@@ -10,6 +10,72 @@ using Hercules.Tools.Policy;
 namespace Hercules.Config;
 
 /// <summary>
+///     Конфигурация security operations (task_055).
+///     Fleet identity, certificates, package signing, vulnerability reporting, audit export.
+/// </summary>
+public sealed class SecurityOpsConfig
+{
+    /// <summary>Включить security operations. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    // Identity rotation
+    /// <summary>Директория для хранения fleet identity. Default: "data/security/identity".</summary>
+    public string IdentityStoragePath { get; set; } = "data/security/identity";
+
+    /// <summary>Default agent ID для fleet identity. Default: "hercules".</summary>
+    public string DefaultAgentId { get; set; } = "hercules";
+
+    /// <summary>Default roles для нового агента. Default: ["agent"].</summary>
+    public List<string> DefaultRoles { get; set; } = new() { "agent" };
+
+    /// <summary>Срок действия identity в днях. Default: 90.</summary>
+    public int IdentityRotationDays { get; set; } = 90;
+
+    /// <summary>Включить автоматическую ротацию identity. Default: true.</summary>
+    public bool AutoRotateIdentity { get; set; } = true;
+
+    // Certificate management
+    /// <summary>Директория для хранения сертификатов. Default: "data/security/certs".</summary>
+    public string CertificateStoragePath { get; set; } = "data/security/certs";
+
+    /// <summary>Срок действия сертификата в днях. Default: 365.</summary>
+    public int CertificateValidityDays { get; set; } = 365;
+
+    /// <summary>Порог дней до истечения для автоматического продления. Default: 30.</summary>
+    public int CertificateRenewalThresholdDays { get; set; } = 30;
+
+    /// <summary>Включить автоматическое продление сертификатов. Default: true.</summary>
+    public bool AutoRenewCertificates { get; set; } = true;
+
+    // Package signing
+    /// <summary>Директория для хранения подписей пакетов. Default: "data/security/signing".</summary>
+    public string PackageSigningPath { get; set; } = "data/security/signing";
+
+    /// <summary>Требовать подпись пакетов. Default: false.</summary>
+    public bool RequirePackageSignature { get; set; } = false;
+
+    /// <summary>Требовать доверенного подписанта. Default: false.</summary>
+    public bool RequireTrustedSigner { get; set; } = false;
+
+    // Vulnerability reporting
+    /// <summary>Директория для хранения vulnerability reports. Default: "data/security/vulns".</summary>
+    public string VulnerabilityReportPath { get; set; } = "data/security/vulns";
+
+    /// <summary>Включить автоматическое сканирование уязвимостей. Default: false.</summary>
+    public bool AutoScanVulnerabilities { get; set; } = false;
+
+    /// <summary>Интервал сканирования уязвимостей в часах. Default: 24.</summary>
+    public int VulnerabilityScanIntervalHours { get; set; } = 24;
+
+    // Security monitoring
+    /// <summary>Включить security monitoring. Default: true.</summary>
+    public bool EnableSecurityMonitoring { get; set; } = true;
+
+    /// <summary>Включить шифрование данных at rest. Default: false.</summary>
+    public bool EnableDataEncryptionAtRest { get; set; } = false;
+}
+
+/// <summary>
 ///     Корневая конфигурация приложения (маппится из appsettings.json).
 /// </summary>
 public sealed class AppConfig
@@ -41,6 +107,37 @@ public sealed class AppConfig
     public ContextConfig Context { get; set; } = new();
     public CacheConfig Cache { get; set; } = new();
     public SkillQualityConfig SkillQuality { get; set; } = new();
+
+    // Extended config properties (task_044-055)
+    /// <summary>Fan-out / fan-in orchestrator config (task_045): concurrency, budget, schema validation, selection strategy.</summary>
+    public FanOutOptions FanOut { get; set; } = new();
+
+    /// <summary>Verification pipeline config (task_046): enabled verifiers, severity thresholds, block list.</summary>
+    public VerificationConfig Verification { get; set; } = new();
+
+    /// <summary>Resilience config (task_047): retry, circuit breaker, bulkhead, idempotency.</summary>
+    public ResilienceConfig Resilience { get; set; } = new();
+
+    /// <summary>Delegation boundaries config (task_048): hop count, fan-out width, cumulative tool calls, cost, time limits.</summary>
+    public DelegationBoundaryConfig DelegationBoundaries { get; set; } = new();
+
+    /// <summary>Human-in-the-loop escalation config (task_049): severity thresholds, TTL, escalation types.</summary>
+    public EscalationConfig Escalation { get; set; } = new();
+
+    /// <summary>Distributed reflection proposal config (task_050): proposal generation, LLM analysis, thresholds.</summary>
+    public Mesh.ReflectionProposalConfig ReflectionProposals { get; set; } = new();
+
+    /// <summary>Shared memory sync config (task_051): TTL, sensitivity classification, encryption, namespace limits.</summary>
+    public SharedMemorySyncConfig SharedMemorySync { get; set; } = new();
+
+    /// <summary>Mesh evaluation suite config (task_052): scenario definitions, metrics, thresholds.</summary>
+    public MeshEvalConfig MeshEval { get; set; } = new();
+
+    /// <summary>Centralized mesh observability config (task_054): trace context propagation, mesh-specific span enrichment, OTLP sink.</summary>
+    public MeshCentralizedObservabilityConfig CentralizedObservability { get; set; } = new();
+
+    /// <summary>Security operations config (task_055): fleet identity, certificates, package signing, vulnerability reporting, audit export.</summary>
+    public SecurityOpsConfig SecurityOps { get; set; } = new();
 }
 
 /// <summary>
@@ -473,33 +570,6 @@ public sealed class MeshConfig
 
     /// <summary>Complexity router config (task_044): complexity classification, execution path selection, cost budgets.</summary>
     public ComplexityRouterOptions ComplexityRouter { get; set; } = new();
-
-    /// <summary>Fan-out / fan-in orchestrator config (task_045): concurrency, budget, schema validation, selection strategy.</summary>
-    public FanOutOptions FanOut { get; set; } = new();
-
-    /// <summary>Verification pipeline config (task_046): enabled verifiers, severity thresholds, block list.</summary>
-    public VerificationConfig Verification { get; set; } = new();
-
-    /// <summary>Resilience config (task_047): retry, circuit breaker, bulkhead, idempotency.</summary>
-    public ResilienceConfig Resilience { get; set; } = new();
-
-    /// <summary>Delegation boundaries config (task_048): hop count, fan-out width, cumulative tool calls, cost, time limits.</summary>
-    public DelegationBoundaryConfig DelegationBoundaries { get; set; } = new();
-
-    /// <summary>Human-in-the-loop escalation config (task_049): severity thresholds, TTL, escalation types.</summary>
-    public EscalationConfig Escalation { get; set; } = new();
-
-    /// <summary>Distributed reflection proposal config (task_050): proposal generation, LLM analysis, thresholds.</summary>
-    public Mesh.ReflectionProposalConfig ReflectionProposals { get; set; } = new();
-
-    /// <summary>Shared memory sync config (task_051): TTL, sensitivity classification, encryption, namespace limits.</summary>
-    public SharedMemorySyncConfig SharedMemorySync { get; set; } = new();
-
-    /// <summary>Mesh evaluation suite config (task_052): scenario definitions, metrics, thresholds.</summary>
-    public MeshEvalConfig MeshEval { get; set; } = new();
-
-    /// <summary>Centralized mesh observability config (task_054): trace context propagation, mesh-specific span enrichment, OTLP sink.</summary>
-    public MeshCentralizedObservabilityConfig CentralizedObservability { get; set; } = new();
 }
 
 /// <summary>

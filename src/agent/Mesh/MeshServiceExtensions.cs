@@ -239,7 +239,7 @@ public static class MeshServiceCollectionExtensions
 
         // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов (task_047)
         // Configure from ResilienceConfig
-        var resCfg = meshCfg.Resilience;
+        var resCfg = appConfig.Resilience;
         services.AddSingleton(resCfg);
 
         var cb = new CircuitBreaker
@@ -283,7 +283,7 @@ public static class MeshServiceCollectionExtensions
         services.AddSingleton<IComplexityRouter, ComplexityRouter>();
 
         // Phase 4: FanOut Orchestrator (task_045) — fan-out / fan-in с schema validation, voting, deterministic, LLM-judge
-        services.AddSingleton(meshCfg.FanOut);
+        services.AddSingleton(appConfig.FanOut);
         services.AddSingleton(sp => new ResponseAggregator(
             sp.GetRequiredService<FanOutOptions>(),
             sp.GetService<ILLMClient>(),
@@ -294,14 +294,14 @@ public static class MeshServiceCollectionExtensions
         services.AddSingleton<MeshRouter>();
 
         // Phase 4: DistributedReflection — отчёты по mesh + рекомендации (task_050)
-        services.AddSingleton(meshCfg.ReflectionProposals);
+        services.AddSingleton(appConfig.ReflectionProposals);
         services.AddSingleton(sp => new ReflectionProposalStore(
             dataRoot,
             sp.GetRequiredService<ILogger<ReflectionProposalStore>>()));
         services.AddSingleton<DistributedReflection>();
 
         // Phase 4: SharedMemorySync — синхронизация избранных фактов памяти (task_051)
-        services.AddSingleton(meshCfg.SharedMemorySync);
+        services.AddSingleton(appConfig.SharedMemorySync);
         services.AddSingleton(sp => new SharedMemorySync(
             dataRoot,
             sp.GetRequiredService<CapabilityRegistry>(),
@@ -374,7 +374,7 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<ILogger<MeshAuditService>>()));
 
         // Phase 4: Verification pipeline (task_046) — safety, policy, schema, numeric validators
-        var verConfig = appConfig.Mesh.Verification;
+        var verConfig = appConfig.Verification;
         services.AddSingleton(verConfig);
 
         if (verConfig.Enabled)
@@ -399,22 +399,22 @@ public static class MeshServiceCollectionExtensions
         }
 
         // Phase 4: Delegation boundaries (task_048) — hop count, fan-out width, cumulative tool calls, cost, time limits
-        services.AddSingleton(meshCfg.DelegationBoundaries);
+        services.AddSingleton(appConfig.DelegationBoundaries);
         services.AddSingleton<IDelegationBoundaryService, DelegationBoundaryService>();
 
         // Phase 4: Human-in-the-loop escalation (task_049)
-        services.AddSingleton(meshCfg.Escalation);
+        services.AddSingleton(appConfig.Escalation);
         services.AddSingleton<IEscalationService, EscalationService>();
 
         // Phase 4: Mesh evaluation suite (task_052)
-        services.AddSingleton(meshCfg.MeshEval);
+        services.AddSingleton(appConfig.MeshEval);
         services.AddSingleton<IMeshEvalRunner, MeshEvalRunner>();
 
         // Phase 5: Mesh dashboard (task_053) — aggregator service
         services.AddSingleton<Hercules.Mesh.Dashboard.MeshDashboardService>();
 
         // Phase 5: Centralized mesh observability (task_054) — trace context propagation, mesh span enrichment, OTLP metrics
-        services.AddSingleton(meshCfg.CentralizedObservability);
+        services.AddSingleton(appConfig.CentralizedObservability);
         services.AddSingleton<IMeshObservabilityService>(sp =>
             new MeshObservabilityService(
                 sp.GetRequiredService<MeshCentralizedObservabilityConfig>(),

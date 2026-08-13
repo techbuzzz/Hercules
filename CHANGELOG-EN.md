@@ -54,6 +54,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - `scripts/test-stage4.cs` — 16/16 TryParseAction + sandbox audit + tool injection.
 
 ### Added
+- **Security Operations (task_055)**: Fleet-wide identity rotation, credential revocation,
+  certificate renewal, package signing verification, vulnerability reporting, and security audit export.
+  - `IFleetIdentityService` / `FleetIdentityService`: Fleet-wide identity management with rotation
+  - `ICertificateService` / `CertificateService`: X.509 certificate lifecycle management
+  - `IPackageSigningService` / `PackageSigningService`: HMAC-SHA256 package signature verification
+  - `IVulnerabilityReporter` / `VulnerabilityReporterService`: Vulnerability tracking and reporting
+  - `ISecurityAuditExporter` / `SecurityAuditExporterService`: Security audit trail and compliance exports
+  - `SecurityOpsConfig`: Unified configuration for all security operations
 - Brand assets in `assets/branding/` (logo, monogram, favicon, PNG/ICO exports).
 - Full set of repository documentation: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
   `SECURITY.md`, `CHANGELOG.md`, `.editorconfig`, Issue/PR templates, CI workflow.
