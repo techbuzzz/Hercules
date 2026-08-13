@@ -1,6 +1,7 @@
 using Hercules.Config;
 using Hercules.Mesh;
 using Hercules.Mesh.Auth;
+using Hercules.Mesh.Dashboard;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Policy;
 using Hercules.Mesh.Router;
@@ -674,6 +675,57 @@ public static class MeshController
 
             return Results.Ok(new { count = health.Count, health });
         }).WithName("MeshRouterHealth");
+
+        // === Phase 5: Mesh Dashboard (task_053) ===
+
+        // GET /api/mesh/dashboard — complete dashboard snapshot
+        app.MapGet("/api/mesh/dashboard", async (MeshDashboardService dashboard, CancellationToken ct) =>
+        {
+            try
+            {
+                var data = await dashboard.GetDashboardAsync(ct);
+                return Results.Ok(data);
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 500, title: "Dashboard error");
+            }
+        }).WithName("MeshDashboard");
+
+        // GET /api/mesh/topology — agent list with health/trust/latency
+        app.MapGet("/api/mesh/topology", async (MeshDashboardService dashboard, CancellationToken ct) =>
+        {
+            var data = await dashboard.GetTopologyAsync(ct);
+            return Results.Ok(data);
+        }).WithName("MeshTopology");
+
+        // GET /api/mesh/health — per-agent health + circuit breaker states
+        app.MapGet("/api/mesh/health", async (MeshDashboardService dashboard, CancellationToken ct) =>
+        {
+            var data = await dashboard.GetHealthAsync(ct);
+            return Results.Ok(data);
+        }).WithName("MeshHealth");
+
+        // GET /api/mesh/denials — recent policy denials from audit log
+        app.MapGet("/api/mesh/denials", async (MeshDashboardService dashboard, int limit = 50, CancellationToken ct = default) =>
+        {
+            var data = await dashboard.GetPolicyDenialsAsync(ct);
+            return Results.Ok(data);
+        }).WithName("MeshPolicyDenials");
+
+        // GET /api/mesh/skills/heatmap — skill usage heatmap
+        app.MapGet("/api/mesh/skills/heatmap", (MeshDashboardService dashboard) =>
+        {
+            var data = dashboard.GetSkillHeatmap();
+            return Results.Ok(data);
+        }).WithName("MeshSkillHeatmap");
+
+        // GET /api/mesh/eval/summary — recent eval runs
+        app.MapGet("/api/mesh/eval/summary", async (MeshDashboardService dashboard, CancellationToken ct) =>
+        {
+            var data = await dashboard.GetEvalSummaryAsync(ct);
+            return Results.Ok(data);
+        }).WithName("MeshEvalSummary");
     }
 
     private static TrustLevel ParseTrustLevel(string? level) =>

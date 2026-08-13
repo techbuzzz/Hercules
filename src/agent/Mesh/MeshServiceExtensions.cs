@@ -408,6 +408,9 @@ public static class MeshServiceCollectionExtensions
         services.AddSingleton(meshCfg.MeshEval);
         services.AddSingleton<IMeshEvalRunner, MeshEvalRunner>();
 
+        // Phase 5: Mesh dashboard (task_053) — aggregator service
+        services.AddSingleton<Hercules.Mesh.Dashboard.MeshDashboardService>();
+
         return services;
     }
 }
