@@ -3,6 +3,7 @@ using Hercules.Config;
 using Hercules.Mesh.A2A;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
+using Hercules.Mesh.Policy;
 using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
 using Hercules.Skills;
@@ -184,6 +185,24 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<TokenIssuer>(),
                 meshCfg.AgentId,
                 sp.GetRequiredService<ILogger<DefaultPeerCredentialProvider>>()));
+
+        // Phase 3: Trust admission policy (task_040) — intent allow-lists, classification, schema, budget
+        services.AddSingleton(meshCfg.TrustAdmission);
+        services.AddSingleton<ITrustAdmissionPolicy>(sp =>
+        {
+            var cfg = sp.GetRequiredService<TrustAdmissionConfig>();
+            var logger = sp.GetRequiredService<ILogger<TrustAdmissionPolicyEngine>>();
+
+            // If Enabled=false, treat as Disabled regardless of PolicyMode string
+            if (!cfg.Enabled)
+            {
+                logger.LogWarning("[TrustPolicy] TrustAdmissionConfig.Enabled=false — policy is disabled");
+            }
+
+            return new TrustAdmissionPolicyEngine(
+                cfg,
+                logger);
+        });
 
         // IntentRouter — маршрутизация intent'ов (локально или peer'у) — Phase 3
         services.AddSingleton<IntentRouter>();

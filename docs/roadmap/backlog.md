@@ -73,7 +73,7 @@
 | 37 | 15 | [Опции транспорта](tasks/task_037.md) | `transports` | pending |
 | 38 | 16 | [Механизмы discovery](tasks/task_038.md) | `discovery` | pending |
 | 39 | — | [Идентичность и делегация](tasks/task_039.md) | `identity-delegation` | pending |
-| 40 | — | [Trust и admission policy](tasks/task_040.md) | `trust-admission` | pending |
+| 40 | — | [Trust и admission policy](tasks/task_040.md) | `trust-admission` | done |
 | 41 | — | [Inter-agent audit trail](tasks/task_041.md) | `inter-agent-audit` | pending |
 | 42 | — | [Контрактные и chaos тесты](tasks/task_042.md) | `protocol-tests` | pending |
 

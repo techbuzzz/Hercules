@@ -1,5 +1,8 @@
+using Hercules.Config;
 using Hercules.Mesh;
+using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
+using Hercules.Mesh.Policy;
 using Hercules.Mesh.TaskLifecycle;
 
 namespace Hercules.WebApi.Controllers;
@@ -129,10 +132,51 @@ public static class MeshController
         }).WithName("SearchMeshByPhrase");
 
         // POST /api/mesh/intent — отправить intent на маршрутизацию (IntentRouter, single-peer)
-        app.MapPost("/api/mesh/intent", async (IntentEnvelope envelope, IntentRouter router, CancellationToken ct) =>
+        // Trust admission policy is evaluated before routing.
+        app.MapPost("/api/mesh/intent", async (
+            IntentEnvelope envelope,
+            IntentRouter router,
+            ITrustAdmissionPolicy policy,
+            CapabilityRegistry registry,
+            AgentManifestService manifestService,
+            HttpContext httpContext,
+            CancellationToken ct) =>
         {
             try
             {
+                // Build trust admission context
+                var callerIdentity = httpContext.GetMeshIdentity();
+                var selfManifest = manifestService.Current;
+
+                // Get target manifest if recipient is specified
+                AgentManifest? targetManifest = null;
+                if (!string.IsNullOrWhiteSpace(envelope.Recipient))
+                {
+                    targetManifest = registry.Get(envelope.Recipient);
+                }
+
+                var ctx = new TrustAdmissionContext
+                {
+                    CallerIdentity = callerIdentity,
+                    Envelope = envelope,
+                    TargetAgentId = envelope.Recipient ?? selfManifest.AgentId,
+                    TargetCapabilities = targetManifest?.Capabilities,
+                    TargetResourceLimits = targetManifest?.ResourceLimits,
+                    TargetMinSchemaVersion = targetManifest?.SupportedProtocolVersions?.FirstOrDefault(),
+                    CallerSchemaVersion = envelope.Version
+                };
+
+                var policyResult = policy.Evaluate(ctx);
+                if (!policyResult.IsAllowed && !policyResult.DryRun)
+                {
+                    return Results.Json(new
+                    {
+                        error = "Trust admission denied",
+                        reason = policyResult.DenialReason,
+                        code = policyResult.DenialCode?.ToString()
+                    }, statusCode: 403);
+                }
+
                 var response = await router.RouteAsync(envelope, ct);
                 return Results.Ok(response);
             }
@@ -445,7 +489,7 @@ public static class MeshController
             return Results.Ok(new
             {
                 count = agents.Count,
-                cacheFresh = discovery.IsCacheFresh,
+                cacheFresh = discovery is Hercules.Mesh.Discovery.DiscoveryService ds ? ds.IsCacheFresh : false,
                 agents = agents.Select(a => new
                 {
                     agentId = a.AgentId,
@@ -483,7 +527,98 @@ public static class MeshController
                 })
             });
         }).WithName("RefreshDiscovery");
+
+        // === Phase 3: Trust admission policy (task_040) ===
+
+        // GET /api/mesh/policy/status — current policy configuration and mode
+        app.MapGet("/api/mesh/policy/status", (
+            ITrustAdmissionPolicy policy,
+            TrustAdmissionConfig config) =>
+        {
+            return Results.Ok(new
+            {
+                enabled = config.Enabled,
+                mode = config.PolicyMode,
+                effectiveMode = policy.Mode.ToString(),
+                allowedTrustLevels = config.AllowedTrustLevels,
+                allowedIntents = config.AllowedIntents,
+                allowedClassifications = config.AllowedClassifications,
+                allowSchemaMismatch = config.AllowSchemaMismatch,
+                allowBudgetExceeded = config.AllowBudgetExceeded,
+                allowedRiskLevels = config.AllowedRiskLevels
+            });
+        }).WithName("GetTrustPolicyStatus");
+
+        // POST /api/mesh/policy/dry-run — evaluate a request against the policy without enforcing
+        app.MapPost("/api/mesh/policy/dry-run", (
+            TrustAdmissionDryRunRequest req,
+            ITrustAdmissionPolicy policy,
+            CapabilityRegistry registry,
+            AgentManifestService manifestService) =>
+        {
+            try
+            {
+                var selfManifest = manifestService.Current;
+
+                // Resolve target manifest
+                AgentManifest? targetManifest = null;
+                if (!string.IsNullOrWhiteSpace(req.TargetAgentId))
+                {
+                    targetManifest = registry.Get(req.TargetAgentId);
+                }
+
+                // Build context from request
+                var ctx = new TrustAdmissionContext
+                {
+                    CallerIdentity = req.CallerIdentity is not null
+                        ? new Hercules.Mesh.Auth.IdentityResult
+                        {
+                            Subject = req.CallerIdentity.Subject,
+                            AuthMethod = req.CallerIdentity.AuthMethod,
+                            Issuer = req.CallerIdentity.Issuer,
+                            Audience = req.CallerIdentity.Audience,
+                            Scopes = req.CallerIdentity.Scopes ?? Array.Empty<string>(),
+                            ExpiresAt = req.CallerIdentity.ExpiresAt,
+                            DelegationDepth = req.CallerIdentity.DelegationDepth,
+                            RootRequestId = req.CallerIdentity.RootRequestId,
+                            Claims = req.CallerIdentity.Claims ?? new Dictionary<string, string>()
+                        }
+                        : null,
+                    Envelope = req.Envelope,
+                    TargetAgentId = req.TargetAgentId ?? selfManifest.AgentId,
+                    TargetCapabilities = targetManifest?.Capabilities,
+                    TargetResourceLimits = targetManifest?.ResourceLimits,
+                    TargetMinSchemaVersion = targetManifest?.SupportedProtocolVersions?.FirstOrDefault(),
+                    CallerSchemaVersion = req.CallerSchemaVersion,
+                    CallerTrustLevel = ParseTrustLevel(req.CallerTrustLevel),
+                    DataClassification = ParseDataClassification(req.DataClassification),
+                    RequestedRiskLevel = req.RequestedRiskLevel
+                };
+
+                var result = policy.Evaluate(ctx);
+                return Results.Ok(new
+                {
+                    allowed = result.IsAllowed,
+                    denialReason = result.DenialReason,
+                    denialCode = result.DenialCode?.ToString(),
+                    dryRun = result.DryRun,
+                    effectiveMode = policy.Mode.ToString()
+                });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithName("TrustPolicyDryRun");
     }
+
+    private static TrustLevel ParseTrustLevel(string? level) =>
+        Enum.TryParse<TrustLevel>(level, true, out var result) ? result : TrustLevel.Unverified;
+
+    private static DataClassification ParseDataClassification(string? classification) =>
+        Enum.TryParse<DataClassification>(classification, true, out var result)
+            ? result
+            : DataClassification.Public;
 
     private static object ToTaskDto(DelegatedTask task)
     {
@@ -545,3 +680,30 @@ public sealed record DelegatedTaskCancelRequest(string? Reason = null);
 
 /// <summary>Callback payload от вызывающего агента (task_036).</summary>
 public sealed record DelegatedTaskCallbackRequest(string Input);
+
+/// <summary>
+///     Request для dry-run evaluation of trust admission policy (task_040).
+///     Allows callers to test a policy decision without actually sending an intent.
+/// </summary>
+public sealed record TrustAdmissionDryRunRequest(
+    IntentEnvelope Envelope,
+    string? TargetAgentId = null,
+    string? CallerTrustLevel = null,
+    string? DataClassification = null,
+    string? CallerSchemaVersion = null,
+    string? RequestedRiskLevel = null,
+    TrustAdmissionDryRunCallerIdentity? CallerIdentity = null);
+
+/// <summary>
+///     Caller identity for dry-run evaluation (task_040).
+/// </summary>
+public sealed record TrustAdmissionDryRunCallerIdentity(
+    string Subject,
+    string AuthMethod,
+    string? Issuer = null,
+    string? Audience = null,
+    IReadOnlyList<string>? Scopes = null,
+    DateTimeOffset? ExpiresAt = null,
+    int DelegationDepth = 0,
+    string? RootRequestId = null,
+    Dictionary<string, string>? Claims = null);

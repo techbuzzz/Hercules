@@ -459,6 +459,9 @@ public sealed class MeshConfig
 
     /// <summary>Inter-agent auth config (bearer tokens, API keys, mTLS). task_039.</summary>
     public PeerAuthConfig PeerAuth { get; set; } = new();
+
+    /// <summary>Trust admission policy config (intent allow-lists, classification, schema, budget). task_040.</summary>
+    public TrustAdmissionConfig TrustAdmission { get; set; } = new();
 }
 
 /// <summary>
@@ -524,6 +527,61 @@ public sealed class DiscoveryConfig
 
     /// <summary>Интервал auto-refresh discovery в секундах (0 = выключен). Default: 0.</summary>
     public int AutoRefreshIntervalSeconds { get; set; } = 0;
+}
+
+/// <summary>
+///     Конфигурация trust admission policy (task_040).
+///     Управляет allow-listing агентов, intent-фильтрацией, data classification,
+///     schema version compatibility и resource budget limits для inter-agent вызовов.
+/// </summary>
+public sealed class TrustAdmissionConfig
+{
+    /// <summary>Включить trust admission policy. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    ///     Enforcement mode: Enforce / DryRun / Disabled.
+    ///     Default: DryRun (логирует, но не блокирует — чтобы не сломать существующие deployments).
+    /// </summary>
+    public string PolicyMode { get; set; } = "DryRun";
+
+    /// <summary>
+    ///     Minimal trust level required for incoming requests.
+    ///     Values: "Unverified", "ProvisionallyTrusted", "Trusted", "Verified".
+    ///     Empty list = no trust level check.
+    /// </summary>
+    public List<string> AllowedTrustLevels { get; set; } = new();
+
+    /// <summary>
+    ///     Allowed intents for inter-agent calls.
+    ///     Empty list = all intents allowed.
+    /// </summary>
+    public List<string> AllowedIntents { get; set; } = new();
+
+    /// <summary>
+    ///     Allowed data classifications: "Public", "Internal", "Confidential", "Restricted".
+    ///     Empty list = all classifications allowed.
+    /// </summary>
+    public List<string> AllowedClassifications { get; set; } = new();
+
+    /// <summary>
+    ///     Allow requests when caller schema version differs from target minimum.
+    ///     Default: true (permissive, to ease migration).
+    /// </summary>
+    public bool AllowSchemaMismatch { get; set; } = true;
+
+    /// <summary>
+    ///     Allow requests that exceed target declared resource limits.
+    ///     Default: true (permissive — target enforces its own limits).
+    /// </summary>
+    public bool AllowBudgetExceeded { get; set; } = true;
+
+    /// <summary>
+    ///     Allowed risk levels for incoming requests (from skill metadata).
+    ///     Values: "low", "medium", "high", "critical".
+    ///     Empty list = no risk level check.
+    /// </summary>
+    public List<string> AllowedRiskLevels { get; set; } = new();
 }
 
 /// <summary>
