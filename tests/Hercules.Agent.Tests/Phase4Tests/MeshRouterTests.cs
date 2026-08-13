@@ -110,8 +110,10 @@ public class MeshRouterTests : IDisposable
          IntentIds.NewRequestId(),
          "hercules-main",
          "review",
-         "review this code",
-         TimeoutMs: 1000);
+         "review this code")
+      {
+         Deadline = DateTimeOffset.UtcNow.AddMilliseconds(1000)
+      };
 
       var result = await _router.RouteWithFanOutAsync(envelope);
 
@@ -144,8 +146,10 @@ public class MeshRouterTests : IDisposable
          IntentIds.NewRequestId(),
          "hercules-main",
          "translate",
-         "translate hello",
-         TimeoutMs: 1000);
+         "translate hello")
+      {
+         Deadline = DateTimeOffset.UtcNow.AddMilliseconds(1000)
+      };
 
       var result = await _router.RouteWithFanOutAsync(envelope);
 
@@ -184,8 +188,10 @@ public class MeshRouterTests : IDisposable
          IntentIds.NewRequestId(),
          "hercules-main",
          "test-cap",
-         "test",
-         TimeoutMs: 1000);
+         "test")
+      {
+         Deadline = DateTimeOffset.UtcNow.AddMilliseconds(1000)
+      };
 
       var result = await _router.RouteWithFanOutAsync(envelope);
 

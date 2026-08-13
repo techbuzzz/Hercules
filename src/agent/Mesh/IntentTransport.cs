@@ -78,9 +78,11 @@ public sealed class IntentTransport : IDisposable
         }
 
         var intentUrl = peerManifest.Endpoint.TrimEnd('/') + "/api/mesh/intent";
-        var timeoutMs = envelope.TimeoutMs > 0
-            ? envelope.TimeoutMs
-            : DefaultTimeoutMs;
+
+        // Calculate timeout from deadline or use default
+        var deadline = envelope.GetDeadlineOrDefault(DefaultTimeoutMs);
+        var remainingMs = (int)(deadline - DateTimeOffset.UtcNow).TotalMilliseconds;
+        var timeoutMs = remainingMs > 0 ? remainingMs : DefaultTimeoutMs;
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeoutMs);
@@ -92,9 +94,35 @@ public sealed class IntentTransport : IDisposable
                 Content = new StringContent(envelope.ToJson(), Encoding.UTF8, "application/json")
             };
 
+            // Peer authentication
             if (peerManifest.Auth.Type == "apikey" && !string.IsNullOrEmpty(peerManifest.Auth.Header))
             {
                 httpReq.Headers.TryAddWithoutValidation(peerManifest.Auth.Header, "mesh-key");
+            }
+
+            // Forward auth context from delegation envelope
+            if (envelope.Auth is not null)
+            {
+                if (!string.IsNullOrEmpty(envelope.Auth.Token))
+                {
+                    httpReq.Headers.TryAddWithoutValidation("Authorization", $"Bearer {envelope.Auth.Token}");
+                }
+
+                if (envelope.Auth.DelegationDepth > 0)
+                {
+                    httpReq.Headers.TryAddWithoutValidation("X-Delegation-Depth", envelope.Auth.DelegationDepth.ToString());
+                }
+
+                if (!string.IsNullOrEmpty(envelope.Auth.RootRequestId))
+                {
+                    httpReq.Headers.TryAddWithoutValidation("X-Root-Request-Id", envelope.Auth.RootRequestId);
+                }
+            }
+
+            // Forward idempotency key
+            if (!string.IsNullOrEmpty(envelope.IdempotencyKey))
+            {
+                httpReq.Headers.TryAddWithoutValidation("X-Idempotency-Key", envelope.IdempotencyKey);
             }
 
             using HttpResponseMessage resp = await _http.SendAsync(httpReq, cts.Token);

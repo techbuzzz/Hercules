@@ -1037,8 +1037,10 @@ public sealed class ConsoleUI(
                     IntentIds.NewRequestId(),
                     manifestService.Current.AgentId,
                     messageText,
-                    messageText,
-                    TraceId: Guid.NewGuid().ToString("N")[..8]);
+                    messageText)
+                {
+                    TraceId = Guid.NewGuid().ToString("N")[..8]
+                };
                 try
                 {
                     var resp = await intentRouter.RouteAsync(envelope, ct);
@@ -1068,8 +1070,10 @@ public sealed class ConsoleUI(
                     IntentIds.NewRequestId(),
                     manifestService.Current.AgentId,
                     fanOutMessage,
-                    fanOutMessage,
-                    TraceId: Guid.NewGuid().ToString("N")[..8]);
+                    fanOutMessage)
+                {
+                    TraceId = Guid.NewGuid().ToString("N")[..8]
+                };
                 try
                 {
                     var result = await meshRouter.RouteWithFanOutAsync(fanOutEnvelope, ct);

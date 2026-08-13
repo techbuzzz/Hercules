@@ -1,4 +1,5 @@
 using Hercules.Mesh;
+using Hercules.Mesh.Schema;
 using Xunit;
 
 namespace Hercules.Agent.Tests.Phase3Tests;
@@ -26,8 +27,100 @@ public class IntentEnvelopeTests
       Assert.Equal("req-001", restored.RequestId);
       Assert.Equal("agent-a", restored.Sender);
       Assert.Equal("code-review", restored.Intent);
-      Assert.Equal(15_000, restored.TimeoutMs);
+      Assert.Equal("http://localhost:5000/api/mesh/callback", restored.ReplyTo);
       Assert.Equal("trace-123", restored.TraceId);
+      Assert.NotNull(restored.Deadline);
+      Assert.Equal("1.0", restored.Version);
+   }
+
+   [Fact]
+   public void Envelope_With_AllNewFields_SerializesCorrectly()
+   {
+      var auth = AuthContext.Bearer("token123", delegationDepth: 1, rootRequestId: "root-001");
+      auth.Claims["scope"] = "delegate:read";
+      var schema = ResponseSchema.Json("""{"type":"object","properties":{"answer":{"type":"string"}}}""");
+
+      var envelope = new IntentEnvelope
+      {
+         RequestId = "req-002",
+         Sender = "agent-x",
+         Recipient = "agent-y",
+         Intent = "csharp-refactor",
+         Payload = """{"code":"void Foo() {}"}""",
+         IdempotencyKey = "idem-key-123",
+         TraceId = "trace-456",
+         ReplyTo = "http://callback.example.com",
+         Deadline = DateTimeOffset.UtcNow.AddMinutes(5),
+         Auth = auth,
+         ResponseSchema = schema,
+         Version = IntentEnvelope.CurrentVersion
+      };
+
+      var json = envelope.ToJson();
+      Assert.Contains("req-002", json);
+      Assert.Contains("agent-x", json);
+      Assert.Contains("agent-y", json);
+      Assert.Contains("idem-key-123", json);
+      Assert.Contains("bearer", json);
+      Assert.Contains("token123", json);
+      Assert.Contains("1.0", json); // version
+
+      var restored = IntentEnvelope.FromJson(json);
+      Assert.NotNull(restored);
+      Assert.Equal("req-002", restored.RequestId);
+      Assert.Equal("agent-y", restored.Recipient);
+      Assert.Equal("idem-key-123", restored.IdempotencyKey);
+      Assert.NotNull(restored.Auth);
+      Assert.Equal("bearer", restored.Auth.AuthType);
+      Assert.Equal("token123", restored.Auth.Token);
+      Assert.Equal(1, restored.Auth.DelegationDepth);
+      Assert.Equal("root-001", restored.Auth.RootRequestId);
+      Assert.Equal("delegate:read", restored.Auth.GetClaim("scope"));
+      Assert.NotNull(restored.ResponseSchema);
+      Assert.Equal("json", restored.ResponseSchema.SchemaType);
+   }
+
+   [Fact]
+   public void Envelope_Create_WithTypedPayload_SerializesCorrectly()
+   {
+      var payload = new { code = "int x = 42;", language = "csharp" };
+      var envelope = IntentEnvelope.Create(
+         requestId: "req-003",
+         sender: "agent-a",
+         intent: "code-analysis",
+         payload: payload,
+         recipient: "agent-b",
+         traceId: "trace-789",
+         idempotencyKey: "idem-003");
+
+      Assert.Equal("req-003", envelope.RequestId);
+      Assert.Equal("agent-a", envelope.Sender);
+      Assert.Equal("agent-b", envelope.Recipient);
+      Assert.Equal("idem-003", envelope.IdempotencyKey);
+      Assert.Contains("\"code\"", envelope.Payload);
+      Assert.Contains("\"language\"", envelope.Payload);
+   }
+
+   [Fact]
+   public void Envelope_Deadline_Expires_Correctly()
+   {
+      var pastDeadline = DateTimeOffset.UtcNow.AddMinutes(-5);
+      var envelope = new IntentEnvelope { Deadline = pastDeadline };
+      Assert.True(envelope.IsExpired);
+
+      var futureDeadline = DateTimeOffset.UtcNow.AddMinutes(5);
+      var envelope2 = new IntentEnvelope { Deadline = futureDeadline };
+      Assert.False(envelope2.IsExpired);
+   }
+
+   [Fact]
+   public void Envelope_GetDeadlineOrDefault_ReturnsDeadline()
+   {
+      var deadline = DateTimeOffset.UtcNow.AddMinutes(10);
+      var envelope = new IntentEnvelope { Deadline = deadline };
+      var result = envelope.GetDeadlineOrDefault(30_000);
+
+      Assert.Equal(deadline, result);
    }
 
    [Fact]
@@ -71,6 +164,16 @@ public class IntentEnvelopeTests
       Assert.Equal("rejected", resp.Status);
       Assert.False(resp.IsSuccess);
       Assert.Equal("Not supported", resp.Error);
+   }
+
+   [Fact]
+   public void IntentResponse_SchemaMismatch_Has_SchemaMismatch_Status()
+   {
+      var resp = IntentResponse.SchemaMismatch("req-005", "agent-e", "{ \"type\": \"object\" }");
+
+      Assert.Equal("schema_mismatch", resp.Status);
+      Assert.False(resp.IsSuccess);
+      Assert.Contains("schema", resp.Error, StringComparison.OrdinalIgnoreCase);
    }
 
    [Fact]

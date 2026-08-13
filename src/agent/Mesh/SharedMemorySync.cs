@@ -184,8 +184,10 @@ public sealed class SharedMemorySync : IDisposable
                     IntentIds.NewRequestId(),
                     ownAgentId,
                     "shared-memory-fetch",
-                    JsonSerializer.Serialize(new { requesterAgentId = ownAgentId }),
-                    TimeoutMs: 10_000);
+                    JsonSerializer.Serialize(new { requesterAgentId = ownAgentId }))
+                {
+                    Deadline = DateTimeOffset.UtcNow.AddMilliseconds(10_000)
+                };
 
                 IntentResponse response = await _transport.SendToAsync(peer.AgentId, envelope, ct);
                 if (response.IsSuccess && !string.IsNullOrEmpty(response.Result))
