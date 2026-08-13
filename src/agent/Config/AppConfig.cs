@@ -452,6 +452,9 @@ public sealed class MeshConfig
 
     /// <summary>Transport layer config (HTTP, gRPC, Bus adapters). task_037.</summary>
     public TransportConfig Transport { get; set; } = new();
+
+    /// <summary>Discovery mechanisms config (static peers, registry, mDNS). task_038.</summary>
+    public DiscoveryConfig Discovery { get; set; } = new();
 }
 
 /// <summary>
@@ -495,6 +498,28 @@ public sealed class ManifestTrustMetadataConfig
     public string IdentityProvider { get; set; } = "self-signed";
     public string? VerifiedBy { get; set; }
     public Dictionary<string, string> IdentityClaims { get; set; } = new();
+}
+
+/// <summary>
+///     Конфигурация discovery mechanisms (task_038).
+///     Static peers, capability registry, and mDNS/Bonjour discovery.
+/// </summary>
+public sealed class DiscoveryConfig
+{
+    /// <summary>Включить автоматический discovery при старте агента. Default: true.</summary>
+    public bool AutoDiscoverOnStart { get; set; } = true;
+
+    /// <summary>Включить mDNS/Bonjour discovery (requires mDNSResponder / Bonjour). Default: false.</summary>
+    public bool EnableMdns { get; set; } = false;
+
+    /// <summary>mDNS service type для mesh-агентов. Default: "_hercules._tcp".</summary>
+    public string MdnsServiceType { get; set; } = "_hercules._tcp";
+
+    /// <summary>TTL кэша discovery-результатов в секундах. Default: 300 (5 минут).</summary>
+    public int CacheTtlSeconds { get; set; } = 300;
+
+    /// <summary>Интервал auto-refresh discovery в секундах (0 = выключен). Default: 0.</summary>
+    public int AutoRefreshIntervalSeconds { get; set; } = 0;
 }
 
 /// <summary>

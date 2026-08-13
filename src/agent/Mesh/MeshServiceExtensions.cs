@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Config;
 using Hercules.Mesh.A2A;
+using Hercules.Mesh.Discovery;
 using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
 using Hercules.Skills;
@@ -207,6 +208,36 @@ public static class MeshServiceCollectionExtensions
             var logger = sp.GetRequiredService<ILogger<AgentCardService>>();
             return new AgentCardService(manifestService, a2aCfg, httpClient, logger);
         });
+
+        // Phase 3: Discovery mechanisms (task_038) — static peers, registry, mDNS
+        services.AddHttpClient<StaticDiscoverySource>()
+            .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
+        services.AddSingleton<IMdnsClient, NoopMdnsClient>();
+
+        services.AddSingleton<IDiscoverySource>(sp =>
+            new StaticDiscoverySource(
+                meshCfg,
+                sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(StaticDiscoverySource)),
+                meshCfg.AgentId,
+                sp.GetRequiredService<ILogger<StaticDiscoverySource>>()));
+
+        services.AddSingleton<IDiscoverySource>(sp =>
+            new RegistryDiscoverySource(
+                sp.GetRequiredService<CapabilityRegistry>(),
+                meshCfg.AgentId,
+                sp.GetRequiredService<ILogger<RegistryDiscoverySource>>()));
+
+        services.AddSingleton<IDiscoverySource>(sp =>
+            new MdnsDiscoverySource(
+                sp.GetRequiredService<IMdnsClient>(),
+                meshCfg.Discovery,
+                sp.GetRequiredService<ILogger<MdnsDiscoverySource>>()));
+
+        services.AddSingleton<IDiscoveryService>(sp =>
+            new DiscoveryService(
+                sp.GetRequiredService<IEnumerable<IDiscoverySource>>(),
+                meshCfg.Discovery,
+                sp.GetRequiredService<ILogger<DiscoveryService>>()));
 
         return services;
     }

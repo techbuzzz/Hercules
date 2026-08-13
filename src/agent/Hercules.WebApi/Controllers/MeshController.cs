@@ -1,4 +1,5 @@
 using Hercules.Mesh;
+using Hercules.Mesh.Discovery;
 using Hercules.Mesh.TaskLifecycle;
 
 namespace Hercules.WebApi.Controllers;
@@ -404,6 +405,84 @@ public static class MeshController
             await protocol.NotifyStateChangeAsync(id, ct);
             return Results.Ok(new { taskId = id, notified = true });
         }).WithName("NotifyDelegatedTaskState");
+
+        // === Phase 3: Discovery mechanisms (task_038) ===
+
+        // GET /api/mesh/discovery/sources — status of all discovery sources
+        app.MapGet("/api/mesh/discovery/sources", (IDiscoveryService discovery) =>
+        {
+            var sources = discovery.GetSourceStatuses();
+            return Results.Ok(new
+            {
+                count = sources.Count,
+                sources = sources.Select(s => new
+                {
+                    source = s.Source.ToString().ToLowerInvariant(),
+                    name = s.Name,
+                    enabled = s.Enabled
+                })
+            });
+        }).WithName("ListDiscoverySources");
+
+        // GET /api/mesh/discovery/agents — all discovered agents (from cache or fresh)
+        app.MapGet("/api/mesh/discovery/agents", async (
+            string? source,
+            IDiscoveryService discovery,
+            CancellationToken ct) =>
+        {
+            IReadOnlyList<Hercules.Mesh.Discovery.DiscoveredAgent> agents;
+
+            if (!string.IsNullOrWhiteSpace(source) &&
+                Enum.TryParse<Hercules.Mesh.Discovery.DiscoverySourceKind>(source, true, out var sourceKind))
+            {
+                agents = await discovery.GetAgentsBySourceAsync(sourceKind, ct);
+            }
+            else
+            {
+                agents = await discovery.GetAgentsAsync(ct);
+            }
+
+            return Results.Ok(new
+            {
+                count = agents.Count,
+                cacheFresh = discovery.IsCacheFresh,
+                agents = agents.Select(a => new
+                {
+                    agentId = a.AgentId,
+                    displayName = a.DisplayName,
+                    endpoint = a.Endpoint,
+                    source = a.Source.ToString().ToLowerInvariant(),
+                    discoveredAt = a.DiscoveredAt,
+                    capabilities = a.Capabilities,
+                    manifestLoaded = a.ManifestLoaded,
+                    error = a.Error
+                })
+            });
+        }).WithName("ListDiscoveredAgents");
+
+        // POST /api/mesh/discovery/refresh — force-refresh all discovery sources
+        app.MapPost("/api/mesh/discovery/refresh", async (
+            IDiscoveryService discovery,
+            CancellationToken ct) =>
+        {
+            var agents = await discovery.RefreshAsync(ct);
+            return Results.Ok(new
+            {
+                status = "refreshed",
+                count = agents.Count,
+                agents = agents.Select(a => new
+                {
+                    agentId = a.AgentId,
+                    displayName = a.DisplayName,
+                    endpoint = a.Endpoint,
+                    source = a.Source.ToString().ToLowerInvariant(),
+                    discoveredAt = a.DiscoveredAt,
+                    capabilities = a.Capabilities,
+                    manifestLoaded = a.ManifestLoaded,
+                    error = a.Error
+                })
+            });
+        }).WithName("RefreshDiscovery");
     }
 
     private static object ToTaskDto(DelegatedTask task)
