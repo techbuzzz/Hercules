@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Hercules.Cache;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Transport;
+using Hercules.Mesh.Audit;
 using Hercules.Tools.Policy;
 
 namespace Hercules.Config;
@@ -462,6 +463,9 @@ public sealed class MeshConfig
 
     /// <summary>Trust admission policy config (intent allow-lists, classification, schema, budget). task_040.</summary>
     public TrustAdmissionConfig TrustAdmission { get; set; } = new();
+
+    /// <summary>Inter-agent audit trail config (task_041).</summary>
+    public MeshAuditConfig InterAgentAudit { get; set; } = new();
 }
 
 /// <summary>

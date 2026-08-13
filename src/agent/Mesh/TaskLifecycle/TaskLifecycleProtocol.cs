@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Hercules.Mesh.Audit;
 using Hercules.Mesh.Schema;
 using Hercules.Mesh.Transport;
 using Microsoft.Extensions.Logging;
@@ -18,17 +19,19 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
     private readonly ITransport? _transport;
     private readonly string _localAgentId;
     private readonly ILogger<TaskLifecycleProtocol> _logger;
+    private readonly MeshAuditService? _auditService;
 
-    public TaskLifecycleProtocol(ITransport? transport, string localAgentId, ILogger<TaskLifecycleProtocol> logger)
+    public TaskLifecycleProtocol(ITransport? transport, string localAgentId, ILogger<TaskLifecycleProtocol> logger, MeshAuditService? auditService = null)
     {
         _transport = transport;
         _localAgentId = localAgentId;
         _logger = logger;
+        _auditService = auditService;
     }
 
     /// <summary>Constructor without IntentTransport (for testing / no-callback mode).</summary>
     public TaskLifecycleProtocol(string localAgentId, ILogger<TaskLifecycleProtocol> logger)
-        : this(null, localAgentId, logger)
+        : this(null, localAgentId, logger, null)
     {
     }
 
@@ -66,6 +69,10 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
             "[TaskLifecycle] Accepted delegated task {TaskId} (parent={ParentRequestId}, caller={CallerAgentId}, intent={Intent})",
             taskId, parentRequestId, callerAgentId, intent);
 
+        // Audit: log inbound delegation acceptance (fire-and-forget)
+        _ = LogTaskStateChangeAsync(task, fromState: null, toState: DelegatedTaskState.Accepted,
+            outcome: DelegationOutcome.Ok, error: null);
+
         return Task.FromResult(task);
     }
 
@@ -81,6 +88,10 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
 
         _logger.LogInformation("[TaskLifecycle] Task {TaskId} state: {OldState} → {NewState}",
             taskId, task.State, newState);
+
+        // Audit: log state transition
+        _ = LogTaskStateChangeAsync(updated, fromState: task.State, toState: newState,
+            outcome: DelegationOutcome.Ok, error: null);
 
         return Task.FromResult(updated);
     }
@@ -143,6 +154,13 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
         // Resolve waiting pollers
         ResolvePollers(taskId, updated);
 
+        // Audit
+        var latencyMs = updated.CompletedAt.HasValue
+            ? (updated.CompletedAt.Value - updated.CreatedAt).TotalMilliseconds
+            : (double?)null;
+        _ = LogTaskStateChangeAsync(updated, fromState: task.State, toState: DelegatedTaskState.Completed,
+            outcome: DelegationOutcome.Ok, error: null, latencyMs, ct);
+
         return Task.FromResult(updated);
     }
 
@@ -166,6 +184,12 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
 
         ResolvePollers(taskId, updated);
 
+        var latencyMs = (updated.CompletedAt.HasValue && updated.CreatedAt != default)
+            ? (updated.CompletedAt.Value - updated.CreatedAt).TotalMilliseconds
+            : (double?)null;
+        _ = LogTaskStateChangeAsync(updated, fromState: task.State, toState: DelegatedTaskState.Failed,
+            outcome: DelegationOutcome.Error, error: error, latencyMs, ct);
+
         return Task.FromResult(updated);
     }
 
@@ -188,6 +212,9 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
 
         ResolvePollers(taskId, updated);
 
+        _ = LogTaskStateChangeAsync(updated, fromState: task.State, toState: DelegatedTaskState.Cancelled,
+            outcome: DelegationOutcome.Rejected, error: reason, ct: ct);
+
         return Task.FromResult(updated);
     }
 
@@ -207,6 +234,10 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
             _logger.LogWarning("[TaskLifecycle] Task {TaskId} expired (deadline={Deadline})", taskId, task.ExpiresAt);
 
             ResolvePollers(taskId, updated);
+
+            _ = LogTaskStateChangeAsync(updated, fromState: task.State, toState: DelegatedTaskState.Expired,
+                outcome: DelegationOutcome.Expired, error: "Task deadline exceeded", ct: ct);
+
             return Task.FromResult(true);
         }
 
@@ -360,6 +391,42 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
                     poller.TrySetResult(task);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    ///     Fire-and-forget audit log for a delegated task state change.
+    ///     Called from task state transition methods (Accept, Complete, Fail, Cancel, Expire).
+    /// </summary>
+    private async Task LogTaskStateChangeAsync(
+        DelegatedTask task,
+        DelegatedTaskState? fromState,
+        DelegatedTaskState toState,
+        DelegationOutcome outcome,
+        string? error,
+        double? latencyMs = null,
+        CancellationToken ct = default)
+    {
+        if (_auditService is null) return;
+
+        try
+        {
+            await _auditService.LogTaskStateChangeAsync(
+                taskId: task.TaskId,
+                requestId: task.ParentRequestId,
+                callerAgentId: task.CallerAgentId,
+                localAgentId: _localAgentId,
+                intent: task.Intent,
+                fromState: fromState?.ToString() ?? "null",
+                toState: toState.ToString(),
+                outcome: outcome,
+                error: error,
+                latencyMs: latencyMs,
+                ct: ct);
+        }
+        catch
+        {
+            // Best-effort audit; do not propagate
         }
     }
 

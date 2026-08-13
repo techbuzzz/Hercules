@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Config;
 using Hercules.Mesh.A2A;
+using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Policy;
@@ -205,7 +206,14 @@ public static class MeshServiceCollectionExtensions
         });
 
         // IntentRouter — маршрутизация intent'ов (локально или peer'у) — Phase 3
-        services.AddSingleton<IntentRouter>();
+        services.AddSingleton<IntentRouter>(sp =>
+            new IntentRouter(
+                sp.GetRequiredService<AgentCore>(),
+                sp.GetRequiredService<CapabilityRegistry>(),
+                sp.GetRequiredService<ITransport>(),
+                sp.GetRequiredService<AgentManifestService>(),
+                sp.GetService<MeshAuditService>(),
+                sp.GetService<ITrustAdmissionPolicy>()));
 
         // Phase 3: TaskLifecycleProtocol — inter-agent task lifecycle (task_036)
         services.AddSingleton<ITaskLifecycleProtocol>(sp =>
@@ -213,7 +221,8 @@ public static class MeshServiceCollectionExtensions
             var transport = sp.GetRequiredService<ITransport>();
             var logger = sp.GetRequiredService<ILogger<TaskLifecycleProtocol>>();
             var agentId = meshCfg.AgentId;
-            return new TaskLifecycleProtocol(transport, agentId, logger);
+            var auditService = sp.GetService<MeshAuditService>();
+            return new TaskLifecycleProtocol(transport, agentId, logger, auditService);
         });
 
         // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов
@@ -274,6 +283,28 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<IEnumerable<IDiscoverySource>>(),
                 meshCfg.Discovery,
                 sp.GetRequiredService<ILogger<DiscoveryService>>()));
+
+        // Phase 3: Inter-agent audit trail (task_041) — structured log + OTel + optional file sink
+        services.AddSingleton(meshCfg.InterAgentAudit);
+        services.AddSingleton<IAuditSink>(sp =>
+            new SerilogMeshAuditSink(
+                sp.GetRequiredService<ILogger<MeshAuditService>>(),
+                sp.GetRequiredService<MeshAuditConfig>()));
+        services.AddSingleton<IAuditSink>(sp =>
+            new OpenTelemetryMeshAuditSink(
+                sp.GetRequiredService<MeshAuditConfig>()));
+        if (meshCfg.InterAgentAudit.FileSinkEnabled)
+        {
+            services.AddSingleton<IAuditSink>(sp =>
+                new FileMeshAuditSink(
+                    meshCfg.InterAgentAudit.FileSinkDirectory,
+                    sp.GetRequiredService<ILogger<FileMeshAuditSink>>()));
+        }
+        services.AddSingleton<MeshAuditService>(sp =>
+            new MeshAuditService(
+                sp.GetRequiredService<IEnumerable<IAuditSink>>(),
+                sp.GetRequiredService<MeshAuditConfig>(),
+                sp.GetRequiredService<ILogger<MeshAuditService>>()));
 
         return services;
     }

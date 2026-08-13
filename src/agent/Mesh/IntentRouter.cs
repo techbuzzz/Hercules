@@ -1,4 +1,7 @@
 using Hercules.Agent;
+using HerculesBus.Core;
+using Hercules.Mesh.Audit;
+using Hercules.Mesh.Policy;
 using Hercules.Mesh.Transport;
 
 namespace Hercules.Mesh;
@@ -19,17 +22,23 @@ public sealed class IntentRouter
     private readonly AgentManifestService _manifestService;
     private readonly CapabilityRegistry _registry;
     private readonly ITransport _transport;
+    private readonly MeshAuditService? _auditService;
+    private readonly ITrustAdmissionPolicy? _trustPolicy;
 
     public IntentRouter(
         AgentCore agent,
         CapabilityRegistry registry,
         ITransport transport,
-        AgentManifestService manifestService)
+        AgentManifestService manifestService,
+        MeshAuditService? auditService = null,
+        ITrustAdmissionPolicy? trustPolicy = null)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _manifestService = manifestService ?? throw new ArgumentNullException(nameof(manifestService));
+        _auditService = auditService;
+        _trustPolicy = trustPolicy;
     }
 
     /// <summary>
@@ -73,9 +82,50 @@ public sealed class IntentRouter
             return await ProcessLocallyAsync(envelope, ct);
         }
 
-        // 4. Отправляем intent peer'у через абстрактный транспорт
+        // 4. Trust admission check before delegation
+        string? policyDecision = null;
+        string? policyReason = null;
+        if (_trustPolicy is not null)
+        {
+            var ctx = new TrustAdmissionContext
+            {
+                CallerIdentity = null,
+                Envelope = envelope,
+                TargetAgentId = peer.AgentId
+            };
+            var admission = _trustPolicy.Evaluate(ctx);
+            policyDecision = admission.IsAllowed ? "Allowed" : "Denied";
+            policyReason = admission.DenialReason;
+        }
+
+        // 5. Отправляем intent peer'у через абстрактный транспорт
+        var sendStarted = DateTimeOffset.UtcNow;
         var result = await _transport.SendAsync(peer.AgentId, envelope, ct);
-        return result.Response ?? IntentResponse.Failed(
+        var latencyMs = (DateTimeOffset.UtcNow - sendStarted).TotalMilliseconds;
+
+        // Build outbound record for audit
+        var outboundRecord = BuildOutboundRecord(envelope, ownAgentId, peer.AgentId,
+            result, policyDecision, policyReason);
+
+        // Log outbound delegation (fire-and-forget-safe)
+        if (_auditService is not null)
+        {
+            await _auditService.LogOutboundDelegationAsync(
+                envelope, ownAgentId, peer.AgentId, result,
+                policyDecision, policyReason, Policy.DataClassification.Public, ct);
+        }
+
+        if (result.Response is not null)
+        {
+            // Log delegation result (includes response hash)
+            if (_auditService is not null)
+            {
+                await _auditService.LogDelegationResultAsync(outboundRecord, result.Response, latencyMs, ct);
+            }
+            return result.Response;
+        }
+
+        return IntentResponse.Failed(
             envelope.RequestId,
             peer.AgentId,
             result.ErrorMessage ?? "Transport error",
@@ -143,5 +193,40 @@ public sealed class IntentRouter
     {
         AgentManifest manifest = _manifestService.Save();
         _registry.Register(manifest);
+    }
+
+    /// <summary>
+    ///     Build an InterAgentAuditRecord for an outbound delegation event (for correlation with result).
+    /// </summary>
+    private InterAgentAuditRecord BuildOutboundRecord(
+        IntentEnvelope envelope,
+        string senderAgentId,
+        string receiverAgentId,
+        TransportResult transportResult,
+        string? policyDecision,
+        string? policyReason)
+    {
+        var traceId = envelope.TraceId ?? Ulid.NewId();
+        var rootRequestId = envelope.Auth?.RootRequestId ?? envelope.RequestId;
+        var depth = envelope.Auth?.DelegationDepth ?? 0;
+
+        return new InterAgentAuditRecord
+        {
+            EventType = "outbound_delegation",
+            TraceId = traceId,
+            RootRequestId = rootRequestId,
+            RequestId = envelope.RequestId,
+            SenderAgentId = senderAgentId,
+            ReceiverAgentId = receiverAgentId,
+            Intent = envelope.Intent,
+            PolicyDecision = policyDecision,
+            PolicyReason = policyReason,
+            LatencyMs = transportResult.LatencyMs,
+            Outcome = transportResult.IsSuccess ? DelegationOutcome.Ok : DelegationOutcome.Error,
+            Error = transportResult.ErrorMessage,
+            DelegationDepth = depth,
+            HopCount = depth + 1,
+            TransportKind = transportResult.TransportKind.ToString(),
+        };
     }
 }
