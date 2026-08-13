@@ -12,6 +12,7 @@ using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
+using Hercules.Mesh.A2A;
 using Hercules.Observability;
 using Hercules.Redaction;
 using Hercules.Simulation;
@@ -508,6 +509,21 @@ app.MapGet("/", () => Results.Ok(new
 }));
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", time = DateTime.UtcNow }));
 
+// A2A Agent Card — статический файл по спецификации (task_033)
+app.MapGet("/agent-card.json", () =>
+{
+    // agent-card.json публикуется в dataRoot при старте;.TryReadFromFile чтобы избежать
+    // NRE если файл ещё не создан (например, CLI-only запуск)
+    string dataRoot = app.Services.GetRequiredService<StorageConfig>().DataRoot;
+    string cardPath = Path.Combine(dataRoot, "agent-card.json");
+    if (File.Exists(cardPath))
+    {
+        string json = File.ReadAllText(cardPath);
+        return Results.Text(json, "application/json");
+    }
+    return Results.NotFound(new { error = "agent-card.json not published yet" });
+});
+
 // --- Доменные эндпоинты ---
 app.MapChat();
 app.MapSkills();
@@ -540,6 +556,26 @@ try
 catch (Exception ex)
 {
     Console.WriteLine($"[Manifest] Publishing failed: {ex.Message}");
+}
+
+// A2A Agent Card — публикация на startup (task_033)
+try
+{
+    var agentCardService = app.Services.GetRequiredService<IAgentCardService>();
+    var a2aConfig = app.Services.GetRequiredService<A2AConfig>();
+    if (a2aConfig.AgentCard.Publish)
+    {
+        string path = await agentCardService.PublishAsync();
+        Console.WriteLine($"[AgentCard] Published: {path}");
+    }
+    else
+    {
+        Console.WriteLine("[AgentCard] Publishing disabled (A2A.AgentCard.Publish = false)");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[AgentCard] Publishing failed: {ex.Message}");
 }
 
 app.MapBudget();

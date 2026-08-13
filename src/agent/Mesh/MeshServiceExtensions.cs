@@ -1,8 +1,10 @@
 using Hercules.Agent;
 using Hercules.Config;
+using Hercules.Mesh.A2A;
 using Hercules.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.Mesh;
 
@@ -160,6 +162,17 @@ public static class MeshServiceCollectionExtensions
             sp.GetRequiredService<CapabilityRegistry>(),
             sp.GetRequiredService<IntentTransport>(),
             sp.GetRequiredService<AgentManifestService>()));
+
+        // Phase 3: A2A Agent Card — публикация и импорт Agent Cards
+        services.AddSingleton<IAgentCardService>(sp =>
+        {
+            var manifestService = sp.GetRequiredService<AgentManifestService>();
+            var a2aCfg = sp.GetRequiredService<A2AConfig>();
+            var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient(nameof(IAgentCardService));
+            var logger = sp.GetRequiredService<ILogger<AgentCardService>>();
+            return new AgentCardService(manifestService, a2aCfg, httpClient, logger);
+        });
 
         return services;
     }

@@ -280,8 +280,50 @@ public sealed class McpServerConfig
 /// </summary>
 public sealed class A2AConfig
 {
+    /// <summary>Known peer agents: name → base URL для JSON-RPC вызовов.</summary>
     public Dictionary<string, string> Endpoints { get; set; } = new();
+
+    /// <summary>Timeout для A2A HTTP-вызовов в секундах.</summary>
     public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Agent Card publishing и discovery настройки.</summary>
+    public A2AAgentCardConfig AgentCard { get; set; } = new();
+
+    /// <summary>Remote discovery: список URLs для автодискавери Agent Cards.</summary>
+    public A2ADiscoveryConfig Discovery { get; set; } = new();
+}
+
+/// <summary>
+///     Agent Card publishing/discovery настройки.
+/// </summary>
+public sealed class A2AAgentCardConfig
+{
+    /// <summary>Публиковать локальный Agent Card в файл. Default: true.</summary>
+    public bool Publish { get; set; } = true;
+
+    /// <summary>
+    ///     Путь/endpoint для публикации Agent Card (по умолчанию "/agent-card.json").
+    ///     Может быть абсолютным путём или относительным (от dataRoot).
+    /// </summary>
+    public string Endpoint { get; set; } = "agent-card.json";
+
+    /// <summary>TTL кэша Agent Card в минутах. Default: 60.</summary>
+    public int CacheTtlMinutes { get; set; } = 60;
+}
+
+/// <summary>
+///     Remote discovery настройки.
+/// </summary>
+public sealed class A2ADiscoveryConfig
+{
+    /// <summary>Список URLs для автоматического дискавери remote Agent Cards.</summary>
+    public List<string> Endpoints { get; set; } = new();
+
+    /// <summary>Включить auto-discovery при старте. Default: false.</summary>
+    public bool AutoDiscover { get; set; } = false;
+
+    /// <summary>Интервал auto-refresh в минутах (0 = выключен). Default: 0.</summary>
+    public int RefreshIntervalMinutes { get; set; } = 0;
 }
 
 /// <summary>

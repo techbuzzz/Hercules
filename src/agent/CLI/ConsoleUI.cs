@@ -1,6 +1,7 @@
 using System.Text;
 using Hercules.Agent;
 using Hercules.Mesh;
+using Hercules.Mesh.A2A;
 using Hercules.Simulation;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
@@ -33,6 +34,7 @@ public sealed class ConsoleUI(
     DistributedReflection distributedReflection,
     SharedMemorySync sharedMemorySync,
     TemplateSimulationService simulation,
+    IAgentCardService? agentCardService = null,
     IApprovalService? approvalService = null,
     IEvalHarnessService? evalHarness = null)
 {
@@ -221,6 +223,10 @@ public sealed class ConsoleUI(
                 await HandleManifestCommandAsync(parts, ct);
                 break;
 
+            case "/agent-card":
+                await HandleAgentCardCommandAsync(parts, ct);
+                break;
+
             case "/skill":
                 if (parts.Length >= 3 && parts[1] == "eval")
                 {
@@ -379,6 +385,114 @@ public sealed class ConsoleUI(
 
             default:
                 AnsiConsole.MarkupLine("[yellow]Использование: /manifest show|refresh|validate[/]");
+                break;
+        }
+    }
+
+    private async Task HandleAgentCardCommandAsync(string[] parts, CancellationToken ct)
+    {
+        if (agentCardService is null)
+        {
+            AnsiConsole.MarkupLine("[yellow]Agent Card service не зарегистрирован.[/]");
+            return;
+        }
+
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "show";
+
+        switch (sub)
+        {
+            case "show":
+            {
+                AgentCard card = await agentCardService.GetAgentCardAsync(ct);
+                var table = new Table().Border(TableBorder.Rounded).Title("A2A Agent Card");
+                table.AddColumn("Поле");
+                table.AddColumn("Значение");
+                table.AddRow("Name", card.Name);
+                table.AddRow("Version", card.Version);
+                table.AddRow("Url", card.Url);
+                table.AddRow("Description", card.Description);
+                table.AddRow("Provider", card.Provider?.Organization ?? "—");
+                table.AddRow("Streaming", card.Capabilities.Streaming.ToString());
+                table.AddRow("PushNotifications", card.Capabilities.PushNotifications.ToString());
+                table.AddRow("Skills", card.Skills.Count.ToString());
+                table.AddRow("Auth", card.Authentication?.Schemes.Count > 0
+                    ? string.Join(", ", card.Authentication.Schemes)
+                    : "—");
+                table.AddRow("GeneratedAt", card.GeneratedAt);
+                table.AddRow("Fresh", agentCardService.IsCurrent() ? "[green]yes[/]" : "[yellow]stale[/]");
+                AnsiConsole.Write(table);
+
+                if (card.Skills.Count > 0)
+                {
+                    var skillTable = new Table().Border(TableBorder.Rounded).Title("AgentCard Skills");
+                    skillTable.AddColumn("Id");
+                    skillTable.AddColumn("Name");
+                    skillTable.AddColumn("Description");
+                    foreach (AgentCardSkill skill in card.Skills)
+                    {
+                        skillTable.AddRow(
+                            Markup.Escape(skill.Id),
+                            Markup.Escape(skill.Name),
+                            Markup.Escape(skill.Description));
+                    }
+                    AnsiConsole.Write(skillTable);
+                }
+
+                break;
+            }
+
+            case "refresh":
+            {
+                await AnsiConsole.Status().StartAsync("Обновляю Agent Card...", async _ =>
+                {
+                    // Invalidate cache by publishing
+                    await agentCardService.PublishAsync(ct);
+                });
+                AgentCard refreshed = await agentCardService.GetAgentCardAsync(ct);
+                AnsiConsole.MarkupLineInterpolated($"[green]✓ Agent Card обновлён:[/] {refreshed.Name} v{refreshed.Version}");
+                break;
+            }
+
+            case "import":
+            {
+                if (parts.Length < 3)
+                {
+                    AnsiConsole.MarkupLine("[yellow]Использование: /agent-card import <url>[/]");
+                    return;
+                }
+
+                string url = parts[2];
+                try
+                {
+                    AgentCard card = await AnsiConsole.Status().StartAsync(
+                        $"Импортирую Agent Card с {url}...",
+                        _ => agentCardService.ImportFromUrlAsync(url, ct));
+
+                    AnsiConsole.MarkupLineInterpolated($"[green]✓ Импортирован:[/] {card.Name} ({card.Url})");
+                    if (card.Skills.Count > 0)
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"  Навыков: {card.Skills.Count}");
+                        foreach (AgentCardSkill skill in card.Skills.Take(5))
+                        {
+                            AnsiConsole.MarkupLineInterpolated($"  • {skill.Id}: {skill.Description}");
+                        }
+
+                        if (card.Skills.Count > 5)
+                        {
+                            AnsiConsole.MarkupLineInterpolated($"  ... и ещё {card.Skills.Count - 5}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]✗ Ошибка импорта:[/] {ex.Message}");
+                }
+
+                break;
+            }
+
+            default:
+                AnsiConsole.MarkupLine("[yellow]Использование: /agent-card show|refresh|import <url>[/]");
                 break;
         }
     }
@@ -1141,6 +1255,9 @@ public sealed class ConsoleUI(
         table.AddRow("/manifest show", "Показать текущий манифест агента");
         table.AddRow("/manifest refresh", "Пересобрать и сохранить манифест в файл");
         table.AddRow("/manifest validate", "Провалидировать манифест (проверить ошибки)");
+        table.AddRow("/agent-card show", "Показать A2A Agent Card");
+        table.AddRow("/agent-card refresh", "Обновить и сохранить Agent Card");
+        table.AddRow("/agent-card import {url}", "Импортировать remote Agent Card");
         table.AddRow("/help", "Эта справка");
         table.AddRow("/exit", "Выход с сохранением контекста");
         AnsiConsole.Write(table);
