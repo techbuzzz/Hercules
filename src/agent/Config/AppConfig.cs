@@ -497,6 +497,9 @@ public sealed class MeshConfig
 
     /// <summary>Mesh evaluation suite config (task_052): scenario definitions, metrics, thresholds.</summary>
     public MeshEvalConfig MeshEval { get; set; } = new();
+
+    /// <summary>Centralized mesh observability config (task_054): trace context propagation, mesh-specific span enrichment, OTLP sink.</summary>
+    public MeshCentralizedObservabilityConfig CentralizedObservability { get; set; } = new();
 }
 
 /// <summary>
@@ -1145,4 +1148,58 @@ public sealed class MeshEvalConfig
 
     /// <summary>Вероятность chaos-инъекции (0.0-1.0). Default: 0.1.</summary>
     public double ChaosInjectionRate { get; set; } = 0.1;
+}
+
+/// <summary>
+///     Конфигурация centralized mesh observability (task_054).
+///     Trace context propagation (W3C TraceContext + B3), mesh-specific span enrichment,
+///     OTLP metrics and structured log sink.
+/// </summary>
+public sealed class MeshCentralizedObservabilityConfig
+{
+    /// <summary>Включить centralized mesh observability. Default: false (backward-compatible).</summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>
+    ///     Propagation formats для trace context: "w3c" (default), "b3", "both".
+    ///     W3C TraceContext: traceparent + tracestate headers.
+    ///     B3: X-B3-TraceId + X-B3-SpanId + X-B3-Sampled.
+    /// </summary>
+    public string PropagationFormat { get; set; } = "w3c";
+
+    /// <summary>
+    ///     Список OTLP endpoint'ов для экспорта mesh-трейсов и метрик.
+    ///     Если пусто — используется OtelConfig.OtlpEndpoint.
+    /// </summary>
+    public List<string> OtlpEndpoints { get; set; } = new();
+
+    /// <summary>Включить per-hop mesh-специфичные span-теги. Default: true.</summary>
+    public bool EnableSpanEnrichment { get; set; } = true;
+
+    /// <summary>Включить mesh-метрики (hop_count, delegation_depth, routing_decision). Default: true.</summary>
+    public bool EnableMetrics { get; set; } = true;
+
+    /// <summary>Включить redacted mesh-structured логи. Default: true.</summary>
+    public bool EnableStructuredLogs { get; set; } = true;
+
+    /// <summary>Включить trace context propagation в outbound HTTP-заголовках. Default: true.</summary>
+    public bool EnableTraceContextPropagation { get; set; } = true;
+
+    /// <summary>Включить trace context extraction из inbound запросов. Default: true.</summary>
+    public bool EnableTraceContextExtraction { get; set; } = true;
+
+    /// <summary>
+    ///     Список header names для извлечения trace context из входящих запросов.
+    ///     Default: traceparent, x-b3-traceid, x-b3-spanid.
+    /// </summary>
+    public List<string> InboundTraceHeaders { get; set; } = new() { "traceparent", "x-b3-traceid", "x-b3-spanid" };
+
+    /// <summary>
+    ///     Список атрибутов для redacted в mesh-тегах: payload, intent, sender, recipient.
+    ///     Default: payload (никогда не включается в span-теги).
+    /// </summary>
+    public List<string> RedactedAttributes { get; set; } = new() { "payload" };
+
+    /// <summary>Максимальная длина строки в tag value (больше обрезается). Default: 512.</summary>
+    public int MaxTagValueLength { get; set; } = 512;
 }

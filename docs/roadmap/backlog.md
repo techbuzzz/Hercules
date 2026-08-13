@@ -84,13 +84,13 @@
 | 43 | 17 | [Mesh router](tasks/task_043.md) | `mesh-router` | done |
 | 44 | 17 | [Сложность и стоимость](tasks/task_044.md) | `complexity-router` | done |
 | 45 | 18 | [Fan-out / fan-in](tasks/task_045.md) | `fan-out-in` | done |
-| 46 | 22 | [Verification pipeline](tasks/task_046.md) | `verification-pipeline` | pending |
-| 47 | 19 | [Retry, timeout, circuit breaker](tasks/task_047.md) | `retry-timeout-breaker` | pending |
+| 46 | 22 | [Verification pipeline](tasks/task_046.md) | `verification-pipeline` | done |
+| 47 | 19 | [Retry, timeout, circuit breaker](tasks/task_047.md) | `retry-timeout-breaker` | done |
 | 48 | 23 | [Границы делегации](tasks/task_048.md) | `delegation-boundaries` | done |
 | 49 | 24 | [Human-in-the-loop эскалация](tasks/task_049.md) | `human-escalation` | done |
 | 50 | 20 | [Distributed reflection](tasks/task_050.md) | `distributed-reflection` | done |
 | 51 | 21 | [Shared memory sync](tasks/task_051.md) | `shared-memory-sync` | done |
-| 52 | 31 | [Mesh evaluation suite](tasks/task_052.md) | `mesh-eval-suite` | pending |
+| 52 | 31 | [Mesh evaluation suite](tasks/task_052.md) | `mesh-eval-suite` | done |
 | 65 | 25 | [Mesh observability](tasks/task_065.md) | `mesh-observability` | pending |
 | 66 | 26 | [Абстракция mesh-бэкендов](tasks/task_066.md) | `mesh-backends-abstraction` | pending |
 | 67 | 27 | [Redis/Valkey coordination backend](tasks/task_067.md) | `redis-coordination-backend` | pending |

@@ -65,14 +65,18 @@ public sealed class TransportFactory : ITransportFactory
         // task_039: resolve peer credential provider for outbound auth
         var credentials = services.GetService<Hercules.Mesh.Auth.IPeerCredentialProvider>();
 
+        // task_054: resolve mesh observability service for trace context propagation
+        var meshObs = services.GetService<Hercules.Mesh.Observability.IMeshObservabilityService>();
+
         var adapter = httpClient is not null
-            ? new HttpTransportAdapter(_registry, httpClient, cfg.DefaultTimeoutMs, credentials)
+            ? new HttpTransportAdapter(_registry, httpClient, cfg.DefaultTimeoutMs, credentials, meshObs)
             : new HttpTransportAdapter(_registry, cfg.DefaultTimeoutMs);
 
         adapter.EnableGzip = cfg.EnableGzip;
         _logger?.LogInformation(
-            "[Transport] HTTP adapter initialised (gzip={Gzip}, auth={Auth})",
-            cfg.EnableGzip, credentials is not null ? "bearer/apikey" : "none");
+            "[Transport] HTTP adapter initialised (gzip={Gzip}, auth={Auth}, meshObs={MeshObs})",
+            cfg.EnableGzip, credentials is not null ? "bearer/apikey" : "none",
+            meshObs is not null ? "enabled" : "disabled");
 
         return adapter;
     }

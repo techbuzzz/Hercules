@@ -8,12 +8,14 @@ using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Escalation;
 using Hercules.Mesh.Eval;
+using Hercules.Mesh.Observability;
 using Hercules.Mesh.Policy;
 using Hercules.Mesh.Verification;
 using Hercules.Mesh.Router;
 using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
 using Hercules.Mesh.Resilience;
+using Hercules.Observability;
 using Hercules.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
@@ -410,6 +412,14 @@ public static class MeshServiceCollectionExtensions
 
         // Phase 5: Mesh dashboard (task_053) — aggregator service
         services.AddSingleton<Hercules.Mesh.Dashboard.MeshDashboardService>();
+
+        // Phase 5: Centralized mesh observability (task_054) — trace context propagation, mesh span enrichment, OTLP metrics
+        services.AddSingleton(meshCfg.CentralizedObservability);
+        services.AddSingleton<IMeshObservabilityService>(sp =>
+            new MeshObservabilityService(
+                sp.GetRequiredService<MeshCentralizedObservabilityConfig>(),
+                sp.GetRequiredService<IOtelService>(),
+                sp.GetRequiredService<ILogger<MeshObservabilityService>>()));
 
         return services;
     }
