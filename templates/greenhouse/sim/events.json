@@ -1,0 +1,13 @@
+[
+  { "timestamp": "2026-08-12T06:00:00Z", "type": "light_ramp_start", "description": "Grow lights ramping up for day cycle", "severity": "info", "payload": null, "source": "system" },
+  { "timestamp": "2026-08-12T06:15:00Z", "type": "irrigation_start", "description": "Scheduled irrigation cycle started", "severity": "info", "payload": null, "source": "irrigation-controller" },
+  { "timestamp": "2026-08-12T07:30:00Z", "type": "co2_enrichment_start", "description": "CO2 enrichment activated for photosynthesis boost", "severity": "info", "payload": null, "source": "co2-controller" },
+  { "timestamp": "2026-08-12T09:00:00Z", "type": "pest_alert", "description": "Aphid detected in zone-a by camera trap", "severity": "warning", "payload": "{\"zone\":\"zone-a\",\"pest\":\"aphid\",\"confidence\":0.87}", "source": "cv-system" },
+  { "timestamp": "2026-08-12T10:00:00Z", "type": "temperature_warning", "description": "Temperature approaching upper threshold in zone-a", "severity": "warning", "payload": "{\"location\":\"zone-a\",\"current\":27.8,\"threshold\":28.0}", "source": "climate-controller" },
+  { "timestamp": "2026-08-12T11:00:00Z", "type": "humidity_low", "description": "Humidity dropped below 60% in zone-a", "severity": "warning", "payload": "{\"location\":\"zone-a\",\"current\":58.2,\"threshold\":60}", "source": "climate-controller" },
+  { "timestamp": "2026-08-12T12:00:00Z", "type": "ventilation_active", "description": "Roof vents opened to reduce temperature", "severity": "info", "payload": null, "source": "climate-controller" },
+  { "timestamp": "2026-08-12T13:00:00Z", "type": "irrigation_stop", "description": "Irrigation cycle completed", "severity": "info", "payload": null, "source": "irrigation-controller" },
+  { "timestamp": "2026-08-12T14:00:00Z", "type": "pest_alert", "description": "Whitefly detected in zone-a by camera trap", "severity": "warning", "payload": "{\"zone\":\"zone-a\",\"pest\":\"whitefly\",\"confidence\":0.92}", "source": "cv-system" },
+  { "timestamp": "2026-08-12T18:00:00Z", "type": "light_ramp_down", "description": "Grow lights dimming for night cycle", "severity": "info", "payload": null, "source": "system" },
+  { "timestamp": "2026-08-12T19:00:00Z", "type": "co2_enrichment_stop", "description": "CO2 enrichment deactivated", "severity": "info", "payload": null, "source": "co2-controller" }
+]

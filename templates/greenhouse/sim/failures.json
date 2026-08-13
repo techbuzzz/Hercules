@@ -1,0 +1,50 @@
+[
+  {
+    "id": "gh-001",
+    "name": "Temperature Sensor Stuck",
+    "description": "Temperature sensor in zone-a freezes at 20.0°C — does not reflect actual temperature changes",
+    "scenario": "greenhouse",
+    "type": "StuckAt",
+    "affectedSensors": ["temperature"],
+    "injectAfterSeconds": 1800,
+    "durationSeconds": 3600,
+    "faultValue": 20.0,
+    "faultMessage": "sensor stuck at 20.0°C"
+  },
+  {
+    "id": "gh-002",
+    "name": "Humidity Data Loss",
+    "description": "Humidity sensor data becomes unavailable — readings show NaN",
+    "scenario": "greenhouse",
+    "type": "DataLoss",
+    "affectedSensors": ["humidity"],
+    "injectAfterSeconds": 7200,
+    "durationSeconds": 1800,
+    "faultValue": null,
+    "faultMessage": "humidity data unavailable"
+  },
+  {
+    "id": "gh-003",
+    "name": "CO2 Spike Anomaly",
+    "description": "CO2 sensor reports anomalous spike — 3x normal value",
+    "scenario": "greenhouse",
+    "type": "Spike",
+    "affectedSensors": ["co2"],
+    "injectAfterSeconds": 10800,
+    "durationSeconds": 900,
+    "faultValue": 1500.0,
+    "faultMessage": "CO2 spike detected"
+  },
+  {
+    "id": "gh-004",
+    "name": "Light Sensor Blackout",
+    "description": "Light sensor goes dark — reports 0 regardless of actual light levels",
+    "scenario": "greenhouse",
+    "type": "Blackout",
+    "affectedSensors": ["light"],
+    "injectAfterSeconds": 14400,
+    "durationSeconds": 2700,
+    "faultValue": 0.0,
+    "faultMessage": "light sensor offline"
+  }
+]

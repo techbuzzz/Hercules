@@ -1,0 +1,13 @@
+[
+  { "timestamp": "2026-08-12T00:00:00Z", "type": "daily_reconciliation", "description": "Machine-01 daily cash reconciliation completed", "severity": "info", "payload": "{\"machine\":\"machine-01\",\"cash\":120.50}", "source": "cash-system" },
+  { "timestamp": "2026-08-12T00:00:00Z", "type": "daily_reconciliation", "description": "Machine-02 daily cash reconciliation — low cash warning", "severity": "warning", "payload": "{\"machine\":\"machine-02\",\"cash\":35.0}", "source": "cash-system" },
+  { "timestamp": "2026-08-12T08:00:00Z", "type": "inventory_low", "description": "Machine-04 inventory below 20% threshold", "severity": "warning", "payload": "{\"machine\":\"machine-04\",\"inventory\":18.0}", "source": "inventory-system" },
+  { "timestamp": "2026-08-12T09:00:00Z", "type": "cash_low", "description": "Machine-02 cash level critical (<$50 threshold)", "severity": "critical", "payload": "{\"machine\":\"machine-02\",\"cash\":15.0}", "source": "cash-system" },
+  { "timestamp": "2026-08-12T09:30:00Z", "type": "service_due", "description": "Machine-05 service overdue (14 days since last visit)", "severity": "warning", "payload": "{\"machine\":\"machine-05\",\"days\":14}", "source": "maintenance-system" },
+  { "timestamp": "2026-08-12T10:00:00Z", "type": "restock_route_generated", "description": "Optimized restock route generated: 3 machines, 2 drivers", "severity": "info", "payload": null, "source": "routing-engine" },
+  { "timestamp": "2026-08-12T12:00:00Z", "type": "refrigerator_excursion", "description": "Machine-03 refrigerator temperature excursion: 8.1°C exceeds 8°C threshold", "severity": "critical", "payload": "{\"machine\":\"machine-03\",\"current\":8.1,\"threshold\":8.0}", "source": "temp-sensor" },
+  { "timestamp": "2026-08-12T12:30:00Z", "type": "refrigerator_recovered", "description": "Machine-03 refrigerator temperature recovered to normal (5.5°C)", "severity": "info", "payload": null, "source": "temp-sensor" },
+  { "timestamp": "2026-08-12T14:00:00Z", "type": "service_due_critical", "description": "Machine-05 service critically overdue (14+ days)", "severity": "critical", "payload": "{\"machine\":\"machine-05\",\"days\":14}", "source": "maintenance-system" },
+  { "timestamp": "2026-08-12T15:00:00Z", "type": "maintenance_scheduled", "description": "Maintenance visit scheduled for machine-05", "severity": "info", "payload": "{\"machine\":\"machine-05\",\"scheduled\":\"2026-08-13T09:00\"}", "source": "maintenance-system" },
+  { "timestamp": "2026-08-12T16:00:00Z", "type": "cash_critical", "description": "Machine-02 cash level critically low — cash collection required", "severity": "critical", "payload": "{\"machine\":\"machine-02\",\"cash\":10.0}", "source": "cash-system" }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "v-001",
+    "name": "Cash Sensor Stuck",
+    "description": "Cash level sensor stuck at $100 — does not reflect actual cash decline",
+    "scenario": "vending",
+    "type": "StuckAt",
+    "affectedSensors": ["cash_level"],
+    "injectAfterSeconds": 2400,
+    "durationSeconds": 3600,
+    "faultValue": 100.0,
+    "faultMessage": "cash sensor frozen at $100"
+  },
+  {
+    "id": "v-002",
+    "name": "Inventory Sensor Noise",
+    "description": "Inventory sensor readings noisy — ±5% variance regardless of actual inventory",
+    "scenario": "vending",
+    "type": "Noise",
+    "affectedSensors": ["inventory"],
+    "injectAfterSeconds": 6000,
+    "durationSeconds": 2700,
+    "faultValue": null,
+    "faultMessage": "inventory noise injected"
+  },
+  {
+    "id": "v-003",
+    "name": "Refrigerator Data Loss",
+    "description": "Refrigerator temperature sensor data gap — no readings for 30 minutes",
+    "scenario": "vending",
+    "type": "DataLoss",
+    "affectedSensors": ["refrigerator_temp"],
+    "injectAfterSeconds": 10800,
+    "durationSeconds": 1800,
+    "faultValue": null,
+    "faultMessage": "refrigerator sensor offline"
+  },
+  {
+    "id": "v-004",
+    "name": "Service Sensor Stuck",
+    "description": "Days since service sensor stuck at 10 days — maintenance overdue not reported",
+    "scenario": "vending",
+    "type": "StuckAt",
+    "affectedSensors": ["days_since_service"],
+    "injectAfterSeconds": 7200,
+    "durationSeconds": 5400,
+    "faultValue": 10.0,
+    "faultMessage": "service sensor frozen at 10 days"
+  }
+]

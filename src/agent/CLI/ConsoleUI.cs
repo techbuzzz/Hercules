@@ -1,6 +1,7 @@
 using System.Text;
 using Hercules.Agent;
 using Hercules.Mesh;
+using Hercules.Simulation;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
 using Hercules.Skills.Marketplace;
@@ -31,6 +32,7 @@ public sealed class ConsoleUI(
     CircuitBreaker circuitBreaker,
     DistributedReflection distributedReflection,
     SharedMemorySync sharedMemorySync,
+    TemplateSimulationService simulation,
     IApprovalService? approvalService = null,
     IEvalHarnessService? evalHarness = null)
 {
@@ -717,10 +719,50 @@ public sealed class ConsoleUI(
 
                 break;
 
+            case "simulate" when parts.Length >= 3:
+                HandleSimulateCommand(parts[2], parts.Length >= 4 && parts[3] == "--no-failures");
+                break;
+
             default:
-                AnsiConsole.MarkupLine("[grey]Команды:[/] /templates list | apply {file}");
+                AnsiConsole.MarkupLine("[grey]Команды:[/] /templates list | apply {file} | simulate {template} [--no-failures]");
                 break;
         }
+    }
+
+    private void HandleSimulateCommand(string templateName, bool noFailures)
+    {
+        if (!simulation.HasFixtures(templateName))
+        {
+            AnsiConsole.MarkupLineInterpolated($"[red]Симуляция не найдена для шаблона:[/] {templateName}");
+            var available = simulation.GetSimulatableTemplates();
+            if (available.Count > 0)
+            {
+                AnsiConsole.MarkupLineInterpolated($"[grey]Доступные:[/] {string.Join(", ", available)}");
+            }
+            return;
+        }
+
+        var coverage = simulation.GetFailureCoverage(templateName);
+        if (coverage.Count > 0)
+        {
+            AnsiConsole.MarkupLineInterpolated($"[grey]Failure coverage ({coverage.Count} sensors):[/]");
+            foreach (var kvp in coverage)
+            {
+                AnsiConsole.MarkupLineInterpolated($"  [yellow]{kvp.Key}[/]: {string.Join(", ", kvp.Value)}");
+            }
+        }
+
+        AnsiConsole.MarkupLineInterpolated($"[grey]Запуск симуляции для '{templateName}'...[/]");
+        simulation.StartSession(templateName);
+        var result = simulation.RunReplay(templateName, withFailures: !noFailures);
+        simulation.StopSession(templateName);
+
+        var color = result.Metrics.FailuresInjected > 0 ? "yellow" : "green";
+        AnsiConsole.MarkupLineInterpolated($"[green]✓ Симуляция завершена[/]");
+        AnsiConsole.MarkupLineInterpolated($"  Readings: {result.Metrics.TotalReadings}");
+        AnsiConsole.MarkupLineInterpolated($"  Events: {result.Metrics.TotalEvents}");
+        AnsiConsole.MarkupLineInterpolated($"[grey]  Failures injected:[/] [yellow]{result.Metrics.FailuresInjected}[/]");
+        AnsiConsole.MarkupLineInterpolated($"[grey]  Elapsed:[/] {result.Metrics.ElapsedSeconds:F3}s");
     }
 
     private async Task HandleMeshCommand(string[] parts, CancellationToken ct)

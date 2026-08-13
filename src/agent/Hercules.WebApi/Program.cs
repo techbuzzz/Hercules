@@ -14,6 +14,7 @@ using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Observability;
 using Hercules.Redaction;
+using Hercules.Simulation;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
 using Hercules.Skills.Marketplace;
@@ -327,6 +328,15 @@ builder.Services.AddSingleton<SkillMarketplace>(sp =>
         sp.GetRequiredService<SkillPackager>(),
         sp.GetRequiredService<IMarketplaceSigningService>()));
 builder.Services.AddSingleton<AgentTemplateManager>();
+
+// Template simulation (task_031)
+builder.Services.AddSingleton<ISensorSimulator>(sp =>
+    new FileSensorSimulator(sp.GetRequiredService<ILogger<FileSensorSimulator>>())
+    {
+        TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, "templates")
+    });
+builder.Services.AddSingleton<FailureScenarioEngine>();
+builder.Services.AddSingleton<TemplateSimulationService>();
 
 // Skill lifecycle: policy, deprecation, evaluation
 builder.Services.AddSingleton<SkillLifecyclePolicy>();
