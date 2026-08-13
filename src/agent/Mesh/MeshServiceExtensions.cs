@@ -297,12 +297,14 @@ public static class MeshServiceCollectionExtensions
             sp.GetRequiredService<ILogger<ReflectionProposalStore>>()));
         services.AddSingleton<DistributedReflection>();
 
-        // Phase 4: SharedMemorySync — синхронизация избранных фактов памяти
+        // Phase 4: SharedMemorySync — синхронизация избранных фактов памяти (task_051)
+        services.AddSingleton(meshCfg.SharedMemorySync);
         services.AddSingleton(sp => new SharedMemorySync(
             dataRoot,
             sp.GetRequiredService<CapabilityRegistry>(),
             sp.GetRequiredService<ITransport>(),
             sp.GetRequiredService<AgentManifestService>(),
+            sp.GetRequiredService<SharedMemorySyncConfig>(),
             sp.GetRequiredService<ILogger<SharedMemorySync>>()));
 
         // Phase 3: A2A Agent Card — публикация и импорт Agent Cards

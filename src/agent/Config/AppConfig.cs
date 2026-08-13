@@ -491,6 +491,9 @@ public sealed class MeshConfig
 
     /// <summary>Distributed reflection proposal config (task_050): proposal generation, LLM analysis, thresholds.</summary>
     public Mesh.ReflectionProposalConfig ReflectionProposals { get; set; } = new();
+
+    /// <summary>Shared memory sync config (task_051): TTL, sensitivity classification, encryption, namespace limits.</summary>
+    public SharedMemorySyncConfig SharedMemorySync { get; set; } = new();
 }
 
 /// <summary>
@@ -1049,4 +1052,33 @@ public sealed class EscalationConfig
     ///     Currently logs at Warning level; pluggable in future.
     /// </summary>
     public bool PageOperatorOnCritical { get; set; } = false;
+}
+
+/// <summary>
+///     Конфигурация shared memory sync (task_051).
+///     TTL, sensitivity classification, encryption requirement, namespace limits.
+/// </summary>
+public sealed class SharedMemorySyncConfig
+{
+    /// <summary>Включить shared memory sync. Default: false (backward-compatible).</summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>Default TTL в минутах для публикуемых фактов. 0 = permanent. Default: 1440 (1 день).</summary>
+    public int DefaultTtlMinutes { get; set; } = 1440;
+
+    /// <summary>Максимальное число shared facts на агента. Default: 500.</summary>
+    public int MaxFactsPerAgent { get; set; } = 500;
+
+    /// <summary>Требовать шифрование при передаче фактов между агентами. Default: true (HTTPS/mTLS).</summary>
+    public bool EncryptionRequired { get; set; } = true;
+
+    /// <summary>
+    ///     Максимальный уровень sensitivity для shared facts: Public, Internal, Sensitive, Restricted.
+    ///     Факты с более высоким уровнем sensitivity не синхронизируются.
+    ///     Default: "Sensitive".
+    /// </summary>
+    public string MaxAllowedSensitivity { get; set; } = "Sensitive";
+
+    /// <summary>Интервал автоматической синхронизации в минутах. 0 = выключена. Default: 30.</summary>
+    public int SyncIntervalMinutes { get; set; } = 30;
 }
