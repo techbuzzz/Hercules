@@ -59,7 +59,7 @@
 | 28 | — | [Кэширование](tasks/task_028.md) | `caching` | done |
 | 29 | — | [Score качества навыка](tasks/task_029.md) | `skill-quality-score` | done |
 | 30 | 11 | [Шаблоны агентов](tasks/task_030.md) | `agent-templates` | pending |
-| 31 | — | [Симуляция шаблонов](tasks/task_031.md) | `template-simulation` | pending |
+| 31 | — | [Симуляция шаблонов](tasks/task_031.md) | `template-simulation` | done |
 
 ## Phase 3 — Inter-agent protocol (Q1 2027)
 
