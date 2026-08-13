@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using Hercules.Agent;
 using HerculesBus.Core;
 using Hercules.Mesh.Audit;
 using Hercules.Mesh.Escalation;
+using Hercules.Mesh.Observability;
 using Hercules.Mesh.Policy;
 using Hercules.Mesh.Transport;
 
@@ -26,6 +28,7 @@ public sealed class IntentRouter
     private readonly MeshAuditService? _auditService;
     private readonly ITrustAdmissionPolicy? _trustPolicy;
     private readonly IEscalationService? _escalationService;
+    private readonly IMeshObservabilityService? _observability;
 
     public IntentRouter(
         AgentCore agent,
@@ -34,7 +37,8 @@ public sealed class IntentRouter
         AgentManifestService manifestService,
         MeshAuditService? auditService = null,
         ITrustAdmissionPolicy? trustPolicy = null,
-        IEscalationService? escalationService = null)
+        IEscalationService? escalationService = null,
+        IMeshObservabilityService? observability = null)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
@@ -43,6 +47,7 @@ public sealed class IntentRouter
         _auditService = auditService;
         _trustPolicy = trustPolicy;
         _escalationService = escalationService;
+        _observability = observability;
     }
 
     /// <summary>
@@ -121,38 +126,81 @@ public sealed class IntentRouter
             }
         }
 
-        // 5. Отправляем intent peer'у через абстрактный транспорт
-        var sendStarted = DateTimeOffset.UtcNow;
-        var result = await _transport.SendAsync(peer.AgentId, envelope, ct);
-        var latencyMs = (DateTimeOffset.UtcNow - sendStarted).TotalMilliseconds;
-
-        // Build outbound record for audit
-        var outboundRecord = BuildOutboundRecord(envelope, ownAgentId, peer.AgentId,
-            result, policyDecision, policyReason);
-
-        // Log outbound delegation (fire-and-forget-safe)
-        if (_auditService is not null)
+        // 5. Start mesh delegation span with trace context propagation
+        var span = _observability?.StartMeshSpan("IntentRouter.Delegate",
+            peerAgentId: peer.AgentId, intent: envelope.Intent);
+        try
         {
-            await _auditService.LogOutboundDelegationAsync(
-                envelope, ownAgentId, peer.AgentId, result,
-                policyDecision, policyReason, Policy.DataClassification.Public, ct);
-        }
+            // Enrich span with mesh tags
+            if (span is not null)
+            {
+                _ = _observability!.InjectTraceContext(span); // inject for outbound headers
+                _observability.EnrichSpanWithMeshTags(span,
+                    intent: envelope.Intent,
+                    senderAgentId: ownAgentId,
+                    receiverAgentId: peer.AgentId,
+                    transportKind: null,
+                    delegationDepth: envelope.Auth?.DelegationDepth,
+                    hopCount: (envelope.Auth?.DelegationDepth ?? 0) + 1,
+                    routingDecision: policyDecision);
+            }
 
-        if (result.Response is not null)
-        {
-            // Log delegation result (includes response hash)
+            var sendStarted = DateTimeOffset.UtcNow;
+            var result = await _transport.SendAsync(peer.AgentId, envelope, ct);
+            var latencyMs = (DateTimeOffset.UtcNow - sendStarted).TotalMilliseconds;
+
+            // Build outbound record for audit
+            var outboundRecord = BuildOutboundRecord(envelope, ownAgentId, peer.AgentId,
+                result, policyDecision, policyReason);
+
+            // Log outbound delegation (fire-and-forget)
             if (_auditService is not null)
             {
-                await _auditService.LogDelegationResultAsync(outboundRecord, result.Response, latencyMs, ct);
+                await _auditService.LogOutboundDelegationAsync(
+                    envelope, ownAgentId, peer.AgentId, result,
+                    policyDecision, policyReason, Policy.DataClassification.Public, ct);
             }
-            return result.Response;
-        }
 
-        return IntentResponse.Failed(
-            envelope.RequestId,
-            peer.AgentId,
-            result.ErrorMessage ?? "Transport error",
-            envelope.TraceId);
+            // Emit delegation metric
+            _observability?.RecordMeshMetric("delegation", 1,
+                peerAgentId: peer.AgentId, intent: envelope.Intent,
+                outcome: result.Response?.IsSuccess == true ? "success" : "failure");
+
+            if (result.Response is not null)
+            {
+                // Log delegation result (includes response hash)
+                if (_auditService is not null)
+                {
+                    await _auditService.LogDelegationResultAsync(outboundRecord, result.Response, latencyMs, ct);
+                }
+                _observability?.RecordMeshEvent(span, "delegation.success",
+                    intent: envelope.Intent, senderAgentId: ownAgentId,
+                    receiverAgentId: peer.AgentId, latencyMs: latencyMs,
+                    routingDecision: policyDecision);
+                _observability?.RecordMeshMetric("delegation_latency_ms", latencyMs,
+                    peerAgentId: peer.AgentId, intent: envelope.Intent,
+                    outcome: "success");
+                return result.Response;
+            }
+
+            _observability?.RecordMeshEvent(span, "delegation.failure",
+                intent: envelope.Intent, senderAgentId: ownAgentId,
+                receiverAgentId: peer.AgentId, latencyMs: latencyMs,
+                error: result.ErrorMessage);
+            _observability?.RecordMeshMetric("delegation_latency_ms", latencyMs,
+                peerAgentId: peer.AgentId, intent: envelope.Intent,
+                outcome: "failure");
+
+            return IntentResponse.Failed(
+                envelope.RequestId,
+                peer.AgentId,
+                result.ErrorMessage ?? "Transport error",
+                envelope.TraceId);
+        }
+        finally
+        {
+            span?.Stop();
+        }
     }
 
     /// <summary>

@@ -225,7 +225,8 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<AgentManifestService>(),
                 sp.GetService<MeshAuditService>(),
                 sp.GetService<ITrustAdmissionPolicy>(),
-                sp.GetService<IEscalationService>()));
+                sp.GetService<IEscalationService>(),
+                sp.GetService<IMeshObservabilityService>()));
 
         // Phase 3: TaskLifecycleProtocol — inter-agent task lifecycle (task_036)
         services.AddSingleton<ITaskLifecycleProtocol>(sp =>
@@ -234,7 +235,8 @@ public static class MeshServiceCollectionExtensions
             var logger = sp.GetRequiredService<ILogger<TaskLifecycleProtocol>>();
             var agentId = meshCfg.AgentId;
             var auditService = sp.GetService<MeshAuditService>();
-            return new TaskLifecycleProtocol(transport, agentId, logger, auditService);
+            var observability = sp.GetService<IMeshObservabilityService>();
+            return new TaskLifecycleProtocol(transport, agentId, logger, auditService, observability);
         });
 
         // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов (task_047)
@@ -269,13 +271,17 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<CircuitBreaker>(),
                 sp.GetRequiredService<RetryPolicy>(),
                 sp.GetRequiredService<ResilienceConfig>(),
-                logger);
+                logger,
+                sp.GetService<IMeshObservabilityService>());
         });
 
         // Phase 4: Mesh Router (task_043) — capability-based peer routing with health + scoring
         services.AddSingleton(meshCfg.MeshRouter);
         services.AddSingleton<RouterHealthTracker>();
         services.AddSingleton<IMeshRouter, CapabilityMeshRouter>();
+
+        // Phase 4: ResilientTransport observability (task_065) — retry/circuit spans
+        // IMeshObservabilityService already registered below; ResilientTransport gets it via DI
 
         // Phase 4: Complexity Router (task_044) — complexity-based execution path selection
         services.AddSingleton(meshCfg.ComplexityRouter);
@@ -288,7 +294,15 @@ public static class MeshServiceCollectionExtensions
             sp.GetRequiredService<FanOutOptions>(),
             sp.GetService<ILLMClient>(),
             sp.GetRequiredService<ILogger<ResponseAggregator>>()));
-        services.AddSingleton<IFanOutOrchestrator, FanOutOrchestrator>();
+        services.AddSingleton<IFanOutOrchestrator>(sp =>
+            new FanOutOrchestrator(
+                sp.GetRequiredService<IMeshRouter>(),
+                sp.GetRequiredService<ITransport>(),
+                sp.GetRequiredService<ResponseAggregator>(),
+                sp.GetRequiredService<FanOutOptions>(),
+                sp.GetRequiredService<CircuitBreaker>(),
+                sp.GetRequiredService<ILogger<FanOutOrchestrator>>(),
+                sp.GetService<IMeshObservabilityService>()));
 
         // Phase 4: MeshRouter — fan-out/fan-in оркестрация с LLM-judge
         services.AddSingleton<MeshRouter>();

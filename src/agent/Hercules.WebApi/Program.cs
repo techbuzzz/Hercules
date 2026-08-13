@@ -536,6 +536,7 @@ app.MapMemory();
 app.MapStats();
 app.MapConfig();
 app.MapMesh();
+app.MapMeshObservability();
 
 // Agent manifest — публикация на startup (task_032)
 try

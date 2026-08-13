@@ -91,7 +91,7 @@
 | 50 | 20 | [Distributed reflection](tasks/task_050.md) | `distributed-reflection` | done |
 | 51 | 21 | [Shared memory sync](tasks/task_051.md) | `shared-memory-sync` | done |
 | 52 | 31 | [Mesh evaluation suite](tasks/task_052.md) | `mesh-eval-suite` | done |
-| 65 | 25 | [Mesh observability](tasks/task_065.md) | `mesh-observability` | pending |
+| 65 | 25 | [Mesh observability](tasks/task_065.md) | `mesh-observability` | done |
 | 66 | 26 | [Абстракция mesh-бэкендов](tasks/task_066.md) | `mesh-backends-abstraction` | pending |
 | 67 | 27 | [Redis/Valkey coordination backend](tasks/task_067.md) | `redis-coordination-backend` | pending |
 | 68 | 28 | [NATS / JetStream transport option](tasks/task_068.md) | `nats-jetstream-transport` | pending |

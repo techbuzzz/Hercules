@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Hercules.Config;
+using Hercules.Mesh.Observability;
 using Hercules.Mesh.Transport;
 using Microsoft.Extensions.Logging;
 
@@ -18,6 +20,7 @@ public sealed class ResilientTransport : ITransport
     private readonly RetryPolicy _retryPolicy;
     private readonly ResilienceConfig _config;
     private readonly ILogger<ResilientTransport> _logger;
+    private readonly IMeshObservabilityService? _observability;
 
     // Per-peer bulkhead: limits concurrent calls to each peer
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _peerSemaphores = new(StringComparer.OrdinalIgnoreCase);
@@ -37,13 +40,15 @@ public sealed class ResilientTransport : ITransport
         CircuitBreaker circuitBreaker,
         RetryPolicy retryPolicy,
         ResilienceConfig config,
-        ILogger<ResilientTransport> logger)
+        ILogger<ResilientTransport> logger,
+        IMeshObservabilityService? observability = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _circuitBreaker = circuitBreaker ?? throw new ArgumentNullException(nameof(circuitBreaker));
         _retryPolicy = retryPolicy ?? throw new ArgumentNullException(nameof(retryPolicy));
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _observability = observability;
 
         _globalSemaphore = new SemaphoreSlim(_config.MaxConcurrentTotal, _config.MaxConcurrentTotal);
 
@@ -71,6 +76,11 @@ public sealed class ResilientTransport : ITransport
                 "[ResilientTransport] Circuit breaker open for {AgentId} — rejecting request {RequestId}",
                 targetAgentId, envelope.RequestId);
 
+            // Emit circuit-breaker rejection metric
+            _observability?.RecordMeshEvent(null, "resilience.circuit_open",
+                intent: envelope.Intent, senderAgentId: envelope.Sender,
+                receiverAgentId: targetAgentId);
+
             return new TransportResult(
                 IntentResponse.Rejected(envelope.RequestId, targetAgentId,
                     "Circuit breaker open — peer temporarily unavailable", envelope.TraceId),
@@ -92,6 +102,10 @@ public sealed class ResilientTransport : ITransport
         // 4. Acquire global bulkhead
         await _globalSemaphore.WaitAsync(ct);
 
+        // Start resilience span
+        var span = _observability?.StartMeshSpan("ResilientTransport.Send",
+            peerAgentId: targetAgentId, intent: envelope.Intent);
+
         try
         {
             // 5. Acquire per-peer bulkhead slot
@@ -99,7 +113,8 @@ public sealed class ResilientTransport : ITransport
 
             try
             {
-                return await SendWithRetryAsync(targetAgentId, envelope, ct);
+                var result = await SendWithRetryAsync(targetAgentId, envelope, span, ct);
+                return result;
             }
             finally
             {
@@ -109,6 +124,9 @@ public sealed class ResilientTransport : ITransport
         finally
         {
             _globalSemaphore.Release();
+            _observability?.RecordMeshEvent(span, "resilience.send_completed",
+                intent: envelope.Intent, senderAgentId: envelope.Sender,
+                receiverAgentId: targetAgentId);
         }
     }
 
@@ -144,7 +162,7 @@ public sealed class ResilientTransport : ITransport
     ///     Records circuit breaker success/failure after each attempt.
     /// </summary>
     private async Task<TransportResult> SendWithRetryAsync(
-        string targetAgentId, IntentEnvelope envelope, CancellationToken ct)
+        string targetAgentId, IntentEnvelope envelope, Activity? span, CancellationToken ct)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -158,9 +176,17 @@ public sealed class ResilientTransport : ITransport
                     targetAgentId, attempt + 1);
 
                 sw.Stop();
+                _observability?.RecordMeshEvent(span, "resilience.circuit_open",
+                    intent: envelope.Intent, senderAgentId: envelope.Sender,
+                    receiverAgentId: targetAgentId, hopCount: attempt + 1);
                 return TransportResult.Rejected(targetAgentId, envelope.TraceId,
                     "Circuit breaker open", sw.ElapsedMilliseconds, _inner.Kind);
             }
+
+            // Start per-attempt child span
+            using var attemptSpan = _observability?.StartMeshSpan(
+                $"ResilientTransport.Retry.{attempt + 1}",
+                peerAgentId: targetAgentId, intent: envelope.Intent);
 
             var result = await _inner.SendAsync(targetAgentId, envelope, ct);
             sw.Stop();
@@ -169,12 +195,20 @@ public sealed class ResilientTransport : ITransport
             if (result.Response?.IsSuccess == true)
             {
                 _circuitBreaker.RecordSuccess(targetAgentId);
+                _observability?.RecordMeshEvent(attemptSpan, "transport.success",
+                    intent: envelope.Intent, senderAgentId: envelope.Sender,
+                    receiverAgentId: targetAgentId, hopCount: attempt + 1,
+                    latencyMs: sw.ElapsedMilliseconds);
                 return new TransportResult(
                     result.Response, true, TransportErrorKind.None,
                     result.ErrorMessage, sw.ElapsedMilliseconds, _inner.Kind);
             }
 
             _circuitBreaker.RecordFailure(targetAgentId);
+            _observability?.RecordMeshEvent(attemptSpan, "transport.failure",
+                intent: envelope.Intent, senderAgentId: envelope.Sender,
+                receiverAgentId: targetAgentId, hopCount: attempt + 1,
+                error: result.ErrorMessage ?? result.Response?.Error);
 
             // Check deadline: do not retry if time is up
             var deadline = envelope.GetDeadlineOrDefault(30_000);
@@ -224,6 +258,11 @@ public sealed class ResilientTransport : ITransport
                 attempt + 2, _retryPolicy.MaxAttempts, targetAgentId, delay.TotalMilliseconds,
                 result.ErrorMessage ?? result.Response?.Error);
 
+            // Emit retry metric
+            _observability?.RecordMeshMetric("retry_attempt", attempt + 1,
+                peerAgentId: targetAgentId, intent: envelope.Intent,
+                outcome: "retrying");
+
             try
             {
                 await Task.Delay(delay, ct);
@@ -239,6 +278,9 @@ public sealed class ResilientTransport : ITransport
         }
 
         sw.Stop();
+        _observability?.RecordMeshEvent(span, "resilience.exhausted",
+            intent: envelope.Intent, senderAgentId: envelope.Sender,
+            receiverAgentId: targetAgentId, error: $"Exhausted {_retryPolicy.MaxAttempts} attempts");
         return new TransportResult(
             IntentResponse.Failed(envelope.RequestId, targetAgentId,
                 $"Exhausted {_retryPolicy.MaxAttempts} attempts", envelope.TraceId),

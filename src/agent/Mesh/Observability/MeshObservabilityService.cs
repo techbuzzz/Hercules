@@ -228,6 +228,10 @@ public sealed class MeshObservabilityService : IMeshObservabilityService
             case "routing_decision":
                 _meshRoutingCounter?.Add((long)value, tagArray);
                 break;
+            case "retry_attempt":
+                // retry_attempt counter — uses delegation counter with retry tag
+                _meshDelegationCounter?.Add((long)value, tagArray);
+                break;
             default:
                 _logger.LogDebug("[MeshObs] Unknown metric {MetricName}={Value}", metricName, value);
                 break;

@@ -56,7 +56,7 @@ public interface IMeshObservabilityService
 
     /// <summary>
     ///     Record a mesh metric (counter or gauge) for observability backends.
-    ///     Currently emits structured log; future: OpenTelemetry metrics.
+    ///     Supported metrics: delegation_latency_ms, hop_count, delegation, routing_decision, retry_attempt.
     /// </summary>
     void RecordMeshMetric(string metricName, double value, string? peerAgentId = null,
         string? intent = null, string? outcome = null);
