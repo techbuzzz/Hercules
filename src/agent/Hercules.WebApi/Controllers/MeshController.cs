@@ -1,4 +1,5 @@
 using Hercules.Mesh;
+using Hercules.Mesh.TaskLifecycle;
 
 namespace Hercules.WebApi.Controllers;
 
@@ -216,6 +217,217 @@ public static class MeshController
                 ? Results.Ok(new { status = "removed", factId })
                 : Results.NotFound(new { error = $"Факт '{factId}' не найден." });
         }).WithName("RemoveSharedMemory");
+
+        // === Phase 3: Task Lifecycle Protocol (task_036) ===
+
+        // POST /api/mesh/tasks/accept — принять delegated задачу
+        app.MapPost("/api/mesh/tasks/accept", async (
+            DelegatedTaskAcceptRequest req,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var task = await protocol.AcceptAsync(
+                    req.ParentRequestId,
+                    req.CallerAgentId,
+                    req.Intent,
+                    req.Payload,
+                    req.Auth,
+                    req.ExpiresAt,
+                    ct);
+                return Results.Accepted($"/api/mesh/tasks/{task.TaskId}", ToTaskDto(task));
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithName("AcceptDelegatedTask");
+
+        // GET /api/mesh/tasks/{id} — получить состояние delegated задачи
+        app.MapGet("/api/mesh/tasks/{id}", async (
+            string id,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            var task = await protocol.GetStateAsync(id, ct);
+            return task is null
+                ? Results.NotFound(new { error = $"Delegated task '{id}' not found." })
+                : Results.Ok(ToTaskDto(task));
+        }).WithName("GetDelegatedTask");
+
+        // POST /api/mesh/tasks/{id}/state — обновить состояние
+        app.MapPost("/api/mesh/tasks/{id}/state", async (
+            string id,
+            DelegatedTaskStateUpdateRequest req,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                if (!Enum.TryParse<DelegatedTaskState>(req.State, true, out var newState))
+                    return Results.BadRequest(new { error = $"Unknown state: {req.State}" });
+
+                var task = await protocol.UpdateStateAsync(id, newState, ct);
+                return Results.Ok(ToTaskDto(task));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 500);
+            }
+        }).WithName("UpdateDelegatedTaskState");
+
+        // POST /api/mesh/tasks/{id}/await-input — перевести в AwaitingInput
+        app.MapPost("/api/mesh/tasks/{id}/await-input", async (
+            string id,
+            AwaitInputRequest req,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var task = await protocol.AwaitInputAsync(id, req.InputType, req.Question, req.Choices, ct);
+                return Results.Ok(ToTaskDto(task));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithName("AwaitDelegatedTaskInput");
+
+        // POST /api/mesh/tasks/{id}/complete — завершить с результатом
+        app.MapPost("/api/mesh/tasks/{id}/complete", async (
+            string id,
+            DelegatedTaskCompleteRequest req,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var task = await protocol.CompleteAsync(id, req.Result, ct);
+                return Results.Ok(ToTaskDto(task));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithName("CompleteDelegatedTask");
+
+        // POST /api/mesh/tasks/{id}/fail — завершить с ошибкой
+        app.MapPost("/api/mesh/tasks/{id}/fail", async (
+            string id,
+            DelegatedTaskFailRequest req,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var task = await protocol.FailAsync(id, req.Error, ct);
+                return Results.Ok(ToTaskDto(task));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithName("FailDelegatedTask");
+
+        // POST /api/mesh/tasks/{id}/cancel — отменить
+        app.MapPost("/api/mesh/tasks/{id}/cancel", async (
+            string id,
+            DelegatedTaskCancelRequest req,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var task = await protocol.CancelAsync(id, req.Reason, ct);
+                return Results.Ok(ToTaskDto(task));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithName("CancelDelegatedTask");
+
+        // POST /api/mesh/tasks/{id}/callback — callback от вызывающего агента (input delivered)
+        app.MapPost("/api/mesh/tasks/{id}/callback", async (
+            string id,
+            DelegatedTaskCallbackRequest req,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var task = await protocol.RecordInputAsync(id, req.Input, ct);
+                return Results.Ok(ToTaskDto(task));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithName("DelegatedTaskCallback");
+
+        // GET /api/mesh/tasks/{id}/poll — long-poll на AwaitingInput
+        app.MapGet("/api/mesh/tasks/{id}/poll", async (
+            string id,
+            int timeoutMs,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            var task = await protocol.PollForInputDeliveryAsync(id, timeoutMs, ct);
+            return task is null
+                ? Results.NotFound(new { error = $"Delegated task '{id}' not found." })
+                : Results.Ok(ToTaskDto(task));
+        }).WithName("PollDelegatedTask");
+
+        // POST /api/mesh/tasks/{id}/expire-check — принудительная проверка expiration
+        app.MapPost("/api/mesh/tasks/{id}/expire-check", async (
+            string id,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            var expired = await protocol.CheckExpiredAsync(id, ct);
+            var task = await protocol.GetStateAsync(id, ct);
+            return Results.Ok(new { taskId = id, expired, task = task is null ? null : ToTaskDto(task) });
+        }).WithName("CheckDelegatedTaskExpired");
+
+        // POST /api/mesh/tasks/{id}/notify — отправить callback вызывающему агенту
+        app.MapPost("/api/mesh/tasks/{id}/notify", async (
+            string id,
+            ITaskLifecycleProtocol protocol,
+            CancellationToken ct) =>
+        {
+            await protocol.NotifyStateChangeAsync(id, ct);
+            return Results.Ok(new { taskId = id, notified = true });
+        }).WithName("NotifyDelegatedTaskState");
+    }
+
+    private static object ToTaskDto(DelegatedTask task)
+    {
+        return new
+        {
+            taskId = task.TaskId,
+            parentRequestId = task.ParentRequestId,
+            callerAgentId = task.CallerAgentId,
+            intent = task.Intent,
+            state = task.State.ToString(),
+            createdAt = task.CreatedAt,
+            updatedAt = task.UpdatedAt,
+            completedAt = task.CompletedAt,
+            result = task.Result,
+            error = task.Error,
+            cancellationReason = task.CancellationReason,
+            expiresAt = task.ExpiresAt,
+            awaitingInput = task.AwaitingInputContext is not null,
+            awaitingInputType = task.AwaitingInputContext?.InputType,
+            awaitingQuestion = task.AwaitingInputContext?.Question,
+            awaitingChoices = task.AwaitingInputContext?.Choices,
+            localTaskId = task.LocalTaskId
+        };
     }
 }
 
@@ -224,3 +436,33 @@ public sealed record SharedMemoryPublishRequest(
     string Category,
     string Content,
     List<string>? AllowedAgents = null);
+
+/// <summary>Запрос на accept delegated задачи (task_036).</summary>
+public sealed record DelegatedTaskAcceptRequest(
+    string ParentRequestId,
+    string CallerAgentId,
+    string Intent,
+    string Payload,
+    Mesh.Schema.AuthContext? Auth = null,
+    DateTimeOffset? ExpiresAt = null);
+
+/// <summary>Запрос на обновление состояния delegated задачи (task_036).</summary>
+public sealed record DelegatedTaskStateUpdateRequest(string State);
+
+/// <summary>Запрос на ожидание ввода (task_036).</summary>
+public sealed record AwaitInputRequest(
+    string InputType,
+    string? Question = null,
+    List<string>? Choices = null);
+
+/// <summary>Запрос на завершение delegated задачи (task_036).</summary>
+public sealed record DelegatedTaskCompleteRequest(string Result);
+
+/// <summary>Запрос на fail delegated задачи (task_036).</summary>
+public sealed record DelegatedTaskFailRequest(string Error);
+
+/// <summary>Запрос на cancel delegated задачи (task_036).</summary>
+public sealed record DelegatedTaskCancelRequest(string? Reason = null);
+
+/// <summary>Callback payload от вызывающего агента (task_036).</summary>
+public sealed record DelegatedTaskCallbackRequest(string Input);

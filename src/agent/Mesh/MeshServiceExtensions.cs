@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Config;
 using Hercules.Mesh.A2A;
+using Hercules.Mesh.TaskLifecycle;
 using Hercules.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
@@ -154,6 +155,15 @@ public static class MeshServiceCollectionExtensions
 
         // IntentRouter — маршрутизация intent'ов (локально или peer'у) — Phase 3
         services.AddSingleton<IntentRouter>();
+
+        // Phase 3: TaskLifecycleProtocol — inter-agent task lifecycle (task_036)
+        services.AddSingleton<ITaskLifecycleProtocol>(sp =>
+        {
+            var transport = sp.GetRequiredService<IntentTransport>();
+            var logger = sp.GetRequiredService<ILogger<TaskLifecycleProtocol>>();
+            var agentId = meshCfg.AgentId;
+            return new TaskLifecycleProtocol(transport, agentId, logger);
+        });
 
         // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов
         services.AddSingleton<CircuitBreaker>();

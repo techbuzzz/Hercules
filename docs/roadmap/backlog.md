@@ -68,8 +68,8 @@
 | 32 | 12 | [Манифест агента](tasks/task_032.md) | `agent-manifest` | done |
 | 33 | — | [A2A Agent Card совместимость](tasks/task_033.md) | `a2a-agent-card` | done |
 | 34 | 13 | [Capability registry](tasks/task_034.md) | `capability-registry` | done |
-| 35 | 14 | [Формат inter-agent сообщений](tasks/task_035.md) | `delegation-envelope` | pending |
-| 36 | — | [Протокол жизненного цикла задач](tasks/task_036.md) | `task-lifecycle-protocol` | pending |
+| 35 | 14 | [Формат inter-agent сообщений](tasks/task_035.md) | `delegation-envelope` | done |
+| 36 | — | [Протокол жизненного цикла задач](tasks/task_036.md) | `task-lifecycle-protocol` | done |
 | 37 | 15 | [Опции транспорта](tasks/task_037.md) | `transports` | pending |
 | 38 | 16 | [Механизмы discovery](tasks/task_038.md) | `discovery` | pending |
 | 39 | — | [Идентичность и делегация](tasks/task_039.md) | `identity-delegation` | pending |
