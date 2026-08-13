@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization;
 using Hercules.Cache;
+using Hercules.Mesh.Auth;
 using Hercules.Mesh.Transport;
 using Hercules.Tools.Policy;
 
@@ -455,6 +456,9 @@ public sealed class MeshConfig
 
     /// <summary>Discovery mechanisms config (static peers, registry, mDNS). task_038.</summary>
     public DiscoveryConfig Discovery { get; set; } = new();
+
+    /// <summary>Inter-agent auth config (bearer tokens, API keys, mTLS). task_039.</summary>
+    public PeerAuthConfig PeerAuth { get; set; } = new();
 }
 
 /// <summary>

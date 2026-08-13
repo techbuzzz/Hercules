@@ -13,6 +13,7 @@ using Hercules.LLM.JsonRepair;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Mesh.A2A;
+using Hercules.Mesh.Auth;
 using Hercules.Observability;
 using Hercules.Redaction;
 using Hercules.Simulation;
@@ -462,6 +463,8 @@ app.UseCors(corsPolicy);
 app.UseMiddleware<RequestBodyLimitMiddleware>();
 app.UseMiddleware<ApiKeyMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
+// task_039: peer auth middleware for /api/mesh/* endpoints
+app.UseMiddleware<PeerAuthMiddleware>();
 
 // --- Инициализация сессии агента ---
 app.Services.GetRequiredService<WebApiAdapter>().EnsureSessionStarted();

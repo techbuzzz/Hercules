@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Config;
 using Hercules.Mesh.A2A;
+using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
@@ -167,6 +168,22 @@ public static class MeshServiceCollectionExtensions
         });
         services.AddSingleton<ITransport>(sp =>
             sp.GetRequiredService<ITransportFactory>().Primary);
+
+        // Phase 3: Identity & delegation (task_039) — bearer tokens, API keys, mTLS
+        services.AddSingleton(meshCfg.PeerAuth);
+        services.AddSingleton<TokenIssuer>(sp =>
+            new TokenIssuer(
+                sp.GetRequiredService<PeerAuthConfig>(),
+                sp.GetRequiredService<ILogger<TokenIssuer>>()));
+        services.AddSingleton<IIdentityProvider, BearerIdentityProvider>();
+        services.AddSingleton<IIdentityProvider, ApiKeyIdentityProvider>();
+        services.AddSingleton<IIdentityProvider, MTlsIdentityProvider>();
+        services.AddSingleton<IPeerCredentialProvider>(sp =>
+            new DefaultPeerCredentialProvider(
+                sp.GetRequiredService<PeerAuthConfig>(),
+                sp.GetRequiredService<TokenIssuer>(),
+                meshCfg.AgentId,
+                sp.GetRequiredService<ILogger<DefaultPeerCredentialProvider>>()));
 
         // IntentRouter — маршрутизация intent'ов (локально или peer'у) — Phase 3
         services.AddSingleton<IntentRouter>();
