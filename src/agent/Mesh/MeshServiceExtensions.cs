@@ -1,5 +1,6 @@
 using Hercules.Agent;
 using Hercules.Config;
+using Hercules.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 
@@ -30,6 +31,26 @@ public sealed class ManifestCapabilitiesProvider
             Description = s.Meta.Description,
             PhraseReceivers = s.Meta.PhraseReceivers,
             Tools = s.Meta.Tools?.Select(t => t.Name).ToList()
+        }).ToList();
+    }
+
+    /// <summary>
+    ///     Получить расширенный список навыков агента для публикации в манифесте.
+    ///     Каждый навык → ManifestSkillEntry с полной информацией.
+    /// </summary>
+    public List<ManifestSkillEntry> GetSkills()
+    {
+        return _skills.All().Select(s => new ManifestSkillEntry
+        {
+            Id = s.Meta.Id,
+            Name = s.Meta.Name,
+            Description = s.Meta.Description,
+            Version = $"{s.Meta.Version}.0.0",
+            RiskLevel = ((SkillRiskLevel)s.Meta.RiskLevel).ToString().ToLowerInvariant(),
+            Tools = s.Meta.Tools?.Select(t => t.Name).ToList() ?? new List<string>(),
+            PhraseReceivers = s.Meta.PhraseReceivers,
+            CreatedAt = s.Meta.CreatedAt,
+            UpdatedAt = null
         }).ToList();
     }
 }
@@ -64,6 +85,34 @@ public static class MeshServiceCollectionExtensions
             ManifestCapabilitiesProvider capsProvider = sp.GetRequiredService<ManifestCapabilitiesProvider>();
             var manifestDir = dataRoot;
 
+            // Build resource limits from config
+            Hercules.Mesh.ManifestResourceLimits? resourceLimits = null;
+            if (meshConfig.ResourceLimits is not null)
+            {
+                resourceLimits = new Hercules.Mesh.ManifestResourceLimits
+                {
+                    MaxTokensPerRequest = meshConfig.ResourceLimits.MaxTokensPerRequest,
+                    MaxConcurrentRequests = meshConfig.ResourceLimits.MaxConcurrentRequests,
+                    MaxToolCallsPerRequest = meshConfig.ResourceLimits.MaxToolCallsPerRequest,
+                    MaxWallClockSecondsPerRequest = meshConfig.ResourceLimits.MaxWallClockSecondsPerRequest,
+                    MaxCostPerDayUsd = meshConfig.ResourceLimits.MaxCostPerDayUsd,
+                    MaxTokensPerDay = meshConfig.ResourceLimits.MaxTokensPerDay
+                };
+            }
+
+            // Build trust metadata from config
+            Hercules.Mesh.ManifestTrustMetadata? trustMetadata = null;
+            if (meshConfig.TrustMetadata is not null)
+            {
+                trustMetadata = new Hercules.Mesh.ManifestTrustMetadata
+                {
+                    Level = meshConfig.TrustMetadata.Level,
+                    IdentityProvider = meshConfig.TrustMetadata.IdentityProvider,
+                    VerifiedBy = meshConfig.TrustMetadata.VerifiedBy,
+                    IdentityClaims = meshConfig.TrustMetadata.IdentityClaims
+                };
+            }
+
             return new AgentManifestService(
                 meshConfig.AgentId,
                 meshConfig.DisplayName,
@@ -71,9 +120,15 @@ public static class MeshServiceCollectionExtensions
                 meshConfig.Endpoint,
                 manifestDir,
                 capsProvider.GetCapabilities,
-                "",
-                null,
-                meshConfig.Endpoint.TrimEnd('/') + "/api/health");
+                capsProvider.GetSkills,
+                "",   // primaryModel — пустой, заполняется из LLM config
+                null, // fallbackModels
+                meshConfig.Endpoint.TrimEnd('/') + "/api/health",
+                meshConfig.SupportedProtocolVersions.Count > 0
+                    ? meshConfig.SupportedProtocolVersions
+                    : new List<string> { "1.0" },
+                resourceLimits,
+                trustMetadata);
         });
 
         // IntentTransport — HTTP-клиент для inter-agent вызовов (IHttpClientFactory)

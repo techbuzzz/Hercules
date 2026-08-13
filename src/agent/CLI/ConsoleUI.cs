@@ -217,6 +217,10 @@ public sealed class ConsoleUI(
                 await HandleApprovalsCommandAsync(parts, ct);
                 break;
 
+            case "/manifest":
+                await HandleManifestCommandAsync(parts, ct);
+                break;
+
             case "/skill":
                 if (parts.Length >= 3 && parts[1] == "eval")
                 {
@@ -295,6 +299,88 @@ public sealed class ConsoleUI(
         await AnsiConsole.Status().StartAsync("Провожу самоанализ...", async _ => { result = await reflection.ReflectAsync(agent.SessionId, ct); });
         AnsiConsole.Write(new Panel(Markup.Escape(result.Markdown)).Header("Reflection Engine").Expand());
         AnsiConsole.MarkupLineInterpolated($"[grey]Сохранено в Skills/{result.FilePath}[/]");
+    }
+
+    private async Task HandleManifestCommandAsync(string[] parts, CancellationToken ct)
+    {
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "show";
+
+        AgentManifest manifest = manifestService.Current;
+
+        switch (sub)
+        {
+            case "show":
+            {
+                var table = new Table().Border(TableBorder.Rounded).Title("Agent Manifest");
+                table.AddColumn("Поле");
+                table.AddColumn("Значение");
+                table.AddRow("AgentId", manifest.AgentId);
+                table.AddRow("Version", manifest.Version);
+                table.AddRow("DisplayName", manifest.DisplayName);
+                table.AddRow("Description", manifest.Description);
+                table.AddRow("Endpoint", manifest.Endpoint);
+                table.AddRow("Transport", manifest.Transport);
+                table.AddRow("Auth", $"{manifest.Auth.Type} ({manifest.Auth.Header})");
+                table.AddRow("ProtocolVersions", string.Join(", ", manifest.SupportedProtocolVersions));
+                table.AddRow("Capabilities", manifest.Capabilities.Count.ToString());
+                table.AddRow("Skills", manifest.Skills.Count.ToString());
+                table.AddRow("ResourceLimits", manifest.ResourceLimits is not null
+                    ? $"tokens={manifest.ResourceLimits.MaxTokensPerRequest}, concurrent={manifest.ResourceLimits.MaxConcurrentRequests}"
+                    : "не заданы");
+                table.AddRow("TrustLevel", manifest.TrustMetadata?.Level ?? "unverified");
+                table.AddRow("GeneratedAt", manifest.GeneratedAt);
+                table.AddRow("ManifestPath", manifestService.ManifestPath);
+                AnsiConsole.Write(table);
+
+                // Show capabilities summary
+                if (manifest.Capabilities.Count > 0)
+                {
+                    var capTable = new Table().Border(TableBorder.Rounded).Title("Capabilities");
+                    capTable.AddColumn("Name");
+                    capTable.AddColumn("Description");
+                    foreach (ManifestCapability cap in manifest.Capabilities)
+                    {
+                        capTable.AddRow(Markup.Escape(cap.Name), Markup.Escape(cap.Description));
+                    }
+                    AnsiConsole.Write(capTable);
+                }
+
+                break;
+            }
+
+            case "refresh":
+            {
+                await AnsiConsole.Status().StartAsync("Публикую манифест...", async _ =>
+                {
+                    await manifestService.SaveAsync(ct);
+                });
+                AnsiConsole.MarkupLineInterpolated($"[green]✓ Манифест сохранён:[/] {manifestService.ManifestPath}");
+                break;
+            }
+
+            case "validate":
+            {
+                List<string> errors = manifestService.Validate();
+                if (errors.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[green]✓ Манифест валиден — ошибок нет.[/]");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[red]⚠ Манифест содержит {errors.Count} ошибок:[/]");
+                    foreach (string err in errors)
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"  • {err}");
+                    }
+                }
+
+                break;
+            }
+
+            default:
+                AnsiConsole.MarkupLine("[yellow]Использование: /manifest show|refresh|validate[/]");
+                break;
+        }
     }
 
     private async Task HandleApprovalsCommandAsync(string[] parts, CancellationToken ct)
@@ -1052,6 +1138,9 @@ public sealed class ConsoleUI(
         table.AddRow("/memory show", "Показать профиль пользователя");
         table.AddRow("/memory reset", "Сбросить память");
         table.AddRow("/reflect", "Запустить рефлексию вручную");
+        table.AddRow("/manifest show", "Показать текущий манифест агента");
+        table.AddRow("/manifest refresh", "Пересобрать и сохранить манифест в файл");
+        table.AddRow("/manifest validate", "Провалидировать манифест (проверить ошибки)");
         table.AddRow("/help", "Эта справка");
         table.AddRow("/exit", "Выход с сохранением контекста");
         AnsiConsole.Write(table);

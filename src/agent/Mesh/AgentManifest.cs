@@ -45,6 +45,19 @@ public sealed class AgentManifest
     /// <summary>Дополнительные метаданные (теги, location, owner — для фильтрации в registry).</summary>
     public Dictionary<string, string>? Tags { get; set; }
 
+    /// <summary>Версии протокола inter-agent communication, поддерживаемые агентом (e.g. ["1.0", "2.0"]).</summary>
+    [JsonPropertyName("supported_protocol_versions")]
+    public List<string> SupportedProtocolVersions { get; set; } = new() { "1.0" };
+
+    /// <summary>Лимиты ресурсов агента (token budget, max concurrent requests, etc.).</summary>
+    public ManifestResourceLimits? ResourceLimits { get; set; }
+
+    /// <summary>Trust metadata: identity claims, trust level, verified_by.</summary>
+    public ManifestTrustMetadata? TrustMetadata { get; set; }
+
+    /// <summary>Полный список навыков агента (расширенная информация, не только capabilities).</summary>
+    public List<ManifestSkillEntry> Skills { get; set; } = new();
+
     /// <summary>Время генерации манифеста (ISO 8601 UTC).</summary>
     public string GeneratedAt { get; set; } = DateTime.UtcNow.ToString("o");
 }
@@ -79,11 +92,97 @@ public sealed class ManifestCapability
 /// <summary>Модели LLM, используемые агентом.</summary>
 public sealed class ManifestModels
 {
-    /// <summary>Основной провайдер (e.g. "yandexgpt").</summary>
+    /// <summary>Основной прровайдер (e.g. "yandexgpt").</summary>
     public string Primary { get; set; } = "";
 
     /// <summary>Fallback-провайдеры.</summary>
     public List<string> Fallback { get; set; } = new();
+}
+
+/// <summary>
+/// Лимиты ресурсов агента.
+/// </summary>
+public sealed class ManifestResourceLimits
+{
+    /// <summary>Максимум токенов на один запрос.</summary>
+    [JsonPropertyName("max_tokens_per_request")]
+    public int MaxTokensPerRequest { get; set; }
+
+    /// <summary>Максимум одновременных запросов.</summary>
+    [JsonPropertyName("max_concurrent_requests")]
+    public int MaxConcurrentRequests { get; set; }
+
+    /// <summary>Максимум вызовов инструментов за один запрос.</summary>
+    [JsonPropertyName("max_tool_calls_per_request")]
+    public int MaxToolCallsPerRequest { get; set; }
+
+    /// <summary>Максимум wall-clock времени на запрос (секунды).</summary>
+    [JsonPropertyName("max_wall_clock_seconds_per_request")]
+    public int MaxWallClockSecondsPerRequest { get; set; }
+
+    /// <summary>Максимум стоимости в USD за день.</summary>
+    [JsonPropertyName("max_cost_per_day_usd")]
+    public decimal MaxCostPerDayUsd { get; set; }
+
+    /// <summary>Максимум токенов за день.</summary>
+    [JsonPropertyName("max_tokens_per_day")]
+    public int MaxTokensPerDay { get; set; }
+}
+
+/// <summary>
+/// Trust metadata агента.
+/// </summary>
+public sealed class ManifestTrustMetadata
+{
+    /// <summary>Уровень доверия: "trusted" | "verified" | "unverified".</summary>
+    public string Level { get; set; } = "unverified";
+
+    /// <summary>Провайдер identity (e.g. "self-signed", "custom-ca").</summary>
+    public string IdentityProvider { get; set; } = "self-signed";
+
+    /// <summary>Список identity claims (subject, issuer, audience).</summary>
+    public Dictionary<string, string> IdentityClaims { get; set; } = new();
+
+    /// <summary>Кем верифицирован агент.</summary>
+    public string? VerifiedBy { get; set; }
+
+    /// <summary>Дата верификации (ISO 8601 UTC).</summary>
+    public string? VerifiedAt { get; set; }
+}
+
+/// <summary>
+/// Расширенная запись о навыке в манифесте.
+/// </summary>
+public sealed class ManifestSkillEntry
+{
+    /// <summary>Уникальный ID навыка.</summary>
+    public string Id { get; set; } = "";
+
+    /// <summary>Имя навыка.</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>Описание.</summary>
+    public string Description { get; set; } = "";
+
+    /// <summary>Версия навыка (semver).</summary>
+    public string Version { get; set; } = "1.0.0";
+
+    /// <summary>Уровень риска навыка.</summary>
+    [JsonPropertyName("risk_level")]
+    public string RiskLevel { get; set; } = "low";
+
+    /// <summary>Инструменты, требуемые навыком.</summary>
+    public List<string> Tools { get; set; } = new();
+
+    /// <summary>Триггеры (phrase receivers).</summary>
+    [JsonPropertyName("phrase_receivers")]
+    public List<string> PhraseReceivers { get; set; } = new();
+
+    /// <summary>Дата создания навыка (ISO 8601).</summary>
+    public string? CreatedAt { get; set; }
+
+    /// <summary>Дата последнего обновления (ISO 8601).</summary>
+    public string? UpdatedAt { get; set; }
 }
 
 /// <summary>
@@ -101,20 +200,15 @@ public sealed class AgentManifestService
     };
 
     private readonly Func<List<ManifestCapability>> _capabilitiesProvider;
+    private readonly Func<List<ManifestSkillEntry>>? _skillsProvider;
+    private readonly List<string> _supportedProtocolVersions;
+    private readonly ManifestResourceLimits? _resourceLimits;
+    private readonly ManifestTrustMetadata? _trustMetadata;
     private readonly AgentManifest _manifest;
 
     /// <summary>
-    ///     Создать сервис манифеста.
+    ///     Создать сервис манифеста (backward-compatible constructor).
     /// </summary>
-    /// <param name="agentId">Стабильный ID агента.</param>
-    /// <param name="displayName">Human-readable имя.</param>
-    /// <param name="description">Описание агента.</param>
-    /// <param name="endpoint">Endpoint для inter-agent вызовов.</param>
-    /// <param name="manifestDir">Папка для сохранения agent.manifest.json.</param>
-    /// <param name="capabilitiesProvider">Функция, возвращающая текущие capabilities (навыки агента).</param>
-    /// <param name="primaryModel">Основной LLM-провайдер.</param>
-    /// <param name="fallbackModels">Fallback LLM-провайдеры.</param>
-    /// <param name="healthEndpoint">URL health-check.</param>
     public AgentManifestService(
         string agentId,
         string displayName,
@@ -125,6 +219,29 @@ public sealed class AgentManifestService
         string primaryModel = "",
         List<string>? fallbackModels = null,
         string healthEndpoint = "")
+        : this(agentId, displayName, description, endpoint, manifestDir,
+            capabilitiesProvider, null, primaryModel, fallbackModels, healthEndpoint,
+            null, null, null)
+    {
+    }
+
+    /// <summary>
+    ///     Создать сервис манифеста с расширенными полями (protocol versions, resource limits, trust).
+    /// </summary>
+    public AgentManifestService(
+        string agentId,
+        string displayName,
+        string description,
+        string endpoint,
+        string manifestDir,
+        Func<List<ManifestCapability>> capabilitiesProvider,
+        Func<List<ManifestSkillEntry>>? skillsProvider,
+        string primaryModel,
+        List<string>? fallbackModels,
+        string healthEndpoint,
+        List<string>? supportedProtocolVersions,
+        ManifestResourceLimits? resourceLimits,
+        ManifestTrustMetadata? trustMetadata)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(agentId);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
@@ -139,22 +256,56 @@ public sealed class AgentManifestService
             Auth = new ManifestAuth { Type = "apikey", Header = "X-Api-Key" },
             Models = new ManifestModels
             {
-                Primary = primaryModel,
+                Primary = primaryModel ?? "",
                 Fallback = fallbackModels ?? new List<string>()
             },
-            Health = healthEndpoint
+            Health = healthEndpoint ?? "",
+            SupportedProtocolVersions = supportedProtocolVersions ?? new List<string> { "1.0" },
+            ResourceLimits = resourceLimits,
+            TrustMetadata = trustMetadata
         };
+
         ManifestPath = Path.Combine(manifestDir, "agent.manifest.json");
         Directory.CreateDirectory(manifestDir);
         _capabilitiesProvider = capabilitiesProvider ?? throw new ArgumentNullException(nameof(capabilitiesProvider));
+        _skillsProvider = skillsProvider;
+        _supportedProtocolVersions = supportedProtocolVersions ?? new List<string> { "1.0" };
+        _resourceLimits = resourceLimits;
+        _trustMetadata = trustMetadata;
     }
 
-    /// <summary>Текущий манифест (с актуальными capabilities).</summary>
+    /// <summary>Текущий манифест (с актуальными capabilities, skills и полями из конфига).</summary>
     public AgentManifest Current
     {
         get
         {
             _manifest.Capabilities = _capabilitiesProvider();
+            _manifest.Skills = _skillsProvider?.Invoke() ?? new List<ManifestSkillEntry>();
+
+            // Only override static fields if they were explicitly set via the extended constructor.
+            // The basic constructor chain sets _Xxx fields to null (from null parameters in this(...)).
+            // We preserve the values already set on _manifest by the constructor chain.
+            if (_supportedProtocolVersions is not null)
+            {
+                _manifest.SupportedProtocolVersions = _supportedProtocolVersions;
+            }
+            else
+            {
+                // Basic constructor: preserve what the extended constructor chain set on _manifest
+            }
+
+            if (_resourceLimits is not null)
+            {
+                _manifest.ResourceLimits = _resourceLimits;
+            }
+            // else: preserve _manifest.ResourceLimits (already set by constructor chain)
+
+            if (_trustMetadata is not null)
+            {
+                _manifest.TrustMetadata = _trustMetadata;
+            }
+            // else: preserve _manifest.TrustMetadata (already set by constructor chain)
+
             _manifest.GeneratedAt = DateTime.UtcNow.ToString("o");
             return _manifest;
         }
@@ -174,6 +325,17 @@ public sealed class AgentManifestService
         return manifest;
     }
 
+    /// <summary>Асинхронно сохранить манифест в файл.</summary>
+    public async Task<AgentManifest> SaveAsync(CancellationToken ct = default)
+    {
+        AgentManifest manifest = Current;
+        var json = JsonSerializer.Serialize(manifest, JsonOpts);
+        var temp = ManifestPath + ".tmp";
+        await File.WriteAllTextAsync(temp, json, ct);
+        File.Move(temp, ManifestPath, true);
+        return manifest;
+    }
+
     /// <summary>Обновить endpoint агента (например, при смене URL).</summary>
     public void UpdateEndpoint(string endpoint)
     {
@@ -186,8 +348,9 @@ public sealed class AgentManifestService
     /// <summary>Валидировать манифест. Возвращает список ошибок (пустой = OK).</summary>
     public List<string> Validate()
     {
-        // Обновляем capabilities из провайдера перед валидацией
+        // Обновляем capabilities и skills из провайдеров перед валидацией
         _manifest.Capabilities = _capabilitiesProvider();
+        _manifest.Skills = _skillsProvider?.Invoke() ?? new List<ManifestSkillEntry>();
 
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(_manifest.AgentId))
@@ -203,6 +366,11 @@ public sealed class AgentManifestService
         if (string.IsNullOrWhiteSpace(_manifest.Endpoint))
         {
             errors.Add("endpoint пуст — другие агенты не смогут вызывать этот.");
+        }
+
+        if (_manifest.SupportedProtocolVersions.Count == 0)
+        {
+            errors.Add("supportedProtocolVersions пуст — peer'ы не узнают поддерживаемые версии протокола.");
         }
 
         if (_manifest.Capabilities.Count == 0)

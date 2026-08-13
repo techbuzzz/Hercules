@@ -517,6 +517,31 @@ app.MapMemory();
 app.MapStats();
 app.MapConfig();
 app.MapMesh();
+
+// Agent manifest — публикация на startup (task_032)
+try
+{
+    var manifestService = app.Services.GetRequiredService<AgentManifestService>();
+    var manifest = manifestService.Save();
+    var errors = manifestService.Validate();
+    if (errors.Count > 0)
+    {
+        Console.WriteLine($"[Manifest] Опубликован с предупреждениями: {manifestService.ManifestPath}");
+        foreach (string err in errors)
+        {
+            Console.WriteLine($"  ⚠ {err}");
+        }
+    }
+    else
+    {
+        Console.WriteLine($"[Manifest] Опубликован: {manifestService.ManifestPath}");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[Manifest] Publishing failed: {ex.Message}");
+}
+
 app.MapBudget();
 app.MapAudit();
 app.MapLlm();

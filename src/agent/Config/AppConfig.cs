@@ -388,6 +388,15 @@ public sealed class MeshConfig
     public double LocalConfidenceThreshold { get; set; } = 0.5;
     public List<MeshPeerConfig> Peers { get; set; } = new();
     public List<ManifestCapabilityConfig>? Capabilities { get; set; }
+
+    /// <summary>Версии протокола, поддерживаемые агентом (для публикации в манифесте).</summary>
+    public List<string> SupportedProtocolVersions { get; set; } = new() { "1.0" };
+
+    /// <summary>Resource limits агента (для публикации в манифесте).</summary>
+    public ManifestResourceLimitsConfig? ResourceLimits { get; set; }
+
+    /// <summary>Trust metadata агента (для публикации в манифесте).</summary>
+    public ManifestTrustMetadataConfig? TrustMetadata { get; set; }
 }
 
 /// <summary>
@@ -407,6 +416,30 @@ public sealed class ManifestCapabilityConfig
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     [JsonPropertyName("phrase_receivers")] public List<string> PhraseReceivers { get; set; } = new();
+}
+
+/// <summary>
+///     Resource limits агента для публикации в манифесте (task_032).
+/// </summary>
+public sealed class ManifestResourceLimitsConfig
+{
+    public int MaxTokensPerRequest { get; set; }
+    public int MaxConcurrentRequests { get; set; }
+    public int MaxToolCallsPerRequest { get; set; }
+    public int MaxWallClockSecondsPerRequest { get; set; }
+    public decimal MaxCostPerDayUsd { get; set; }
+    public int MaxTokensPerDay { get; set; }
+}
+
+/// <summary>
+///     Trust metadata агента для публикации в манифесте (task_032).
+/// </summary>
+public sealed class ManifestTrustMetadataConfig
+{
+    public string Level { get; set; } = "unverified";
+    public string IdentityProvider { get; set; } = "self-signed";
+    public string? VerifiedBy { get; set; }
+    public Dictionary<string, string> IdentityClaims { get; set; } = new();
 }
 
 /// <summary>

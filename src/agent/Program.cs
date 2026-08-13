@@ -448,6 +448,30 @@ catch (Exception ex)
     Console.WriteLine($"[MCP] Initialization failed: {ex.Message}");
 }
 
+// Agent manifest — публикация на startup (task_032)
+try
+{
+    var manifestService = host.Services.GetRequiredService<AgentManifestService>();
+    var manifest = manifestService.Save();
+    var errors = manifestService.Validate();
+    if (errors.Count > 0)
+    {
+        Console.WriteLine($"[Manifest] Опубликован с предупреждениями: {manifestService.ManifestPath}");
+        foreach (string err in errors)
+        {
+            Console.WriteLine($"  ⚠ {err}");
+        }
+    }
+    else
+    {
+        Console.WriteLine($"[Manifest] Опубликован: {manifestService.ManifestPath}");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[Manifest] Publishing failed: {ex.Message}");
+}
+
 // --- Выбор режима запуска ---
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
