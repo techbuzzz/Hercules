@@ -1,0 +1,12 @@
+---
+import Layout from "../layouts/Layout.astro";
+import MeshRouterPanel from "../components/MeshRouterPanel.astro";
+---
+
+<Layout title="Hercules · Mesh" active="mesh">
+  <div class="mb-4">
+    <h1 class="text-xl font-semibold text-white">Mesh Router</h1>
+    <p class="text-sm text-gray-400">Маршрутизация по capability, health tracking, circuit breakers.</p>
+  </div>
+  <MeshRouterPanel />
+</Layout>

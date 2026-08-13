@@ -5,6 +5,7 @@ using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Policy;
+using Hercules.Mesh.Router;
 using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
 using Hercules.Skills;
@@ -228,6 +229,11 @@ public static class MeshServiceCollectionExtensions
         // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов
         services.AddSingleton<CircuitBreaker>();
         services.AddSingleton<RetryPolicy>();
+
+        // Phase 4: Mesh Router (task_043) — capability-based peer routing with health + scoring
+        services.AddSingleton(meshCfg.MeshRouter);
+        services.AddSingleton<RouterHealthTracker>();
+        services.AddSingleton<IMeshRouter, CapabilityMeshRouter>();
 
         // Phase 4: MeshRouter — fan-out/fan-in оркестрация с LLM-judge
         services.AddSingleton<MeshRouter>();

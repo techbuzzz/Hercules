@@ -281,4 +281,52 @@ export const api = {
     const res = await fetch(`${API_BASE}/api/audit/${encodeURIComponent(target)}?limit=${limit}`, { headers: headers(false) });
     return handle<AuditLogDto>(res);
   },
+
+  // ---- Mesh Router (Phase 4 task_043) ----
+
+  async getMeshRouterRoutes(capability: string, maxCostUsd?: number): Promise<MeshRouterRoutesDto> {
+    const url = maxCostUsd != null
+      ? `${API_BASE}/api/mesh/router/routes?capability=${encodeURIComponent(capability)}&maxCostUsd=${maxCostUsd}`
+      : `${API_BASE}/api/mesh/router/routes?capability=${encodeURIComponent(capability)}`;
+    const res = await fetch(url, { headers: headers(false) });
+    return handle<MeshRouterRoutesDto>(res);
+  },
+
+  async getMeshRouterHealth(): Promise<MeshRouterHealthDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/router/health`, { headers: headers(false) });
+    return handle<MeshRouterHealthDto>(res);
+  },
+
+  async getMeshCircuits(): Promise<Record<string, string>> {
+    const res = await fetch(`${API_BASE}/api/mesh/circuits`, { headers: headers(false) });
+    return handle<Record<string, string>>(res);
+  },
 };
+
+// ---- Mesh DTOs ----
+
+export interface MeshRouterRoutesDto {
+  capability: string;
+  count: number;
+  candidates: MeshPeerCandidate[];
+}
+
+export interface MeshPeerCandidate {
+  agentId: string;
+  displayName: string;
+  endpoint: string;
+  healthScore: number;
+  latencyMs: number;
+  qualityScore: number;
+  trustLevel: string;
+  compositeScore: number;
+  costHintUsd: number;
+  circuitState: string;
+  lastSeen: string;
+  trustPassed: boolean;
+}
+
+export interface MeshRouterHealthDto {
+  count: number;
+  health: Record<string, { healthScore: number; avgLatencyMs: number }>;
+}

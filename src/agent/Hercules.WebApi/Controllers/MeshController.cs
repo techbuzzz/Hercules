@@ -3,6 +3,7 @@ using Hercules.Mesh;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Policy;
+using Hercules.Mesh.Router;
 using Hercules.Mesh.TaskLifecycle;
 
 namespace Hercules.WebApi.Controllers;
@@ -610,6 +611,69 @@ public static class MeshController
                 return Results.BadRequest(new { error = ex.Message });
             }
         }).WithName("TrustPolicyDryRun");
+
+        // === Phase 4: Mesh Router (task_043) ===
+
+        // GET /api/mesh/router/routes — rank peers for a given capability/intent
+        app.MapGet("/api/mesh/router/routes", async (
+            string capability,
+            decimal? maxCostUsd,
+            IMeshRouter router,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(capability))
+            {
+                return Results.BadRequest(new { error = "Параметр 'capability' обязателен." });
+            }
+
+            IReadOnlyList<Hercules.Mesh.Router.PeerCandidate> candidates;
+            if (maxCostUsd.HasValue)
+            {
+                candidates = await router.RouteAsync(capability, maxCostUsd.Value, ct);
+            }
+            else
+            {
+                candidates = await router.RouteAsync(capability, ct);
+            }
+
+            return Results.Ok(new
+            {
+                capability,
+                count = candidates.Count,
+                candidates = candidates.Select(c => new
+                {
+                    c.AgentId,
+                    c.DisplayName,
+                    c.Endpoint,
+                    c.HealthScore,
+                    c.LatencyMs,
+                    c.QualityScore,
+                    c.TrustLevel,
+                    c.CompositeScore,
+                    c.CostHintUsd,
+                    c.CircuitState,
+                    c.LastSeen,
+                    c.TrustPassed
+                })
+            });
+        }).WithName("MeshRouterRoutes");
+
+        // GET /api/mesh/router/health — health scores for all tracked peers
+        app.MapGet("/api/mesh/router/health", (
+            RouterHealthTracker tracker,
+            CapabilityRegistry registry) =>
+        {
+            var agents = registry.ListAgents();
+            var health = agents.ToDictionary(
+                a => a.AgentId,
+                a => new
+                {
+                    healthScore = tracker.GetHealthScore(a.AgentId),
+                    avgLatencyMs = tracker.GetAverageLatencyMs(a.AgentId)
+                });
+
+            return Results.Ok(new { count = health.Count, health });
+        }).WithName("MeshRouterHealth");
     }
 
     private static TrustLevel ParseTrustLevel(string? level) =>

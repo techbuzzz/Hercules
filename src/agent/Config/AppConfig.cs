@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Hercules.Cache;
 using Hercules.Mesh.Auth;
+using Hercules.Mesh.Router;
 using Hercules.Mesh.Transport;
 using Hercules.Mesh.Audit;
 using Hercules.Tools.Policy;
@@ -466,6 +467,9 @@ public sealed class MeshConfig
 
     /// <summary>Inter-agent audit trail config (task_041).</summary>
     public MeshAuditConfig InterAgentAudit { get; set; } = new();
+
+    /// <summary>Mesh router config (capability routing, peer scoring, health tracking). task_043.</summary>
+    public MeshRouterOptions MeshRouter { get; set; } = new();
 }
 
 /// <summary>
