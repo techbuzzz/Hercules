@@ -1,3 +1,4 @@
+using Hercules.Mesh.Transport;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Hercules.Mesh.TaskLifecycle;
@@ -15,10 +16,10 @@ public static class TaskLifecycleServiceExtensions
         this IServiceCollection services,
         string localAgentId)
     {
-        // Register with IntentTransport for callbacks
+        // Register with ITransport for callbacks
         services.AddSingleton<ITaskLifecycleProtocol>(sp =>
         {
-            var transport = sp.GetService<IntentTransport>();
+            var transport = sp.GetService<ITransport>();
             var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<TaskLifecycleProtocol>>();
             return new TaskLifecycleProtocol(transport, localAgentId, logger);
         });

@@ -47,6 +47,9 @@
     <!-- Model Context Protocol (MCP) — Stage 3, tool ecosystem -->
     <PackageReference Include="ModelContextProtocol" Version="2.1.0" />
 
+    <!-- gRPC transport (task_037) -->
+    <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
+
     <!-- OpenTelemetry (task_013) — tracing, metrics, structured logs -->
     <PackageReference Include="OpenTelemetry" Version="1.10.0" />
     <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.10.0" />

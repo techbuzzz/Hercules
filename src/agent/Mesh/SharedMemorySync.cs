@@ -1,6 +1,8 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Hercules.Mesh.Transport;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.Mesh;
 
@@ -55,17 +57,20 @@ public sealed class SharedMemorySync : IDisposable
 
     private readonly AgentManifestService _manifestService;
     private readonly CapabilityRegistry _registry;
-    private readonly IntentTransport _transport;
+    private readonly ITransport _transport;
+    private readonly ILogger<SharedMemorySync> _logger;
 
     public SharedMemorySync(
         string dataRoot,
         CapabilityRegistry registry,
-        IntentTransport transport,
-        AgentManifestService manifestService)
+        ITransport transport,
+        AgentManifestService manifestService,
+        ILogger<SharedMemorySync> logger)
     {
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _manifestService = manifestService ?? throw new ArgumentNullException(nameof(manifestService));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         var sharedDir = Path.Combine(dataRoot, "Memory", "shared");
         Directory.CreateDirectory(sharedDir);
@@ -189,8 +194,9 @@ public sealed class SharedMemorySync : IDisposable
                     Deadline = DateTimeOffset.UtcNow.AddMilliseconds(10_000)
                 };
 
-                IntentResponse response = await _transport.SendToAsync(peer.AgentId, envelope, ct);
-                if (response.IsSuccess && !string.IsNullOrEmpty(response.Result))
+                var result = await _transport.SendAsync(peer.AgentId, envelope, ct).ConfigureAwait(false);
+                IntentResponse? response = result.IsSuccess ? result.Response : null;
+                if (response is not null && !string.IsNullOrEmpty(response.Result))
                 {
                     List<SharedMemoryFact>? peerFacts = JsonSerializer.Deserialize<List<SharedMemoryFact>>(response.Result);
                     if (peerFacts is not null)
@@ -235,7 +241,11 @@ public sealed class SharedMemorySync : IDisposable
         {
             try
             {
-                await _transport.SendToAsync(peer.AgentId, envelope, ct);
+                var result = await _transport.SendAsync(peer.AgentId, envelope, ct).ConfigureAwait(false);
+                if (!result.IsSuccess)
+                {
+                    _logger.LogDebug("[SharedMemory] Push to {PeerId} failed: {Error}", peer.AgentId, result.ErrorMessage);
+                }
             }
             catch
             {

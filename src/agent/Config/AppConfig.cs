@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization;
 using Hercules.Cache;
+using Hercules.Mesh.Transport;
 using Hercules.Tools.Policy;
 
 namespace Hercules.Config;
@@ -448,6 +449,9 @@ public sealed class MeshConfig
 
     /// <summary>Default TTL для агентов в capability registry (секунды, default = 86400).</summary>
     public int CapabilityDefaultTtlSeconds { get; set; } = 86_400;
+
+    /// <summary>Transport layer config (HTTP, gRPC, Bus adapters). task_037.</summary>
+    public TransportConfig Transport { get; set; } = new();
 }
 
 /// <summary>

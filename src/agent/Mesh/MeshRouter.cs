@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Hercules.Agent;
 using Hercules.LLM;
+using Hercules.Mesh.Transport;
 
 namespace Hercules.Mesh;
 
@@ -51,12 +52,12 @@ public sealed class MeshRouter
     private readonly AgentManifestService _manifestService;
     private readonly CapabilityRegistry _registry;
     private readonly RetryPolicy _retry;
-    private readonly IntentTransport _transport;
+    private readonly ITransport _transport;
 
     public MeshRouter(
         AgentCore agent,
         CapabilityRegistry registry,
-        IntentTransport transport,
+        ITransport transport,
         AgentManifestService manifestService,
         ILLMClient llm,
         CircuitBreaker breaker,
@@ -189,7 +190,12 @@ public sealed class MeshRouter
                     "Circuit breaker open — peer temporarily unavailable", envelope.TraceId);
             }
 
-            IntentResponse response = await _transport.SendToAsync(agentId, envelope, ct);
+            var result = await _transport.SendAsync(agentId, envelope, ct);
+            IntentResponse response = result.Response ?? IntentResponse.Failed(
+                envelope.RequestId,
+                agentId,
+                result.ErrorMessage ?? "Transport error",
+                envelope.TraceId);
 
             if (response.IsSuccess)
             {

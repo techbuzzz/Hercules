@@ -3,6 +3,7 @@ using Hercules.Config;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Mesh;
+using Hercules.Mesh.Transport;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -22,7 +23,7 @@ public class MeshRouterTests : IDisposable
    private readonly SqliteSessionStore _sessions;
    private readonly SkillManager _skillManager;
    private readonly string _tempDir;
-   private readonly IntentTransport _transport;
+   private readonly ITransport _transport;
 
    public MeshRouterTests()
    {
@@ -47,7 +48,7 @@ public class MeshRouterTests : IDisposable
          _tempDir,
          () => new List<ManifestCapability>());
 
-      _transport = new IntentTransport(_registry);
+      _transport = new HttpTransportAdapter(_registry);
       _breaker = new CircuitBreaker { FailureThreshold = 10, Cooldown = TimeSpan.FromSeconds(1) };
       _retry = new RetryPolicy { MaxAttempts = 1 };
       _router = new MeshRouter(_agent, _registry, _transport, _manifestService,

@@ -1,4 +1,5 @@
 using Hercules.Agent;
+using Hercules.Mesh.Transport;
 
 namespace Hercules.Mesh;
 
@@ -17,12 +18,12 @@ public sealed class IntentRouter
     private readonly AgentCore _agent;
     private readonly AgentManifestService _manifestService;
     private readonly CapabilityRegistry _registry;
-    private readonly IntentTransport _transport;
+    private readonly ITransport _transport;
 
     public IntentRouter(
         AgentCore agent,
         CapabilityRegistry registry,
-        IntentTransport transport,
+        ITransport transport,
         AgentManifestService manifestService)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
@@ -72,8 +73,13 @@ public sealed class IntentRouter
             return await ProcessLocallyAsync(envelope, ct);
         }
 
-        // 4. Отправляем intent peer'у
-        return await _transport.SendToAsync(peer.AgentId, envelope, ct);
+        // 4. Отправляем intent peer'у через абстрактный транспорт
+        var result = await _transport.SendAsync(peer.AgentId, envelope, ct);
+        return result.Response ?? IntentResponse.Failed(
+            envelope.RequestId,
+            peer.AgentId,
+            result.ErrorMessage ?? "Transport error",
+            envelope.TraceId);
     }
 
     /// <summary>

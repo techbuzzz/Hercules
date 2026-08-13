@@ -2,6 +2,7 @@ using Hercules.Agent;
 using Hercules.Config;
 using Hercules.Mesh.A2A;
 using Hercules.Mesh.TaskLifecycle;
+using Hercules.Mesh.Transport;
 using Hercules.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
@@ -153,13 +154,26 @@ public static class MeshServiceCollectionExtensions
             return new IntentTransport(registry, httpClient);
         });
 
+        // ITransport — абстракция транспорта (HTTP / gRPC / Bus); wire via factory
+        // Зависит от того, что уже зарегистрировано: CapabilityRegistry (singleton),
+        // IHttpClientFactory (singleton), MeshConfig (singleton в Configure).
+        services.AddSingleton<ITransportFactory>(sp =>
+        {
+            var registry = sp.GetRequiredService<ICapabilityLookup>();
+            var logger = sp.GetRequiredService<ILogger<TransportFactory>>();
+            var meshCfg = sp.GetRequiredService<MeshConfig>();
+            return new TransportFactory(registry, sp, meshCfg.Transport, logger);
+        });
+        services.AddSingleton<ITransport>(sp =>
+            sp.GetRequiredService<ITransportFactory>().Primary);
+
         // IntentRouter — маршрутизация intent'ов (локально или peer'у) — Phase 3
         services.AddSingleton<IntentRouter>();
 
         // Phase 3: TaskLifecycleProtocol — inter-agent task lifecycle (task_036)
         services.AddSingleton<ITaskLifecycleProtocol>(sp =>
         {
-            var transport = sp.GetRequiredService<IntentTransport>();
+            var transport = sp.GetRequiredService<ITransport>();
             var logger = sp.GetRequiredService<ILogger<TaskLifecycleProtocol>>();
             var agentId = meshCfg.AgentId;
             return new TaskLifecycleProtocol(transport, agentId, logger);
@@ -179,8 +193,9 @@ public static class MeshServiceCollectionExtensions
         services.AddSingleton(sp => new SharedMemorySync(
             dataRoot,
             sp.GetRequiredService<CapabilityRegistry>(),
-            sp.GetRequiredService<IntentTransport>(),
-            sp.GetRequiredService<AgentManifestService>()));
+            sp.GetRequiredService<ITransport>(),
+            sp.GetRequiredService<AgentManifestService>(),
+            sp.GetRequiredService<ILogger<SharedMemorySync>>()));
 
         // Phase 3: A2A Agent Card — публикация и импорт Agent Cards
         services.AddSingleton<IAgentCardService>(sp =>

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Hercules.Mesh.Transport;
 using Microsoft.Data.Sqlite;
 
 namespace Hercules.Mesh;
@@ -9,7 +10,7 @@ namespace Hercules.Mesh;
 ///     для маршрутизации intent'ов: "какой агент умеет csharp-refactor?".
 ///     Спецификация: docs/ROADMAP-RU.md Phase 3 #13.
 /// </summary>
-public sealed class CapabilityRegistry : IDisposable
+public sealed class CapabilityRegistry : ICapabilityLookup, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -206,6 +207,8 @@ public sealed class CapabilityRegistry : IDisposable
     }
 
     /// <summary>Получить манифест агента по ID.</summary>
+    AgentManifest? ICapabilityLookup.TryGet(string agentId) => Get(agentId);
+
     public AgentManifest? Get(string agentId)
     {
         using SqliteCommand cmd = _conn.CreateCommand();

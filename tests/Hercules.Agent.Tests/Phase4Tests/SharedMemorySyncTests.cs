@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Hercules.Mesh;
+using Hercules.Mesh.Transport;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Hercules.Agent.Tests.Phase4Tests;
@@ -10,7 +12,7 @@ public class SharedMemorySyncTests : IDisposable
    private readonly CapabilityRegistry _registry;
    private readonly SharedMemorySync _sync;
    private readonly string _tempDir;
-   private readonly IntentTransport _transport;
+   private readonly ITransport _transport;
 
    public SharedMemorySyncTests()
    {
@@ -28,8 +30,8 @@ public class SharedMemorySyncTests : IDisposable
          _tempDir,
          () => new List<ManifestCapability>());
 
-      _transport = new IntentTransport(_registry);
-      _sync = new SharedMemorySync(_tempDir, _registry, _transport, _manifestService);
+      _transport = new HttpTransportAdapter(_registry);
+      _sync = new SharedMemorySync(_tempDir, _registry, _transport, _manifestService, NullLogger<SharedMemorySync>.Instance);
    }
 
    public void Dispose()
@@ -76,7 +78,7 @@ public class SharedMemorySyncTests : IDisposable
    {
       await _sync.PublishFactAsync("entities", "project-hercules");
 
-      var sync2 = new SharedMemorySync(_tempDir, _registry, _transport, _manifestService);
+      var sync2 = new SharedMemorySync(_tempDir, _registry, _transport, _manifestService, NullLogger<SharedMemorySync>.Instance);
       AssertFactInFileFor(sync2, "project-hercules");
       sync2.Dispose();
    }

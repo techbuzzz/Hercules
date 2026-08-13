@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Hercules.Mesh.Schema;
+using Hercules.Mesh.Transport;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.Mesh.TaskLifecycle;
@@ -14,11 +15,11 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
 {
     private readonly ConcurrentDictionary<string, DelegatedTask> _tasks = new();
     private readonly ConcurrentDictionary<string, List<TaskCompletionSource<DelegatedTask>>> _inputPollers = new();
-    private readonly IntentTransport? _transport;
+    private readonly ITransport? _transport;
     private readonly string _localAgentId;
     private readonly ILogger<TaskLifecycleProtocol> _logger;
 
-    public TaskLifecycleProtocol(IntentTransport? transport, string localAgentId, ILogger<TaskLifecycleProtocol> logger)
+    public TaskLifecycleProtocol(ITransport? transport, string localAgentId, ILogger<TaskLifecycleProtocol> logger)
     {
         _transport = transport;
         _localAgentId = localAgentId;
@@ -332,8 +333,15 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
 
         try
         {
-            await _transport.SendToAsync(task.CallerAgentId, envelope, ct);
-            _logger.LogDebug("[TaskLifecycle] Callback sent for task {TaskId} to {CallerAgentId}", taskId, task.CallerAgentId);
+            var result = await _transport.SendAsync(task.CallerAgentId, envelope, ct);
+            if (result.IsSuccess)
+            {
+                _logger.LogDebug("[TaskLifecycle] Callback sent for task {TaskId} to {CallerAgentId}", taskId, task.CallerAgentId);
+            }
+            else
+            {
+                _logger.LogWarning("[TaskLifecycle] Callback failed for task {TaskId}: {Error}", taskId, result.ErrorMessage);
+            }
         }
         catch (Exception ex)
         {
