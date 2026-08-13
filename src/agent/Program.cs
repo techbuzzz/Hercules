@@ -13,6 +13,7 @@ using Hercules.LLM.JsonRepair;
 using Hercules.Mcp;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
+using Hercules.Mesh.Verification;
 using Hercules.Observability;
 using Hercules.Redaction;
 using Hercules.Simulation;
@@ -178,7 +179,15 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<Bus>();
 
     // Phase 3: Inter-agent mesh
-    services.AddMeshServices(appConfig.Mesh, appConfig.Storage.DataRoot);
+    services.AddMeshServices(appConfig, appConfig.Storage.DataRoot);
+
+    // Phase 4: Verification pipeline (task_046)
+    // Register no-op pipeline as fallback; AddMeshServices overrides with real pipeline when enabled.
+    services.AddSingleton<IVerificationPipeline>(sp =>
+        new VerificationPipeline(
+            Array.Empty<IVerifier>(),
+            new VerificationConfig { Enabled = false },
+            sp.GetRequiredService<ILogger<VerificationPipeline>>()));
 
     // Хранилища
     services.AddSingleton<FileSkillRepository>();

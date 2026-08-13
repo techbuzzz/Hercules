@@ -6,6 +6,7 @@ using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Policy;
+using Hercules.Mesh.Verification;
 using Hercules.Mesh.Router;
 using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
@@ -77,8 +78,9 @@ public static class MeshServiceCollectionExtensions
     ///     IntentRouter, ManifestCapabilitiesProvider, CircuitBreaker, RetryPolicy, MeshRouter,
     ///     DistributedReflection, SharedMemorySync, CapabilityHealthService.
     /// </summary>
-    public static IServiceCollection AddMeshServices(this IServiceCollection services, MeshConfig meshCfg, string dataRoot)
+    public static IServiceCollection AddMeshServices(this IServiceCollection services, AppConfig appConfig, string dataRoot)
     {
+        var meshCfg = appConfig.Mesh;
         var registryDbPath = Path.IsPathRooted(meshCfg.RegistryDb)
             ? meshCfg.RegistryDb
             : Path.Combine(dataRoot, meshCfg.RegistryDb);
@@ -326,6 +328,31 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<IEnumerable<IAuditSink>>(),
                 sp.GetRequiredService<MeshAuditConfig>(),
                 sp.GetRequiredService<ILogger<MeshAuditService>>()));
+
+        // Phase 4: Verification pipeline (task_046) — safety, policy, schema, numeric validators
+        var verConfig = appConfig.Mesh.Verification;
+        services.AddSingleton(verConfig);
+
+        if (verConfig.Enabled)
+        {
+            services.AddSingleton<IVerificationPipeline>(sp =>
+            {
+                var verifiers = new List<IVerifier>();
+                if (verConfig.EnableSafetyVerifier)
+                    verifiers.Add(sp.GetRequiredService<SafetyVerifier>());
+                if (verConfig.EnablePolicyVerifier)
+                    verifiers.Add(sp.GetRequiredService<PolicyVerifier>());
+                if (verConfig.EnableSchemaVerifier)
+                    verifiers.Add(sp.GetRequiredService<SchemaVerifier>());
+                if (verConfig.EnableNumericValidator)
+                    verifiers.Add(sp.GetRequiredService<NumericValidator>());
+
+                return new VerificationPipeline(
+                    verifiers,
+                    verConfig,
+                    sp.GetRequiredService<ILogger<VerificationPipeline>>());
+            });
+        }
 
         return services;
     }

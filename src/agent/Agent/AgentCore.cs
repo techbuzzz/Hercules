@@ -11,6 +11,7 @@ using Hercules.Contracts;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Observability;
+using Hercules.Mesh.Verification;
 using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Tools;
@@ -53,6 +54,9 @@ public sealed record AgentResponse
     public string? ProposeImproveSkillId { get; init; }
 
     public string? ProposeImproveSkillName { get; init; }
+
+    /// <summary>[task_046] Метаданные верификации. Null если верификация не выполнялась.</summary>
+    public VerificationMetadata? Verification { get; init; }
 }
 
 /// <summary>
@@ -92,6 +96,7 @@ public sealed class AgentCore : IConfigReload
     private readonly IOtelService? _otel;
     private readonly IAuditService? _auditService;
     private readonly IContextBuilder? _contextBuilder;
+    private readonly IVerificationPipeline? _verificationPipeline;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
@@ -119,7 +124,8 @@ public sealed class AgentCore : IConfigReload
         IAuditService? auditService = null,
         EmbeddingSkillRouter? embeddingRouter = null,
         Phase2Config? phase2Config = null,
-        IContextBuilder? contextBuilder = null)
+        IContextBuilder? contextBuilder = null,
+        IVerificationPipeline? verificationPipeline = null)
     {
         _llm = llm;
         _router = router;
@@ -139,6 +145,7 @@ public sealed class AgentCore : IConfigReload
         _otel = otel;
         _auditService = auditService;
         _contextBuilder = contextBuilder;
+        _verificationPipeline = verificationPipeline;
     }
 
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
@@ -410,7 +417,92 @@ public sealed class AgentCore : IConfigReload
         OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
 
         // 5-6. Пороги (skill creation/improvement)
-        return BuildResponse(answer, confidence, llmResp.Provider, route.MatchedSkill, toolUsed, mode);
+        var response = BuildResponse(answer, confidence, llmResp.Provider, route.MatchedSkill, toolUsed, mode);
+
+        // [task_046] Verification pipeline: check response before returning
+        if (_verificationPipeline is not null && _verificationPipeline.Config.Enabled)
+        {
+            var skipConfidence = _verificationPipeline.Config.MinConfidenceToSkipVerification.ToLowerInvariant() switch
+            {
+                "high" => 3, "medium" => 2, "low" => 1, _ => 3
+            };
+            var respConfidence = confidence.ToLowerInvariant() switch
+            {
+                "high" => 3, "medium" => 2, "low" => 1, _ => 2
+            };
+            if (respConfidence < skipConfidence)
+            {
+                var verifyCtx = new VerificationContext
+                {
+                    VerificationId = "",
+                    RequestId = SessionId,
+                    AgentId = "hercules-agent",
+                    SessionId = SessionId,
+                    ResponseText = answer,
+                    Mode = mode,
+                    ToolUsed = string.IsNullOrEmpty(toolUsed) ? null : toolUsed,
+                    Confidence = confidence,
+                    Provider = llmResp.Provider
+                };
+
+                using var verifyTimeout = new CancellationTokenSource(_verificationPipeline.Config.MaxVerificationTimeMs);
+                var verifyResult = await _verificationPipeline.VerifyAsync(verifyCtx, verifyTimeout.Token);
+
+                if (verifyResult.Blocked)
+                {
+                    _logger.LogWarning(
+                        "[VerificationPipeline] Response BLOCKED (severity={Severity}, reason={Reason})",
+                        verifyResult.MaxSeverity, verifyResult.BlockingReason);
+                    _otel?.SetTag(_currentHandleActivity, "hercules.verification_blocked", "true");
+                    _otel?.SetTag(_currentHandleActivity, "hercules.verification_severity", verifyResult.MaxSeverity.ToString());
+
+                    // Return a safe degradation response instead of the original
+                    return new AgentResponse
+                    {
+                        Answer = "Ответ заблокирован системой верификации из-за нарушения политики безопасности. Обратитесь к администратору.",
+                        Mode = "verification_blocked",
+                        Confidence = "low",
+                        Provider = "",
+                        UsedSkill = response.UsedSkill,
+                        ToolUsed = response.ToolUsed,
+                        ProposeSkillForInput = response.ProposeSkillForInput,
+                        ProposeImproveSkillId = response.ProposeImproveSkillId,
+                        ProposeImproveSkillName = response.ProposeImproveSkillName,
+                        Verification = new VerificationMetadata(
+                            verifyResult.VerificationId,
+                            false,
+                            verifyResult.MaxSeverity.ToString(),
+                            verifyResult.BlockingReason,
+                            verifyResult.ElapsedMs)
+                    };
+                }
+
+                _otel?.SetTag(_currentHandleActivity, "hercules.verification_passed", "true");
+                _logger.LogDebug("[VerificationPipeline] Response passed verification ({ElapsedMs}ms)",
+                    verifyResult.ElapsedMs);
+
+                response = new AgentResponse
+                {
+                    Answer = response.Answer,
+                    Mode = response.Mode,
+                    Confidence = response.Confidence,
+                    Provider = response.Provider,
+                    UsedSkill = response.UsedSkill,
+                    ToolUsed = response.ToolUsed,
+                    ProposeSkillForInput = response.ProposeSkillForInput,
+                    ProposeImproveSkillId = response.ProposeImproveSkillId,
+                    ProposeImproveSkillName = response.ProposeImproveSkillName,
+                    Verification = new VerificationMetadata(
+                        verifyResult.VerificationId,
+                        true,
+                        verifyResult.MaxSeverity.ToString(),
+                        null,
+                        verifyResult.ElapsedMs)
+                };
+            }
+        }
+
+        return response;
     }
 
     /// <summary>

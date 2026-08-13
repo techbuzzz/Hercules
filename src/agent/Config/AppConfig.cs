@@ -476,6 +476,9 @@ public sealed class MeshConfig
 
     /// <summary>Fan-out / fan-in orchestrator config (task_045): concurrency, budget, schema validation, selection strategy.</summary>
     public FanOutOptions FanOut { get; set; } = new();
+
+    /// <summary>Verification pipeline config (task_046): enabled verifiers, severity thresholds, block list.</summary>
+    public VerificationConfig Verification { get; set; } = new();
 }
 
 /// <summary>
@@ -830,4 +833,47 @@ public sealed class MarketplaceConfig
     ///     Если задан — /marketplace import-url загружает отсюда.
     /// </summary>
     public string? TemplateRepositoryUrl { get; set; }
+}
+
+/// <summary>
+///     Конфигурация verification pipeline (task_046).
+///     Verifiers: SafetyVerifier, PolicyVerifier, SchemaVerifier, NumericValidator.
+/// </summary>
+public sealed class VerificationConfig
+{
+    /// <summary>Включить verification pipeline. Default: false (backward-compatible).</summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>Режим: "off" | "dryrun" | "enforce". Default: "dryrun".</summary>
+    public string Mode { get; set; } = "dryrun";
+
+    /// <summary>Минимальная severity для блокировки: "info" | "low" | "medium" | "high" | "critical".</summary>
+    public string BlockSeverityThreshold { get; set; } = "medium";
+
+    /// <summary>Включить SafetyVerifier (PII, code injection, dangerous patterns). Default: true.</summary>
+    public bool EnableSafetyVerifier { get; set; } = true;
+
+    /// <summary>Включить PolicyVerifier (trust admission, tool constraints). Default: true.</summary>
+    public bool EnablePolicyVerifier { get; set; } = true;
+
+    /// <summary>Включить SchemaVerifier (JSON structure, error fields). Default: true.</summary>
+    public bool EnableSchemaVerifier { get; set; } = true;
+
+    /// <summary>Включить NumericValidator (numeric plausibility). Default: false (may produce false positives).</summary>
+    public bool EnableNumericValidator { get; set; } = false;
+
+    /// <summary>Режимы ответов, верифицируемые всегда (помимо tool/low-confidence).</summary>
+    public List<string> AlwaysVerifyModes { get; set; } = new();
+
+    /// <summary>Tool'ы, которые всегда блокируются PolicyVerifier'ом.</summary>
+    public List<string> BlockedTools { get; set; } = new();
+
+    /// <summary>Требовать approval при low-confidence ответах. Default: false.</summary>
+    public bool RequireApprovalOnLowConfidence { get; set; } = false;
+
+    /// <summary>Максимальное время верификации в миллисекундах. Default: 5000.</summary>
+    public int MaxVerificationTimeMs { get; set; } = 5000;
+
+    /// <summary>Верифицировать только ответы с confidence ниже этого порога. Default: "high".</summary>
+    public string MinConfidenceToSkipVerification { get; set; } = "high";
 }
