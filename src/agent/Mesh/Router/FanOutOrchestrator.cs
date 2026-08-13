@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Hercules.Budget;
+using Hercules.Mesh;
 using Hercules.Mesh.Aggregation;
 using Hercules.Mesh.Schema;
 using Hercules.Mesh.Transport;
@@ -19,6 +21,7 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
     private readonly ITransport _transport;
     private readonly ResponseAggregator _aggregator;
     private readonly FanOutOptions _options;
+    private readonly CircuitBreaker _circuitBreaker;
     private readonly ILogger<FanOutOrchestrator> _logger;
 
     public FanOutOrchestrator(
@@ -26,12 +29,14 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
         ITransport transport,
         ResponseAggregator aggregator,
         FanOutOptions options,
+        CircuitBreaker circuitBreaker,
         ILogger<FanOutOrchestrator> logger)
     {
         _meshRouter = meshRouter ?? throw new ArgumentNullException(nameof(meshRouter));
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _aggregator = aggregator ?? throw new ArgumentNullException(nameof(aggregator));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _circuitBreaker = circuitBreaker ?? throw new ArgumentNullException(nameof(circuitBreaker));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -75,7 +80,24 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
             return AggregationResult.NoPeers(sw.Elapsed);
         }
 
-        // 3. Determine fan-out vs single-peer
+        // 3. Filter by circuit breaker state — skip peers with open circuits
+        var skippedByCircuit = peers.Count;
+        peers = peers.Where(p => _circuitBreaker.CanSend(p.AgentId)).ToList();
+        skippedByCircuit -= peers.Count;
+        if (skippedByCircuit > 0)
+        {
+            _logger.LogDebug(
+                "[FanOutOrchestrator] Skipped {Count} peers with open circuit breaker",
+                skippedByCircuit);
+        }
+
+        if (peers.Count == 0)
+        {
+            _logger.LogDebug("[FanOutOrchestrator] All peers have open circuit breakers");
+            return AggregationResult.NoPeers(sw.Elapsed);
+        }
+
+        // 4. Determine fan-out vs single-peer
         if (peers.Count < _options.MinPeersForFanOut)
         {
             _logger.LogDebug(

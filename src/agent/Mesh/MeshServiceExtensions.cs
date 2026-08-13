@@ -1,4 +1,5 @@
 using Hercules.Agent;
+using Hercules.Budget;
 using Hercules.Config;
 using Hercules.Mesh.A2A;
 using Hercules.Mesh.Aggregation;
@@ -10,6 +11,7 @@ using Hercules.Mesh.Verification;
 using Hercules.Mesh.Router;
 using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
+using Hercules.Mesh.Resilience;
 using Hercules.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
@@ -230,9 +232,40 @@ public static class MeshServiceCollectionExtensions
             return new TaskLifecycleProtocol(transport, agentId, logger, auditService);
         });
 
-        // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов
-        services.AddSingleton<CircuitBreaker>();
-        services.AddSingleton<RetryPolicy>();
+        // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов (task_047)
+        // Configure from ResilienceConfig
+        var resCfg = meshCfg.Resilience;
+        services.AddSingleton(resCfg);
+
+        var cb = new CircuitBreaker
+        {
+            FailureThreshold = resCfg.CircuitBreakerFailureThreshold,
+            Cooldown = TimeSpan.FromSeconds(resCfg.CircuitBreakerCooldownSeconds)
+        };
+        services.AddSingleton(cb);
+
+        var rp = new RetryPolicy
+        {
+            MaxAttempts = resCfg.MaxAttempts,
+            BaseDelay = TimeSpan.FromMilliseconds(resCfg.BaseDelayMs),
+            BackoffMultiplier = resCfg.BackoffMultiplier,
+            MaxDelay = TimeSpan.FromMilliseconds(resCfg.MaxDelayMs),
+            JitterFactor = resCfg.JitterFactor
+        };
+        services.AddSingleton(rp);
+
+        // Wrap ITransport with ResilientTransport (bulkhead + retry + CB)
+        services.AddSingleton<ITransport>(sp =>
+        {
+            var inner = sp.GetRequiredService<ITransportFactory>().Primary;
+            var logger = sp.GetRequiredService<ILogger<ResilientTransport>>();
+            return new ResilientTransport(
+                inner,
+                sp.GetRequiredService<CircuitBreaker>(),
+                sp.GetRequiredService<RetryPolicy>(),
+                sp.GetRequiredService<ResilienceConfig>(),
+                logger);
+        });
 
         // Phase 4: Mesh Router (task_043) — capability-based peer routing with health + scoring
         services.AddSingleton(meshCfg.MeshRouter);
@@ -353,6 +386,10 @@ public static class MeshServiceCollectionExtensions
                     sp.GetRequiredService<ILogger<VerificationPipeline>>());
             });
         }
+
+        // Phase 4: Delegation boundaries (task_048) — hop count, fan-out width, cumulative tool calls, cost, time limits
+        services.AddSingleton(meshCfg.DelegationBoundaries);
+        services.AddSingleton<IDelegationBoundaryService, DelegationBoundaryService>();
 
         return services;
     }

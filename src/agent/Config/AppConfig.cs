@@ -479,6 +479,126 @@ public sealed class MeshConfig
 
     /// <summary>Verification pipeline config (task_046): enabled verifiers, severity thresholds, block list.</summary>
     public VerificationConfig Verification { get; set; } = new();
+
+    /// <summary>Resilience config (task_047): retry, circuit breaker, bulkhead, idempotency.</summary>
+    public ResilienceConfig Resilience { get; set; } = new();
+
+    /// <summary>Delegation boundaries config (task_048): hop count, fan-out width, cumulative tool calls, cost, time limits.</summary>
+    public DelegationBoundaryConfig DelegationBoundaries { get; set; } = new();
+}
+
+/// <summary>
+///     Enforcement mode for delegation boundary violations.
+/// </summary>
+public enum DelegationBoundaryEnforcementMode
+{
+    /// <summary>Log violations but allow the operation to proceed.</summary>
+    SoftWarn,
+
+    /// <summary>Hard block: reject delegations that exceed any boundary.</summary>
+    HardCap
+}
+
+/// <summary>
+///     Конфигурация delegation boundaries (task_048).
+///     Управляет hop count, fan-out width, cumulative tool calls, cost и time limits
+///     для inter-agent delegation chains.
+/// </summary>
+public sealed class DelegationBoundaryConfig
+{
+    /// <summary>Включить enforcement delegation boundaries. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    ///     Enforcement mode: SoftWarn (log only) or HardCap (reject). Default: SoftWarn.
+    /// </summary>
+    public string EnforcementMode { get; set; } = "SoftWarn";
+
+    /// <summary>
+    ///     Максимальная глубина делегации (hop count). 0 = без ограничений. Default: 3.
+    /// </summary>
+    public int MaxHopCount { get; set; } = 3;
+
+    /// <summary>
+    ///     Максимальное количество параллельных delegations с одного hop (fan-out width). 0 = без ограничений. Default: 5.
+    /// </summary>
+    public int MaxFanOutWidth { get; set; } = 5;
+
+    /// <summary>
+    ///     Максимум cumulative tool calls за весь delegation chain. 0 = без ограничений. Default: 50.
+    /// </summary>
+    public int MaxCumulativeToolCalls { get; set; } = 50;
+
+    /// <summary>
+    ///     Максимум cumulative cost в USD за весь delegation chain. 0 = без ограничений. Default: 5.00.
+    /// </summary>
+    public decimal MaxCumulativeCostUsd { get; set; } = 5.00m;
+
+    /// <summary>
+    ///     Максимум cumulative wall-clock milliseconds за весь delegation chain. 0 = без ограничений. Default: 300000 (5 min).
+    /// </summary>
+    public long MaxCumulativeWallClockMs { get; set; } = 300_000;
+}
+
+/// <summary>
+///     Конфигурация resilience для peer-вызовов: retry, circuit breaker, bulkhead, idempotency.
+///     task_047: Retry, timeout, circuit breaker.
+/// </summary>
+public sealed class ResilienceConfig
+{
+    /// <summary>Включить resilience-логику. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Максимум попыток (включая первую). Default: 3.</summary>
+    public int MaxAttempts { get; set; } = 3;
+
+    /// <summary>Базовая задержка перед retry (мс). Default: 500.</summary>
+    public int BaseDelayMs { get; set; } = 500;
+
+    /// <summary>Множитель экспоненциальной задержки. Default: 2.0.</summary>
+    public double BackoffMultiplier { get; set; } = 2.0;
+
+    /// <summary>Максимальная задержка между попытками (мс). Default: 5000.</summary>
+    public int MaxDelayMs { get; set; } = 5_000;
+
+    /// <summary>
+    ///     Амплитуда jitter (±% от задержки). 0 = без jitter. Default: 0.3 (30%).
+    ///     Jitter снимает "thundering herd" — все клиенты ретраятся с разным смещением.
+    /// </summary>
+    public double JitterFactor { get; set; } = 0.3;
+
+    /// <summary>Порог неудач для размыкания circuit breaker. Default: 5.</summary>
+    public int CircuitBreakerFailureThreshold { get; set; } = 5;
+
+    /// <summary>Cooldown circuit breaker перед пробной попыткой (секунды). Default: 60.</summary>
+    public int CircuitBreakerCooldownSeconds { get; set; } = 60;
+
+    /// <summary>Максимум одновременных вызовов к одному peer'у (bulkhead). Default: 4.</summary>
+    public int MaxConcurrentPerPeer { get; set; } = 4;
+
+    /// <summary>Общий максимум одновременных outbound вызовов. Default: 20.</summary>
+    public int MaxConcurrentTotal { get; set; } = 20;
+
+    /// <summary>Idempotency key policy для non-idempotent операций.</summary>
+    public IdempotencyKeyConfig IdempotencyKey { get; set; } = new();
+}
+
+/// <summary>
+///     Политика генерации idempotency keys для retry-safe операций.
+/// </summary>
+public sealed class IdempotencyKeyConfig
+{
+    /// <summary>Автогенерировать idempotency key если отсутствует. Default: true.</summary>
+    public bool AutoGenerate { get; set; } = true;
+
+    /// <summary>
+    ///     Prefixes intent names, при которых idempotency key не нужен (idempotent-safe).
+    ///     Операции с этими prefix'ами ретраятся без ограничений.
+    /// </summary>
+    public List<string> SafeIntents { get; set; } = new() { "read:", "query:", "search:", "get:", "list:" };
+
+    /// <summary>TTL idempotency key на receiver'е (секунды). Default: 300.</summary>
+    public int TtlSeconds { get; set; } = 300;
 }
 
 /// <summary>

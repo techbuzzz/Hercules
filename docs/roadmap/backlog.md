@@ -86,7 +86,7 @@
 | 45 | 18 | [Fan-out / fan-in](tasks/task_045.md) | `fan-out-in` | done |
 | 46 | 22 | [Verification pipeline](tasks/task_046.md) | `verification-pipeline` | pending |
 | 47 | 19 | [Retry, timeout, circuit breaker](tasks/task_047.md) | `retry-timeout-breaker` | pending |
-| 48 | 23 | [Границы делегации](tasks/task_048.md) | `delegation-boundaries` | pending |
+| 48 | 23 | [Границы делегации](tasks/task_048.md) | `delegation-boundaries` | done |
 | 49 | 24 | [Human-in-the-loop эскалация](tasks/task_049.md) | `human-escalation` | pending |
 | 50 | 20 | [Distributed reflection](tasks/task_050.md) | `distributed-reflection` | pending |
 | 51 | 21 | [Shared memory sync](tasks/task_051.md) | `shared-memory-sync` | pending |

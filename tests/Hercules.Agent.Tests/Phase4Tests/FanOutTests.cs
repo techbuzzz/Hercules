@@ -407,6 +407,7 @@ public class FanOutTests : IDisposable
         var aggregator = new ResponseAggregator(opts, null, NullLogger<ResponseAggregator>.Instance);
         var orchestrator = new FanOutOrchestrator(
             mockRouter.Object, mockTransport.Object, aggregator, opts,
+            new CircuitBreaker(),
             NullLogger<FanOutOrchestrator>.Instance);
 
         var envelope = IntentEnvelope.Create("req1", "hercules", "test", "payload");
@@ -428,6 +429,7 @@ public class FanOutTests : IDisposable
         var aggregator = new ResponseAggregator(_options, null, NullLogger<ResponseAggregator>.Instance);
         var orchestrator = new FanOutOrchestrator(
             mockRouter.Object, mockTransport.Object, aggregator, _options,
+            new CircuitBreaker(),
             NullLogger<FanOutOrchestrator>.Instance);
 
         var envelope = IntentEnvelope.Create("req1", "hercules", "test", "payload");
@@ -461,6 +463,7 @@ public class FanOutTests : IDisposable
         var aggregator = new ResponseAggregator(_options, null, NullLogger<ResponseAggregator>.Instance);
         var orchestrator = new FanOutOrchestrator(
             mockRouter.Object, mockTransport.Object, aggregator, _options,
+            new CircuitBreaker(),
             NullLogger<FanOutOrchestrator>.Instance);
 
         var envelope = IntentEnvelope.Create("req1", "hercules", "test", "payload");
@@ -497,6 +500,7 @@ public class FanOutTests : IDisposable
         var aggregator = new ResponseAggregator(_options, null, NullLogger<ResponseAggregator>.Instance);
         var orchestrator = new FanOutOrchestrator(
             mockRouter.Object, mockTransport.Object, aggregator, _options,
+            new CircuitBreaker(),
             NullLogger<FanOutOrchestrator>.Instance);
 
         var envelope = IntentEnvelope.Create("req1", "hercules", "test", "payload");
@@ -528,6 +532,7 @@ public class FanOutTests : IDisposable
         var aggregator = new ResponseAggregator(_options, null, NullLogger<ResponseAggregator>.Instance);
         var orchestrator = new FanOutOrchestrator(
             mockRouter.Object, mockTransport.Object, aggregator, _options,
+            new CircuitBreaker(),
             NullLogger<FanOutOrchestrator>.Instance);
 
         var envelope = IntentEnvelope.Create("req1", "hercules", "test", "payload");
@@ -560,6 +565,7 @@ public class FanOutTests : IDisposable
         var aggregator = new ResponseAggregator(_options, null, NullLogger<ResponseAggregator>.Instance);
         var orchestrator = new FanOutOrchestrator(
             mockRouter.Object, mockTransport.Object, aggregator, _options,
+            new CircuitBreaker(),
             NullLogger<FanOutOrchestrator>.Instance);
 
         var envelope = IntentEnvelope.Create("req1", "hercules", "test", "payload");
@@ -595,6 +601,7 @@ public class FanOutTests : IDisposable
         var aggregator = new ResponseAggregator(opts, null, NullLogger<ResponseAggregator>.Instance);
         var orchestrator = new FanOutOrchestrator(
             mockRouter.Object, mockTransport.Object, aggregator, opts,
+            new CircuitBreaker(),
             NullLogger<FanOutOrchestrator>.Instance);
 
         var envelope = IntentEnvelope.Create("req1", "hercules", "test", "payload");
