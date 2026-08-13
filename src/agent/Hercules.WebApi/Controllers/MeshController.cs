@@ -19,21 +19,58 @@ public static class MeshController
             return Results.Ok(manifest);
         }).WithName("GetAgentManifest");
 
-        // GET /api/mesh/agents — список известных агентов в реестре
-        app.MapGet("/api/mesh/agents", (CapabilityRegistry registry) =>
+        // GET /api/mesh/agents — список известных агентов в реестре (полная запись с health/trust/cost)
+        app.MapGet("/api/mesh/agents", (ICapabilityRegistryService registry) =>
         {
-            var agents = registry.ListAgents();
-            return Results.Ok(agents);
+            var agents = registry.ListAll();
+            return Results.Ok(new { count = agents.Count, agents });
         }).WithName("ListMeshAgents");
 
-        // GET /api/mesh/agents/{id} — манифест агента по ID
-        app.MapGet("/api/mesh/agents/{id}", (string id, CapabilityRegistry registry) =>
+        // GET /api/mesh/agents/{id} — полная запись агента по ID (health, trust, cost/latency, TTL)
+        app.MapGet("/api/mesh/agents/{id}", (string id, ICapabilityRegistryService registry) =>
         {
-            var manifest = registry.Get(id);
-            return manifest is null
+            var entry = registry.GetEntry(id);
+            return entry is null
                 ? Results.NotFound(new { error = $"Агент '{id}' не найден в реестре." })
-                : Results.Ok(manifest);
-        }).WithName("GetMeshAgent");
+                : Results.Ok(entry);
+        }).WithName("GetMeshAgentFull");
+
+        // GET /api/mesh/agents/{id}/health — health status агента
+        app.MapGet("/api/mesh/agents/{id}/health", (string id, ICapabilityRegistryService registry) =>
+        {
+            var entry = registry.GetEntry(id);
+            if (entry is null)
+                return Results.NotFound(new { error = $"Агент '{id}' не найден." });
+            return Results.Ok(new
+            {
+                agentId = entry.AgentId,
+                healthStatus = entry.HealthStatus,
+                lastHealthCheck = entry.LastHealthCheck,
+                consecutiveFailures = entry.ConsecutiveFailures,
+                trustLevel = entry.TrustLevel,
+                costHintUsd = entry.CostHintUsd,
+                latencyHintMs = entry.LatencyHintMs,
+                expirySeconds = entry.ExpirySeconds
+            });
+        }).WithName("GetMeshAgentHealth");
+
+        // POST /api/mesh/agents/{id}/touch — heartbeat (обновить last_seen)
+        app.MapPost("/api/mesh/agents/{id}/touch", (string id, ICapabilityRegistryService registry) =>
+        {
+            var entry = registry.GetEntry(id);
+            if (entry is null)
+                return Results.NotFound(new { error = $"Агент '{id}' не найден." });
+
+            registry.Touch(id);
+            return Results.Ok(new { status = "touched", agentId = id });
+        }).WithName("TouchMeshAgent");
+
+        // POST /api/mesh/agents/cleanup — cleanup просроченных агентов
+        app.MapPost("/api/mesh/agents/cleanup", (ICapabilityRegistryService registry) =>
+        {
+            int removed = registry.CleanupExpired();
+            return Results.Ok(new { status = "cleaned", removedCount = removed });
+        }).WithName("CleanupExpiredAgents");
 
         // POST /api/mesh/agents/register — зарегистрировать peer-агента
         app.MapPost("/api/mesh/agents/register", (AgentManifest manifest, CapabilityRegistry registry) =>

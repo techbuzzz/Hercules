@@ -64,9 +64,9 @@ public static class MeshServiceCollectionExtensions
 {
     /// <summary>
     ///     Зарегистрировать все Phase 3 + Phase 4 mesh-сервисы:
-    ///     AgentManifestService, CapabilityRegistry, IntentTransport, IntentRouter,
-    ///     ManifestCapabilitiesProvider, CircuitBreaker, RetryPolicy, MeshRouter,
-    ///     DistributedReflection, SharedMemorySync.
+    ///     AgentManifestService, CapabilityRegistry, ICapabilityRegistryService, IntentTransport,
+    ///     IntentRouter, ManifestCapabilitiesProvider, CircuitBreaker, RetryPolicy, MeshRouter,
+    ///     DistributedReflection, SharedMemorySync, CapabilityHealthService.
     /// </summary>
     public static IServiceCollection AddMeshServices(this IServiceCollection services, MeshConfig meshCfg, string dataRoot)
     {
@@ -76,6 +76,15 @@ public static class MeshServiceCollectionExtensions
 
         // CapabilityRegistry — singleton с SQLite-хранилищем
         services.AddSingleton(sp => new CapabilityRegistry(registryDbPath));
+
+        // ICapabilityRegistryService — DI-friendly обёртка
+        services.AddSingleton<ICapabilityRegistryService>(sp =>
+            new CapabilityRegistryService(sp.GetRequiredService<CapabilityRegistry>()));
+
+        // CapabilityHealthService — фоновый health-check агентов
+        services.AddHttpClient<CapabilityHealthService>()
+            .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
+        services.AddHostedService<CapabilityHealthService>();
 
         // ManifestCapabilitiesProvider — читает навыки из SkillManager
         services.AddSingleton<ManifestCapabilitiesProvider>();

@@ -439,6 +439,15 @@ public sealed class MeshConfig
 
     /// <summary>Trust metadata агента (для публикации в манифесте).</summary>
     public ManifestTrustMetadataConfig? TrustMetadata { get; set; }
+
+    /// <summary>Интервал health-check агентов в capability registry (секунды, 0 = выключен).</summary>
+    public int CapabilityHealthCheckIntervalSeconds { get; set; } = 60;
+
+    /// <summary>Порог последовательных ошибок health-check для статуса Unhealthy.</summary>
+    public int CapabilityHealthFailureThreshold { get; set; } = 3;
+
+    /// <summary>Default TTL для агентов в capability registry (секунды, default = 86400).</summary>
+    public int CapabilityDefaultTtlSeconds { get; set; } = 86_400;
 }
 
 /// <summary>
