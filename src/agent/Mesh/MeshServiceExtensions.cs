@@ -235,6 +235,11 @@ public static class MeshServiceCollectionExtensions
         services.AddSingleton<RouterHealthTracker>();
         services.AddSingleton<IMeshRouter, CapabilityMeshRouter>();
 
+        // Phase 4: Complexity Router (task_044) — complexity-based execution path selection
+        services.AddSingleton(meshCfg.ComplexityRouter);
+        services.AddSingleton<IComplexityClassifier, ComplexityClassifier>();
+        services.AddSingleton<IComplexityRouter, ComplexityRouter>();
+
         // Phase 4: MeshRouter — fan-out/fan-in оркестрация с LLM-judge
         services.AddSingleton<MeshRouter>();
 

@@ -470,6 +470,9 @@ public sealed class MeshConfig
 
     /// <summary>Mesh router config (capability routing, peer scoring, health tracking). task_043.</summary>
     public MeshRouterOptions MeshRouter { get; set; } = new();
+
+    /// <summary>Complexity router config (task_044): complexity classification, execution path selection, cost budgets.</summary>
+    public ComplexityRouterOptions ComplexityRouter { get; set; } = new();
 }
 
 /// <summary>

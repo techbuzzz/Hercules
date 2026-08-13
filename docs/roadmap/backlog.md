@@ -70,19 +70,19 @@
 | 34 | 13 | [Capability registry](tasks/task_034.md) | `capability-registry` | done |
 | 35 | 14 | [Формат inter-agent сообщений](tasks/task_035.md) | `delegation-envelope` | done |
 | 36 | — | [Протокол жизненного цикла задач](tasks/task_036.md) | `task-lifecycle-protocol` | done |
-| 37 | 15 | [Опции транспорта](tasks/task_037.md) | `transports` | pending |
-| 38 | 16 | [Механизмы discovery](tasks/task_038.md) | `discovery` | pending |
-| 39 | — | [Идентичность и делегация](tasks/task_039.md) | `identity-delegation` | pending |
+| 37 | 15 | [Опции транспорта](tasks/task_037.md) | `transports` | done |
+| 38 | 16 | [Механизмы discovery](tasks/task_038.md) | `discovery` | done |
+| 39 | — | [Идентичность и делегация](tasks/task_039.md) | `identity-delegation` | done |
 | 40 | — | [Trust и admission policy](tasks/task_040.md) | `trust-admission` | done |
 | 41 | — | [Inter-agent audit trail](tasks/task_041.md) | `inter-agent-audit` | done |
-| 42 | — | [Контрактные и chaos тесты](tasks/task_042.md) | `protocol-tests` | pending |
+| 42 | — | [Контрактные и chaos тесты](tasks/task_042.md) | `protocol-tests` | done |
 
 ## Phase 4 — Mesh orchestration (Q2 2027)
 
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
 | 43 | 17 | [Mesh router](tasks/task_043.md) | `mesh-router` | done |
-| 44 | 17 | [Сложность и стоимость](tasks/task_044.md) | `complexity-router` | pending |
+| 44 | 17 | [Сложность и стоимость](tasks/task_044.md) | `complexity-router` | done |
 | 45 | 18 | [Fan-out / fan-in](tasks/task_045.md) | `fan-out-in` | pending |
 | 46 | 22 | [Verification pipeline](tasks/task_046.md) | `verification-pipeline` | pending |
 | 47 | 19 | [Retry, timeout, circuit breaker](tasks/task_047.md) | `retry-timeout-breaker` | pending |
