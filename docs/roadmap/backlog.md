@@ -103,7 +103,7 @@
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
 | 53 | 32 | [Mesh dashboard](tasks/task_053.md) | `mesh-dashboard` | done |
-| 54 | 33 | [Централизованные логи и трейсы](tasks/task_054.md) | `centralized-observability` | pending |
+| 54 | 33 | [Централизованные логи и трейсы](tasks/task_054.md) | `centralized-observability` | done |
 | 55 | 40 | [Security operations](tasks/task_055.md) | `security-ops` | pending |
 | 56 | 35 | [Rate limits и квоты](tasks/task_056.md) | `rate-limits-quotas` | pending |
 | 57 | 36 | [Управление жизненным циклом](tasks/task_057.md) | `lifecycle-management` | pending |
