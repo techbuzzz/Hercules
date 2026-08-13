@@ -193,9 +193,12 @@ public sealed class CircuitBreaker
 /// <summary>
 ///     Retry-политика с экспоненциальной задержкой для peer-вызовов.
 ///     Используется вместе с CircuitBreaker: retry выполняется только если цепь замкнута.
+///     Поддерживает jitter для снятия thundering herd.
 /// </summary>
 public sealed class RetryPolicy
 {
+    private readonly Random? _jitterRng;
+
     /// <summary>Максимум попыток (включая первую). По умолчанию 3.</summary>
     public int MaxAttempts { get; set; } = 3;
 
@@ -209,7 +212,23 @@ public sealed class RetryPolicy
     public TimeSpan MaxDelay { get; set; } = TimeSpan.FromSeconds(5);
 
     /// <summary>
+    ///     Амплитуда jitter (±% от задержки). 0 = без jitter.
+    ///     По умолчанию 0.3 (задержка ±30%).
+    /// </summary>
+    public double JitterFactor { get; set; } = 0.3;
+
+    /// <summary>Создать RetryPolicy со случайным jitter (production).</summary>
+    public RetryPolicy() { }
+
+    /// <summary>Создать RetryPolicy с детерминистичным RNG (для тестов).</summary>
+    public RetryPolicy(int seed)
+    {
+        _jitterRng = new Random(seed);
+    }
+
+    /// <summary>
     ///     Вычислить задержку перед N-й retry-попыткой (N = 1 для первой retry, 2 для второй и т.д.).
+    ///     Применяет экспоненциальный backoff с jitter для снятия thundering herd.
     /// </summary>
     public TimeSpan GetDelay(int attempt)
     {
@@ -219,8 +238,17 @@ public sealed class RetryPolicy
         }
 
         var delayMs = BaseDelay.TotalMilliseconds * Math.Pow(BackoffMultiplier, attempt - 1);
-        var clamped = Math.Min(delayMs, MaxDelay.TotalMilliseconds);
-        return TimeSpan.FromMilliseconds(clamped);
+        delayMs = Math.Min(delayMs, MaxDelay.TotalMilliseconds);
+
+        // Jitter: ±JitterFactor% от задержки (Full Jitter)
+        if (JitterFactor > 0)
+        {
+            var rng = _jitterRng ?? Random.Shared;
+            var jitter = delayMs * JitterFactor * (rng.NextDouble() * 2 - 1);
+            delayMs = Math.Max(0, delayMs + jitter);
+        }
+
+        return TimeSpan.FromMilliseconds(delayMs);
     }
 
     /// <summary>

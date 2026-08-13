@@ -124,10 +124,12 @@ public class RetryPolicyTests
    [Fact]
    public void GetDelay_Increases_Exponentially()
    {
+      // JitterFactor=0 to test deterministic exponential backoff without randomness
       var policy = new RetryPolicy
       {
          BaseDelay = TimeSpan.FromMilliseconds(100),
-         BackoffMultiplier = 2.0
+         BackoffMultiplier = 2.0,
+         JitterFactor = 0.0
       };
       var d1 = policy.GetDelay(1).TotalMilliseconds;
       var d2 = policy.GetDelay(2).TotalMilliseconds;
@@ -141,10 +143,12 @@ public class RetryPolicyTests
    [Fact]
    public void GetDelay_Clamped_To_MaxDelay()
    {
+      // JitterFactor=0 to test deterministic clamping without randomness
       var policy = new RetryPolicy
       {
          BaseDelay = TimeSpan.FromSeconds(1),
-         MaxDelay = TimeSpan.FromSeconds(2)
+         MaxDelay = TimeSpan.FromSeconds(2),
+         JitterFactor = 0.0
       };
       var d10 = policy.GetDelay(10);
       Assert.True(d10 <= TimeSpan.FromSeconds(2));
