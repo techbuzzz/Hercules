@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using HerculesBus.Core;
 using Hercules.Mesh.Audit;
+using Hercules.Mesh.Escalation;
 using Hercules.Mesh.Policy;
 using Hercules.Mesh.Transport;
 
@@ -24,6 +25,7 @@ public sealed class IntentRouter
     private readonly ITransport _transport;
     private readonly MeshAuditService? _auditService;
     private readonly ITrustAdmissionPolicy? _trustPolicy;
+    private readonly IEscalationService? _escalationService;
 
     public IntentRouter(
         AgentCore agent,
@@ -31,7 +33,8 @@ public sealed class IntentRouter
         ITransport transport,
         AgentManifestService manifestService,
         MeshAuditService? auditService = null,
-        ITrustAdmissionPolicy? trustPolicy = null)
+        ITrustAdmissionPolicy? trustPolicy = null,
+        IEscalationService? escalationService = null)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
@@ -39,6 +42,7 @@ public sealed class IntentRouter
         _manifestService = manifestService ?? throw new ArgumentNullException(nameof(manifestService));
         _auditService = auditService;
         _trustPolicy = trustPolicy;
+        _escalationService = escalationService;
     }
 
     /// <summary>
@@ -96,6 +100,25 @@ public sealed class IntentRouter
             var admission = _trustPolicy.Evaluate(ctx);
             policyDecision = admission.IsAllowed ? "Allowed" : "Denied";
             policyReason = admission.DenialReason;
+
+            // [task_049] Escalate trust admission denials
+            if (!admission.IsAllowed && _escalationService is not null)
+            {
+                var escCtx = new EscalationContext
+                {
+                    RequestId = envelope.RequestId,
+                    AgentId = ownAgentId,
+                    SessionId = envelope.RequestId,
+                    Type = EscalationType.DelegationTrustLow,
+                    Severity = EscalationSeverity.High,
+                    ActionPlan = $"Delegate intent '{envelope.Intent}' to peer '{peer.AgentId}'",
+                    Context = $"Trust admission denied: {admission.DenialReason}",
+                    PayloadJson = System.Text.Json.JsonSerializer.Serialize(envelope),
+                    ToolOrIntentName = envelope.Intent,
+                    RequestedBy = "mesh"
+                };
+                _ = _escalationService.EscalateAsync(escCtx, ct);
+            }
         }
 
         // 5. Отправляем intent peer'у через абстрактный транспорт

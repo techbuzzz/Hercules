@@ -6,6 +6,7 @@ using Hercules.Mesh.Aggregation;
 using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
+using Hercules.Mesh.Escalation;
 using Hercules.Mesh.Policy;
 using Hercules.Mesh.Verification;
 using Hercules.Mesh.Router;
@@ -220,7 +221,8 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<ITransport>(),
                 sp.GetRequiredService<AgentManifestService>(),
                 sp.GetService<MeshAuditService>(),
-                sp.GetService<ITrustAdmissionPolicy>()));
+                sp.GetService<ITrustAdmissionPolicy>(),
+                sp.GetService<IEscalationService>()));
 
         // Phase 3: TaskLifecycleProtocol — inter-agent task lifecycle (task_036)
         services.AddSingleton<ITaskLifecycleProtocol>(sp =>
@@ -390,6 +392,10 @@ public static class MeshServiceCollectionExtensions
         // Phase 4: Delegation boundaries (task_048) — hop count, fan-out width, cumulative tool calls, cost, time limits
         services.AddSingleton(meshCfg.DelegationBoundaries);
         services.AddSingleton<IDelegationBoundaryService, DelegationBoundaryService>();
+
+        // Phase 4: Human-in-the-loop escalation (task_049)
+        services.AddSingleton(meshCfg.Escalation);
+        services.AddSingleton<IEscalationService, EscalationService>();
 
         return services;
     }

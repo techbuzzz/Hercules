@@ -485,6 +485,9 @@ public sealed class MeshConfig
 
     /// <summary>Delegation boundaries config (task_048): hop count, fan-out width, cumulative tool calls, cost, time limits.</summary>
     public DelegationBoundaryConfig DelegationBoundaries { get; set; } = new();
+
+    /// <summary>Human-in-the-loop escalation config (task_049): severity thresholds, TTL, escalation types.</summary>
+    public EscalationConfig Escalation { get; set; } = new();
 }
 
 /// <summary>
@@ -996,4 +999,51 @@ public sealed class VerificationConfig
 
     /// <summary>Верифицировать только ответы с confidence ниже этого порога. Default: "high".</summary>
     public string MinConfidenceToSkipVerification { get; set; } = "high";
+}
+
+/// <summary>
+///     Конфигурация human-in-the-loop escalation (task_049).
+///     Severity thresholds, TTL, escalation types, and operator notification.
+/// </summary>
+public sealed class EscalationConfig
+{
+    /// <summary>Включить escalation service. Default: false (backward-compatible).</summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>
+    ///     Режим: "off" | "notify" | "block". Default: "notify".
+    ///     block: ответ блокируется до подтверждения оператором.
+    ///     notify: эскалация создаётся, но операция выполняется (с нотификацией).
+    /// </summary>
+    public string Mode { get; set; } = "notify";
+
+    /// <summary>TTL pending-эскалаций в минутах. Default: 30.</summary>
+    public int DefaultTtlMinutes { get; set; } = 30;
+
+    /// <summary>
+    ///     Minimal severity that triggers escalation in block mode.
+    ///     Values: Low, Medium, High, Critical. Default: Medium.
+    /// </summary>
+    public string MinSeverityForBlock { get; set; } = "Medium";
+
+    /// <summary>Escalate low-confidence responses (below this threshold). Default: "low".</summary>
+    public string LowConfidenceThreshold { get; set; } = "low";
+
+    /// <summary>Escalate destructive operations (SideEffectLevel.Destructive or above). Default: true.</summary>
+    public bool EscalateDestructive { get; set; } = true;
+
+    /// <summary>Escalate trust admission denials. Default: true.</summary>
+    public bool EscalateTrustDenials { get; set; } = true;
+
+    /// <summary>Escalate budget guardrail violations. Default: true.</summary>
+    public bool EscalateBudgetViolations { get; set; } = true;
+
+    /// <summary>Escalate ambiguous intent routing. Default: false.</summary>
+    public bool EscalateAmbiguousIntent { get; set; } = false;
+
+    /// <summary>
+    ///     Operationally escalate (notify operator, page, etc.) for Critical escalations.
+    ///     Currently logs at Warning level; pluggable in future.
+    /// </summary>
+    public bool PageOperatorOnCritical { get; set; } = false;
 }

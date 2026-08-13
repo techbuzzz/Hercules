@@ -585,6 +585,7 @@ app.MapBudget();
 app.MapAudit();
 app.MapLlm();
 app.MapApprovals();
+app.MapEscalations();
 app.MapObservability();
 app.MapSkillHarness();
 app.MapSelfImprovement();

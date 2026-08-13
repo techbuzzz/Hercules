@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import MeshRouterPanel from "../components/MeshRouterPanel.astro";
+import EscalationPanel from "../components/EscalationPanel.astro";
 ---
 
 <Layout title="Hercules · Mesh" active="mesh">
@@ -8,5 +9,8 @@ import MeshRouterPanel from "../components/MeshRouterPanel.astro";
     <h1 class="text-xl font-semibold text-white">Mesh Router</h1>
     <p class="text-sm text-gray-400">Маршрутизация по capability, health tracking, circuit breakers.</p>
   </div>
-  <MeshRouterPanel />
+  <div class="grid gap-6 lg:grid-cols-2">
+    <MeshRouterPanel />
+    <EscalationPanel />
+  </div>
 </Layout>

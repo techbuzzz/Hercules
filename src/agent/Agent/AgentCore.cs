@@ -97,6 +97,7 @@ public sealed class AgentCore : IConfigReload
     private readonly IAuditService? _auditService;
     private readonly IContextBuilder? _contextBuilder;
     private readonly IVerificationPipeline? _verificationPipeline;
+    private readonly Hercules.Mesh.Escalation.IEscalationService? _escalationService;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
@@ -125,7 +126,8 @@ public sealed class AgentCore : IConfigReload
         EmbeddingSkillRouter? embeddingRouter = null,
         Phase2Config? phase2Config = null,
         IContextBuilder? contextBuilder = null,
-        IVerificationPipeline? verificationPipeline = null)
+        IVerificationPipeline? verificationPipeline = null,
+        Hercules.Mesh.Escalation.IEscalationService? escalationService = null)
     {
         _llm = llm;
         _router = router;
@@ -146,6 +148,7 @@ public sealed class AgentCore : IConfigReload
         _auditService = auditService;
         _contextBuilder = contextBuilder;
         _verificationPipeline = verificationPipeline;
+        _escalationService = escalationService;
     }
 
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
@@ -251,6 +254,24 @@ public sealed class AgentCore : IConfigReload
                 _otel?.SetErrorStatus(_currentHandleActivity, "guardrail_blocked");
                 handleSw.Stop();
                 OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
+
+                // [task_049] Escalate budget guardrail violations
+                if (_escalationService is not null)
+                {
+                    _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
+                    {
+                        RequestId = SessionId,
+                        AgentId = "hercules-agent",
+                        SessionId = SessionId,
+                        Type = Hercules.Mesh.Escalation.EscalationType.BudgetExceeded,
+                        Severity = Hercules.Mesh.Escalation.EscalationSeverity.High,
+                        ActionPlan = "Return budget-degradation message to user",
+                        Context = $"Budget guardrail: {degradation}",
+                        ToolOrIntentName = "BudgetGuard",
+                        RequestedBy = "agent"
+                    }, externalCt);
+                }
+
                 return new AgentResponse
                 {
                     Answer = degradation,
@@ -362,6 +383,23 @@ public sealed class AgentCore : IConfigReload
 
         var (answer, confidence) = ExtractConfidence(llmResp.Text);
 
+        // [task_049] Escalate low-confidence responses
+        if (_escalationService is not null && confidence.Equals("low", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
+            {
+                RequestId = SessionId,
+                AgentId = "hercules-agent",
+                SessionId = SessionId,
+                Type = Hercules.Mesh.Escalation.EscalationType.LowConfidence,
+                Severity = Hercules.Mesh.Escalation.EscalationSeverity.Medium,
+                ActionPlan = $"Return low-confidence response to user (answer: {(answer.Length > 80 ? answer[..80] + "..." : answer)})",
+                Context = $"Low-confidence response ({confidence}): {answer}",
+                ToolOrIntentName = route.MatchedSkill?.Meta.Id ?? "(direct)",
+                RequestedBy = "agent"
+            }, externalCt);
+        }
+
         // [task_012] Record LLM usage for budget guardrails
         if (_guardrails is not null)
         {
@@ -455,6 +493,30 @@ public sealed class AgentCore : IConfigReload
                         verifyResult.MaxSeverity, verifyResult.BlockingReason);
                     _otel?.SetTag(_currentHandleActivity, "hercules.verification_blocked", "true");
                     _otel?.SetTag(_currentHandleActivity, "hercules.verification_severity", verifyResult.MaxSeverity.ToString());
+
+                    // [task_049] Escalate verification policy denials
+                    if (_escalationService is not null)
+                    {
+                        var sev = verifyResult.MaxSeverity switch
+                        {
+                            Hercules.Mesh.Verification.VerificationSeverity.Critical => Hercules.Mesh.Escalation.EscalationSeverity.Critical,
+                            Hercules.Mesh.Verification.VerificationSeverity.High => Hercules.Mesh.Escalation.EscalationSeverity.High,
+                            Hercules.Mesh.Verification.VerificationSeverity.Medium => Hercules.Mesh.Escalation.EscalationSeverity.Medium,
+                            _ => Hercules.Mesh.Escalation.EscalationSeverity.Low
+                        };
+                        _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
+                        {
+                            RequestId = SessionId,
+                            AgentId = "hercules-agent",
+                            SessionId = SessionId,
+                            Type = Hercules.Mesh.Escalation.EscalationType.PolicyDenial,
+                            Severity = sev,
+                            ActionPlan = "Block verification-blocked response and notify operator",
+                            Context = $"Verification blocked: severity={verifyResult.MaxSeverity}, reason={verifyResult.BlockingReason}",
+                            ToolOrIntentName = response.ToolUsed,
+                            RequestedBy = "verification-pipeline"
+                        }, externalCt);
+                    }
 
                     // Return a safe degradation response instead of the original
                     return new AgentResponse
