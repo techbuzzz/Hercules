@@ -494,6 +494,9 @@ public sealed class MeshConfig
 
     /// <summary>Shared memory sync config (task_051): TTL, sensitivity classification, encryption, namespace limits.</summary>
     public SharedMemorySyncConfig SharedMemorySync { get; set; } = new();
+
+    /// <summary>Mesh evaluation suite config (task_052): scenario definitions, metrics, thresholds.</summary>
+    public MeshEvalConfig MeshEval { get; set; } = new();
 }
 
 /// <summary>
@@ -1081,4 +1084,65 @@ public sealed class SharedMemorySyncConfig
 
     /// <summary>Интервал автоматической синхронизации в минутах. 0 = выключена. Default: 30.</summary>
     public int SyncIntervalMinutes { get; set; } = 30;
+}
+
+/// <summary>
+///     Конфигурация mesh evaluation suite (task_052).
+///     Scenario definitions, metrics collection, regression thresholds.
+/// </summary>
+public sealed class MeshEvalConfig
+{
+    /// <summary>Включить evaluation suite. Default: false.</summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>Директория с файлами сценариев (.json). Default: "data/mesh-eval/scenarios".</summary>
+    public string ScenariosDir { get; set; } = "data/mesh-eval/scenarios";
+
+    /// <summary>Директория для сохранения результатов. Default: "data/mesh-eval/results".</summary>
+    public string ResultsDir { get; set; } = "data/mesh-eval/results";
+
+    /// <summary>Максимальное время выполнения одного сценария в секундах. Default: 120.</summary>
+    public int MaxScenarioDurationSeconds { get; set; } = 120;
+
+    /// <summary>Включить оценку task success rate. Default: true.</summary>
+    public bool EnableTaskSuccessEval { get; set; } = true;
+
+    /// <summary>Включить оценку safety denials. Default: true.</summary>
+    public bool EnableSafetyDenialEval { get; set; } = true;
+
+    /// <summary>Включить оценку routing quality. Default: true.</summary>
+    public bool EnableRoutingQualityEval { get; set; } = true;
+
+    /// <summary>Включить оценку latency. Default: true.</summary>
+    public bool EnableLatencyEval { get; set; } = true;
+
+    /// <summary>Включить оценку cost. Default: true.</summary>
+    public bool EnableCostEval { get; set; } = true;
+
+    /// <summary>Включить оценку resilience (retry, circuit breaker). Default: true.</summary>
+    public bool EnableResilienceEval { get; set; } = true;
+
+    /// <summary>Включить оценку degradation при отказах. Default: true.</summary>
+    public bool EnableDegradationEval { get; set; } = true;
+
+    /// <summary>Порог success rate для pass/fail (0.0-1.0). Default: 0.8.</summary>
+    public double MinSuccessRateThreshold { get; set; } = 0.8;
+
+    /// <summary>Порог max latency в миллисекундах. Default: 5000.</summary>
+    public int MaxLatencyThresholdMs { get; set; } = 5000;
+
+    /// <summary>Порог max cost per request в USD. Default: 0.10.</summary>
+    public decimal MaxCostPerRequestUsd { get; set; } = 0.10m;
+
+    /// <summary>Блокировать deployment при regression (success rate ниже baseline). Default: true.</summary>
+    public bool BlockOnRegression { get; set; } = true;
+
+    /// <summary>Порог regression: если success rate падает более чем на это значение vs baseline — блокировка. Default: 0.05.</summary>
+    public double RegressionThreshold { get; set; } = 0.05;
+
+    /// <summary>Включить chaos-тестирование (случайные отказы). Default: false.</summary>
+    public bool EnableChaosTesting { get; set; } = false;
+
+    /// <summary>Вероятность chaos-инъекции (0.0-1.0). Default: 0.1.</summary>
+    public double ChaosInjectionRate { get; set; } = 0.1;
 }

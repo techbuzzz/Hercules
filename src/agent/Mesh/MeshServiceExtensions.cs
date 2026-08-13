@@ -7,6 +7,7 @@ using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Escalation;
+using Hercules.Mesh.Eval;
 using Hercules.Mesh.Policy;
 using Hercules.Mesh.Verification;
 using Hercules.Mesh.Router;
@@ -402,6 +403,10 @@ public static class MeshServiceCollectionExtensions
         // Phase 4: Human-in-the-loop escalation (task_049)
         services.AddSingleton(meshCfg.Escalation);
         services.AddSingleton<IEscalationService, EscalationService>();
+
+        // Phase 4: Mesh evaluation suite (task_052)
+        services.AddSingleton(meshCfg.MeshEval);
+        services.AddSingleton<IMeshEvalRunner, MeshEvalRunner>();
 
         return services;
     }
