@@ -83,7 +83,7 @@
 |---|------------|------|------|--------|
 | 43 | 17 | [Mesh router](tasks/task_043.md) | `mesh-router` | done |
 | 44 | 17 | [Сложность и стоимость](tasks/task_044.md) | `complexity-router` | done |
-| 45 | 18 | [Fan-out / fan-in](tasks/task_045.md) | `fan-out-in` | pending |
+| 45 | 18 | [Fan-out / fan-in](tasks/task_045.md) | `fan-out-in` | done |
 | 46 | 22 | [Verification pipeline](tasks/task_046.md) | `verification-pipeline` | pending |
 | 47 | 19 | [Retry, timeout, circuit breaker](tasks/task_047.md) | `retry-timeout-breaker` | pending |
 | 48 | 23 | [Границы делегации](tasks/task_048.md) | `delegation-boundaries` | pending |

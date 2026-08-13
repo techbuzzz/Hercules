@@ -473,6 +473,9 @@ public sealed class MeshConfig
 
     /// <summary>Complexity router config (task_044): complexity classification, execution path selection, cost budgets.</summary>
     public ComplexityRouterOptions ComplexityRouter { get; set; } = new();
+
+    /// <summary>Fan-out / fan-in orchestrator config (task_045): concurrency, budget, schema validation, selection strategy.</summary>
+    public FanOutOptions FanOut { get; set; } = new();
 }
 
 /// <summary>

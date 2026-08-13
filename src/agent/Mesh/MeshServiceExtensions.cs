@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Config;
 using Hercules.Mesh.A2A;
+using Hercules.Mesh.Aggregation;
 using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
@@ -11,6 +12,7 @@ using Hercules.Mesh.Transport;
 using Hercules.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
+using Hercules.LLM;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.Mesh;
@@ -239,6 +241,14 @@ public static class MeshServiceCollectionExtensions
         services.AddSingleton(meshCfg.ComplexityRouter);
         services.AddSingleton<IComplexityClassifier, ComplexityClassifier>();
         services.AddSingleton<IComplexityRouter, ComplexityRouter>();
+
+        // Phase 4: FanOut Orchestrator (task_045) — fan-out / fan-in с schema validation, voting, deterministic, LLM-judge
+        services.AddSingleton(meshCfg.FanOut);
+        services.AddSingleton(sp => new ResponseAggregator(
+            sp.GetRequiredService<FanOutOptions>(),
+            sp.GetService<ILLMClient>(),
+            sp.GetRequiredService<ILogger<ResponseAggregator>>()));
+        services.AddSingleton<IFanOutOrchestrator, FanOutOrchestrator>();
 
         // Phase 4: MeshRouter — fan-out/fan-in оркестрация с LLM-judge
         services.AddSingleton<MeshRouter>();
