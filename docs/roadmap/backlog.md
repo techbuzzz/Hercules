@@ -88,7 +88,7 @@
 | 47 | 19 | [Retry, timeout, circuit breaker](tasks/task_047.md) | `retry-timeout-breaker` | pending |
 | 48 | 23 | [Границы делегации](tasks/task_048.md) | `delegation-boundaries` | done |
 | 49 | 24 | [Human-in-the-loop эскалация](tasks/task_049.md) | `human-escalation` | done |
-| 50 | 20 | [Distributed reflection](tasks/task_050.md) | `distributed-reflection` | pending |
+| 50 | 20 | [Distributed reflection](tasks/task_050.md) | `distributed-reflection` | done |
 | 51 | 21 | [Shared memory sync](tasks/task_051.md) | `shared-memory-sync` | pending |
 | 52 | 31 | [Mesh evaluation suite](tasks/task_052.md) | `mesh-eval-suite` | pending |
 | 65 | 25 | [Mesh observability](tasks/task_065.md) | `mesh-observability` | pending |

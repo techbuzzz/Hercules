@@ -488,6 +488,9 @@ public sealed class MeshConfig
 
     /// <summary>Human-in-the-loop escalation config (task_049): severity thresholds, TTL, escalation types.</summary>
     public EscalationConfig Escalation { get; set; } = new();
+
+    /// <summary>Distributed reflection proposal config (task_050): proposal generation, LLM analysis, thresholds.</summary>
+    public Mesh.ReflectionProposalConfig ReflectionProposals { get; set; } = new();
 }
 
 /// <summary>

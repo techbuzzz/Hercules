@@ -290,7 +290,11 @@ public static class MeshServiceCollectionExtensions
         // Phase 4: MeshRouter — fan-out/fan-in оркестрация с LLM-judge
         services.AddSingleton<MeshRouter>();
 
-        // Phase 4: DistributedReflection — отчёты по mesh + рекомендации
+        // Phase 4: DistributedReflection — отчёты по mesh + рекомендации (task_050)
+        services.AddSingleton(meshCfg.ReflectionProposals);
+        services.AddSingleton(sp => new ReflectionProposalStore(
+            dataRoot,
+            sp.GetRequiredService<ILogger<ReflectionProposalStore>>()));
         services.AddSingleton<DistributedReflection>();
 
         // Phase 4: SharedMemorySync — синхронизация избранных фактов памяти

@@ -23,11 +23,19 @@ public sealed class CapabilityRegistry : ICapabilityLookup, IDisposable
     public CapabilityRegistry(string dbPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dbPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+        if (!string.Equals(dbPath, ":memory:", StringComparison.OrdinalIgnoreCase))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+        }
         _conn = new SqliteConnection($"Data Source={dbPath}");
         _conn.Open();
         InitSchema();
     }
+
+    /// <summary>
+    ///     Create an in-memory capability registry (no persistence, useful for testing).
+    /// </summary>
+    public static CapabilityRegistry CreateInMemory() => new(":memory:");
 
     public void Dispose()
     {
