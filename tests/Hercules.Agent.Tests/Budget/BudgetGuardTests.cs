@@ -58,7 +58,9 @@ public class BudgetGuardTests
         var result = new GuardrailCheckResult(violations, true);
         var msg = _guard.CheckAndGetDegradationMessage(result);
         Assert.NotNull(msg);
-        Assert.Contains("превышен лимит безопасности", msg);
+        // Source: BudgetGuard.cs использует "Превышен" (capital P) — корректно для русского.
+        // OrdinalIgnoreCase делает тест устойчивым к возможной смене регистра в source.
+        Assert.Contains("Превышен лимит безопасности", msg, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Tool calls per request exceeded", msg);
     }
 
