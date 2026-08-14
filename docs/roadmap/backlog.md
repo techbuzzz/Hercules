@@ -95,7 +95,7 @@
 | 66 | 26 | [Абстракция mesh-бэкендов](tasks/task_066.md) | `mesh-backends-abstraction` | done |
 | 67 | 27 | [Redis/Valkey coordination backend](tasks/task_067.md) | `redis-coordination-backend` | done |
 | 68 | 28 | [NATS / JetStream transport option](tasks/task_068.md) | `nats-jetstream-transport` | done |
-| 69 | 29 | [PostgreSQL shared state backend](tasks/task_069.md) | `postgres-shared-state` | pending |
+| 69 | 29 | [PostgreSQL shared state backend](tasks/task_069.md) | `postgres-shared-state` | done |
 | 70 | 30 | [Backend-профили и деградация](tasks/task_070.md) | `backend-profiles-degradation` | done |
 
 ## Phase 5 — IoT/edge fleet and mesh operations (Q3 2027)

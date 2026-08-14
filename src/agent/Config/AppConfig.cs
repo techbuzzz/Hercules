@@ -175,6 +175,10 @@ public sealed class AppConfig
     // task_068: NATS/JetStream backend
     /// <summary>NATS/JetStream backend config (task_068): servers, auth, stream/KV prefixes, JetStream options.</summary>
     public Hercules.Mesh.Backends.Nats.NatsMeshConfig Nats { get; set; } = new();
+
+    // task_069: PostgreSQL shared state backend
+    /// <summary>PostgreSQL backend config (task_069): connection string, schema, TTL, visibility timeout, LISTEN/NOTIFY options.</summary>
+    public Hercules.Mesh.Backends.Postgres.PostgresMeshConfig Postgres { get; set; } = new();
 }
 
 /// <summary>

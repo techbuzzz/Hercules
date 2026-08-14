@@ -9,6 +9,7 @@ using Hercules.Mesh.Auth;
 using Hercules.Mesh.Backend;
 using Hercules.Mesh.Backends.Redis;
 using Hercules.Mesh.Backends.Nats;
+using Hercules.Mesh.Backends.Postgres;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Escalation;
 using Hercules.Mesh.Eval;
@@ -22,6 +23,7 @@ using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
 using StackExchange.Redis;
 using NATS.Client.Core;
+using Npgsql;
 using Hercules.Mesh.Resilience;
 using Hercules.Observability;
 using Hercules.Skills;
@@ -461,18 +463,22 @@ public static class MeshServiceCollectionExtensions
     ///     Registers mesh backends (IMeshBus, ITaskQueue, IMeshStateStore) based on active profile.
     ///     Redis (task_067): uses Redis when Redis:Enabled or profile = Redis.
     ///     NATS (task_068): uses NATS/JetStream when Nats:Enabled or profile = Nats.
-    ///     Falls back to in-process when neither is available.
+    ///     Postgres (task_069): uses Npgsql when Postgres:Enabled or profile = Postgres.
+    ///     Falls back to in-process when none is available.
     /// </summary>
     private static void RegisterMeshBackends(IServiceCollection services, AppConfig appConfig, IServiceProvider sp)
     {
         var redisCfg = appConfig.Redis;
         var natsCfg = appConfig.Nats;
+        var postgresCfg = appConfig.Postgres;
         var profileLoader = new MeshProfileLoader(appConfig.MeshProfiles, sp.GetRequiredService<ILogger<MeshProfileLoader>>());
         var activeProfile = profileLoader.GetActiveProfile();
         var isRedisProfile = activeProfile?.Profile == MeshBackendProfile.Redis;
         var isNatsProfile = activeProfile?.Profile == MeshBackendProfile.Nats;
+        var isPostgresProfile = activeProfile?.Profile == MeshBackendProfile.Postgres;
         var isRedisEnabled = redisCfg.Enabled || isRedisProfile;
         var isNatsEnabled = natsCfg.Enabled || isNatsProfile;
+        var isPostgresEnabled = postgresCfg.Enabled || isPostgresProfile;
 
         if (isNatsEnabled)
         {
@@ -518,6 +524,22 @@ public static class MeshServiceCollectionExtensions
             services.AddSingleton<IMeshBus, RedisMeshBus>();
             services.AddSingleton<ITaskQueue, RedisTaskQueue>();
             services.AddSingleton<IMeshStateStore, RedisMeshStateStore>();
+        }
+        else if (isPostgresEnabled)
+        {
+            // Register Npgsql data source as singleton (task_069).
+            // The data source is lazy: connection is opened only on first use.
+            services.AddSingleton<NpgsqlDataSource>(_ =>
+            {
+                var builder = new NpgsqlDataSourceBuilder(postgresCfg.ConnectionString);
+                builder.UseLoggerFactory(sp.GetRequiredService<ILoggerFactory>());
+                return builder.Build();
+            });
+
+            services.AddSingleton(postgresCfg);
+            services.AddSingleton<IMeshBus, PostgresMeshBus>();
+            services.AddSingleton<ITaskQueue, PostgresTaskQueue>();
+            services.AddSingleton<IMeshStateStore, PostgresMeshStateStore>();
         }
         else
         {
