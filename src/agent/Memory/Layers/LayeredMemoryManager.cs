@@ -1,4 +1,5 @@
 using System.Text;
+using Hercules.Agent;
 using Hercules.LLM;
 
 namespace Hercules.Memory.Layers;
@@ -6,10 +7,17 @@ namespace Hercules.Memory.Layers;
 /// <summary>
 ///     Facade composing all 4 memory layers. Provides a unified API for the agent.
 ///     Assembles context for LLM prompts and manages memory lifecycle.
+///     <para>
+///         task_075 H6 fix: when constructed with <see cref="ISessionStateStore" />,
+///         working memory is resolved per session, eliminating the previous
+///         captive-dependency (singleton <c>LayeredMemoryManager</c> capturing a
+///         scoped <c>IWorkingMemory</c> shared across all HTTP requests).
+///     </para>
 /// </summary>
 public sealed class LayeredMemoryManager
 {
-    private readonly IWorkingMemory _workingMemory;
+    private readonly IWorkingMemory? _legacyWorkingMemory;
+    private readonly ISessionStateStore? _sessionStates;
     private readonly IDurableFactsStore _factsStore;
     private readonly IEpisodicStore _episodicStore;
     private readonly LayeredMemoryConfig _config;
@@ -19,28 +27,64 @@ public sealed class LayeredMemoryManager
     /// </summary>
     public IEpisodicStore EpisodicStore => _episodicStore;
 
+    /// <summary>Legacy single-session ctor (kept for tests / CLI single-tenant mode).</summary>
     public LayeredMemoryManager(
         IWorkingMemory workingMemory,
         IDurableFactsStore factsStore,
         IEpisodicStore episodicStore,
         LayeredMemoryConfig? config = null)
     {
-        _workingMemory = workingMemory;
+        _legacyWorkingMemory = workingMemory;
+        _sessionStates = null;
         _factsStore = factsStore;
         _episodicStore = episodicStore;
         _config = config ?? new LayeredMemoryConfig();
     }
 
     /// <summary>
-    ///     Build the complete memory context block for an LLM prompt.
-    ///     Combines: durable facts + recent episodes + working memory.
-    ///     Respects sensitivity redaction.
+    ///     task_075 H6 fix: per-session ctor. Looks up the per-session
+    ///     <c>IWorkingMemory</c> from the store on every call so that parallel
+    ///     HTTP requests can never leak working-memory entries across sessions.
     /// </summary>
-    public async Task<string> BuildContextBlockAsync(CancellationToken ct = default)
+    public LayeredMemoryManager(
+        ISessionStateStore sessionStates,
+        IDurableFactsStore factsStore,
+        IEpisodicStore episodicStore,
+        LayeredMemoryConfig? config = null)
+    {
+        _legacyWorkingMemory = null;
+        _sessionStates = sessionStates ?? throw new ArgumentNullException(nameof(sessionStates));
+        _factsStore = factsStore;
+        _episodicStore = episodicStore;
+        _config = config ?? new LayeredMemoryConfig();
+    }
+
+    private IWorkingMemory ResolveWorkingMemory(string? sessionId)
+    {
+        if (_sessionStates is not null)
+        {
+            return _sessionStates.GetOrCreate(sessionId ?? "default").WorkingMemory;
+        }
+        return _legacyWorkingMemory ?? throw new InvalidOperationException("Working memory not configured");
+    }
+
+    /// <summary>
+    /// Build the complete memory context block for an LLM prompt.
+    /// Uses legacy (process-wide) working memory.
+    /// </summary>
+    public Task<string> BuildContextBlockAsync(CancellationToken ct = default) =>
+        BuildContextBlockAsync(sessionId: null, ct);
+
+    /// <summary>
+    /// task_075 H6 fix: per-session context assembly. Working memory entries are
+    /// scoped to <paramref name="sessionId" /> so that concurrent requests cannot
+    /// observe each other's scratchpad / reasoning.
+    /// </summary>
+    public async Task<string> BuildContextBlockAsync(string? sessionId, CancellationToken ct = default)
     {
         var sb = new StringBuilder();
 
-        // Durable facts (non-expired, non-redacted)
+        // Durable facts (non-expired, non-redacted) — shared across sessions (intentional).
         var facts = await _factsStore.SearchFactsAsync(includeExpired: false, ct: ct);
         var redactedFacts = facts
             .Where(f => !f.Entry.ShouldRedact(_config.SensitivityRedactionEnabled))
@@ -57,7 +101,7 @@ public sealed class LayeredMemoryManager
             sb.AppendLine();
         }
 
-        // Recent episodes
+        // Recent episodes — shared across sessions.
         var episodes = await _episodicStore.GetRecentEpisodesAsync(_config.MaxEpisodesInContext, ct);
         if (episodes.Count > 0)
         {
@@ -73,8 +117,9 @@ public sealed class LayeredMemoryManager
             sb.AppendLine();
         }
 
-        // Working memory
-        var working = _workingMemory.GetAll();
+        // Working memory — task_075 H6 fix: per-session view.
+        var workingMemory = ResolveWorkingMemory(sessionId);
+        var working = workingMemory.GetAll();
         var redactedWorking = working
             .Where(kvp => !kvp.Value.Entry.ShouldRedact(_config.SensitivityRedactionEnabled))
             .ToList();
@@ -101,15 +146,25 @@ public sealed class LayeredMemoryManager
     public Task<(string? Value, MemoryEntry? Entry)?> GetFactAsync(string key, CancellationToken ct = default)
         => _factsStore.GetFactAsync(key, ct);
 
-    /// <summary>Set a working memory entry.</summary>
-    public void SetWorking(string key, string value, MemoryEntry? entry = null)
-        => _workingMemory.Set(key, value, entry);
+    /// <summary>
+    ///     Set a working memory entry for the given session (task_075 H6: per-session).
+    ///     When the manager was constructed with the legacy single-session ctor, the
+    ///     sessionId is ignored and the legacy working memory is used.
+    /// </summary>
+    public void SetWorking(string key, string value, MemoryEntry? entry = null, string? sessionId = null)
+        => ResolveWorkingMemory(sessionId).Set(key, value, entry);
 
-    /// <summary>Get a working memory entry.</summary>
-    public string? GetWorking(string key) => _workingMemory.Get(key);
+    /// <summary>Get a working memory entry for the given session.</summary>
+    public string? GetWorking(string key, string? sessionId = null)
+        => ResolveWorkingMemory(sessionId).Get(key);
 
-    /// <summary>Clear working memory (end of session).</summary>
-    public void ClearWorking() => _workingMemory.Clear();
+    /// <summary>
+    ///     Clear working memory (end of session). For per-session managers, only
+    ///     the given session is cleared; for legacy managers the process-wide
+    ///     working memory is cleared.
+    /// </summary>
+    public void ClearWorking(string? sessionId = null)
+        => ResolveWorkingMemory(sessionId).Clear();
 
     /// <summary>Persist a session transcript as an episode.</summary>
     public Task AppendEpisodeAsync(string sessionId, string summary, MemoryEntry entry, CancellationToken ct = default)

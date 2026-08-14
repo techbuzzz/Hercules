@@ -95,17 +95,40 @@ public sealed class WebApiAdapter(
     ReflectionEngine reflection,
     SqliteSessionStore sessions)
 {
-    /// <summary>Инициализировать сессию агента (вызывается один раз при старте сервера).</summary>
-    public void EnsureSessionStarted()
+    /// <summary>
+    ///     Default session id used when the HTTP request doesn't carry an
+    ///     <c>X-Session-Id</c> header. Stable for the agent's lifetime.
+    /// </summary>
+    public string DefaultSessionId => agent.SessionId;
+
+    /// <summary>Инициализировать сессию агента по умолчанию (для boot-time / single-tenant CLI).</summary>
+    public void EnsureSessionStarted() => EnsureSessionStarted(agent.SessionId);
+
+    /// <summary>
+    ///     Инициализировать сессию по идентификатору (для multi-tenant Web API — task_075 H7).
+    ///     HTTP-эндпоинт чата должен вызывать этот метод для каждого уникального
+    ///     <c>X-Session-Id</c> (или сгенерированного) перед первым <c>ChatAsync</c> для этой сессии.
+    /// </summary>
+    public void EnsureSessionStarted(string sessionId)
     {
-        agent.StartSession();
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            throw new ArgumentException("sessionId must be non-empty", nameof(sessionId));
+        }
+        agent.StartSession(sessionId);
     }
 
     // ---- Chat ----
 
-    public async Task<ChatResponseDto> ChatAsync(string message, CancellationToken ct = default)
+    /// <summary>Обработать сообщение в default-сессии (back-compat).</summary>
+    public Task<ChatResponseDto> ChatAsync(string message, CancellationToken ct = default) =>
+        ChatAsync(message, null, ct);
+
+    /// <summary>Обработать сообщение в конкретной сессии (multi-tenant Web API — task_075 H7).</summary>
+    public async Task<ChatResponseDto> ChatAsync(string message, string? sessionId, CancellationToken ct = default)
     {
-        AgentResponse r = await agent.ProcessMessageAsync(message, ct);
+        var effective = string.IsNullOrWhiteSpace(sessionId) ? agent.SessionId : sessionId;
+        AgentResponse r = await agent.HandleAsync(message, options: null, sessionId: effective, externalCt: ct);
         return new ChatResponseDto(
             r.Answer, r.Mode, r.Confidence, r.Provider,
             r.UsedSkill is null

@@ -108,7 +108,7 @@
 | 72 | 45 | [QuotaService cleanup fix and distributed quotas](tasks/task_072.md) | `quota-cleanup-fix` | done |
 | 73 | 45 | [Outbox synced-state and bounded-queue prune fix](tasks/task_073.md) | `outbox-synced-fix` | done |
 | 74 | 45 | [NATS JetStream ack/fail implementation](tasks/task_074.md) | `nats-jetstream-ack` | done |
-| 75 | 46 | [DI lifetime fixes: captive dependency and AgentCore singleton](tasks/task_075.md) | `di-lifetime-fixes` | pending |
+| 75 | 46 | [DI lifetime fixes: captive dependency and AgentCore singleton](tasks/task_075.md) | `di-lifetime-fixes` | done |
 | 76 | 46 | [ResilientLLMClient per-call provider/model](tasks/task_076.md) | `resilient-llm-per-call-provider` | pending |
 | 77 | 46 | [Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController](tasks/task_077.md) | `sync-over-async-sweep` | pending |
 | 78 | 46 | [IHttpClientFactory adoption and standard resilience handlers](tasks/task_078.md) | `httpclient-factory-adoption` | pending |
@@ -153,6 +153,26 @@
 | 93 | 48 | [Mesh observability & centralized logs](tasks/task_093.md) | `web-mesh-observability` | pending |
 | 94 | 48 | [Backup & SLO panel](tasks/task_094.md) | `web-backup-slo-panel` | pending |
 | 95 | 48 | [Security, quotas & rollout panel](tasks/task_095.md) | `web-security-quotas-rollout` | pending |
+
+## Phase 8 — Hercules Studio backend prerequisites
+
+Доработки Hercules.WebApi и новых сервисов, необходимые для [Hercules Studio Epic](../EPIC_Hercules_Studio/README.md). Каждая задача должна быть в `done` до старта соответствующего Studio stage.
+
+| # | Studio Stage | Task | Slug | Status |
+|---|---|------|------|--------|
+| 96 | 1 (pre-PR) | [Port migration 5000 → 8421](tasks/task_096.md) | `port-migration-8421` | pending |
+| 97 | 1 | [Dual API keys (contribute + system)](tasks/task_097.md) | `dual-api-keys` | pending |
+| 98 | 1 | [CheckIn/CheckOut protocol](tasks/task_098.md) | `checkin-checkout-protocol` | pending |
+| 99 | 6 | [System restart protocol](tasks/task_099.md) | `system-restart-protocol` | pending |
+| 100 | 6 | [MCP hot-reload (IConfigReload)](tasks/task_100.md) | `mcp-hot-reload` | pending |
+| 101 | 6 | [SkillSdk (Hercules.SkillSdk NuGet)](tasks/task_101.md) | `skill-sdk` | pending |
+| 102 | 6 | [Context distillation](tasks/task_102.md) | `context-distillation` | pending |
+| 103 | 6 | [PostgreSQL session store](tasks/task_103.md) | `postgres-session-store` | pending |
+| 104 | 8 | [hercules-workflow-server](tasks/task_104.md) | `workflow-server` | pending |
+| 105 | 8 | [Workflow graph model + executor](tasks/task_105.md) | `workflow-graph-executor` | pending |
+| 106 | 8 | [DelegatedTask persistence](tasks/task_106.md) | `delegated-task-persistence` | pending |
+| 107 | 8 | [Parent/child task relationships](tasks/task_107.md) | `parent-child-tasks` | pending |
+| 108 | 8 | [DurableTask checkpoint persistence](tasks/task_108.md) | `checkpoint-persistence` | pending |
 
 ## Workflow
 

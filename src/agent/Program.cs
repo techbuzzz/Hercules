@@ -215,7 +215,7 @@ builder.ConfigureServices((context, services) =>
             Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, "grants.db")));
     services.AddSingleton<Hercules.Tools.Grants.ISkillGrantService, Hercules.Tools.Grants.SkillGrantService>();
 
-    // Layered memory (task_011)
+    // Layered memory (task_011, task_075 H6)
     services.AddSingleton(appConfig.Memory);
     services.AddSingleton<LayeredMemoryConfig>(sp =>
     {
@@ -229,11 +229,17 @@ builder.ConfigureServices((context, services) =>
             MaxFactAgeDays = cfg.MaxFactAgeDays
         };
     });
-    services.AddScoped<IWorkingMemory, WorkingMemoryService>();
     services.AddSingleton<IDurableFactsStore, DurableFactsService>();
     services.AddSingleton<IEpisodicStore, EpisodicStore>();
     services.AddSingleton<LayerMetadataExtractor>();
-    services.AddSingleton<LayeredMemoryManager>();
+    // task_075 H6 fix: LayeredMemoryManager is now singleton and resolves working memory
+    // per session via ISessionStateStore (no more captive dependency on scoped IWorkingMemory).
+    services.AddSingleton<ISessionStateStore, InMemorySessionStateStore>();
+    services.AddSingleton<LayeredMemoryManager>(sp => new LayeredMemoryManager(
+        sp.GetRequiredService<ISessionStateStore>(),
+        sp.GetRequiredService<IDurableFactsStore>(),
+        sp.GetRequiredService<IEpisodicStore>(),
+        sp.GetRequiredService<LayeredMemoryConfig>()));
 
     // Hybrid storage services (task_003)
     services.AddSingleton<IBudgetService, BudgetService>();

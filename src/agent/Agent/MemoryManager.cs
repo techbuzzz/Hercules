@@ -22,11 +22,21 @@ public sealed class MemoryManager(
     public string EntitiesMarkdown => store.ReadEntities();
 
     /// <summary>Собрать контекст для системного промпта (профиль + предпочтения + последний контекст).</summary>
-    public string BuildContextBlock()
+    public string BuildContextBlock() => BuildContextBlock(sessionId: null);
+
+    /// <summary>
+    ///     Собрать контекст для конкретной сессии (task_075 — H6 fix).
+    ///     Когда <paramref name="sessionId" /> задан и <see cref="LayeredMemoryManager" />
+    ///     поддерживает per-session context, рабочая память берётся только для этой сессии —
+    ///     иначе параллельные HTTP-запросы делили бы один <c>IWorkingMemory</c>.
+    /// </summary>
+    public string BuildContextBlock(string? sessionId)
     {
-        // Use layered manager for new layered context (null-safe)
+        // Use layered manager for new layered context (null-safe, session-aware when available)
         string layeredBlock = layered is not null
-            ? layered.BuildContextBlockAsync().GetAwaiter().GetResult()
+            ? (sessionId is not null
+                ? layered.BuildContextBlockAsync(sessionId).GetAwaiter().GetResult()
+                : layered.BuildContextBlockAsync().GetAwaiter().GetResult())
             : "";
 
         // Fall back to legacy profile/prefs/entities for backward compatibility

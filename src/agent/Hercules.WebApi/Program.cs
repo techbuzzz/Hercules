@@ -257,12 +257,25 @@ builder.Services.AddSingleton<QuotaGuard>(sp =>
     new QuotaGuard(
         sp.GetRequiredService<ILogger<QuotaGuard>>()));
 
-// Layered memory (task_011)
-builder.Services.AddScoped<IWorkingMemory, WorkingMemoryService>();
+// Layered memory (task_011, task_075 H6)
 builder.Services.AddSingleton<IDurableFactsStore, DurableFactsService>();
 builder.Services.AddSingleton<IEpisodicStore, EpisodicStore>();
 builder.Services.AddSingleton<LayerMetadataExtractor>();
-builder.Services.AddSingleton<LayeredMemoryManager>();
+// task_075 H6 fix: LayeredMemoryManager is now singleton and resolves working memory
+// per session via ISessionStateStore (no more captive dependency on scoped IWorkingMemory).
+builder.Services.AddSingleton<ISessionStateStore, InMemorySessionStateStore>();
+builder.Services.AddSingleton<LayeredMemoryManager>(sp => new LayeredMemoryManager(
+    sp.GetRequiredService<ISessionStateStore>(),
+    sp.GetRequiredService<IDurableFactsStore>(),
+    sp.GetRequiredService<IEpisodicStore>(),
+    new LayeredMemoryConfig
+    {
+        MaxWorkingMemoryEntries = sp.GetRequiredService<MemoryConfig>().MaxWorkingMemoryEntries,
+        MaxEpisodesInContext = sp.GetRequiredService<MemoryConfig>().MaxEpisodesInContext,
+        DefaultFactTtlMinutes = sp.GetRequiredService<MemoryConfig>().DefaultFactTtlMinutes,
+        SensitivityRedactionEnabled = sp.GetRequiredService<MemoryConfig>().SensitivityRedactionEnabled,
+        MaxFactAgeDays = sp.GetRequiredService<MemoryConfig>().MaxFactAgeDays
+    }));
 
 // Phase 2: Skill packager (export/import .skillpkg) + signing (task_021)
 builder.Services.AddSingleton(appConfig.Marketplace);

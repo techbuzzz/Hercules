@@ -101,14 +101,10 @@ public sealed class AgentCore : IConfigReload
     private readonly Hercules.Mesh.Escalation.IEscalationService? _escalationService;
     private readonly IQuotaService? _quotaService;
     private readonly QuotaGuard? _quotaGuard;
+    private readonly ISessionStateStore _sessionStates;
 
-    private readonly List<ChatTurn> _transcript = new();
-    private readonly object _transcriptLock = new();
     private AgentConfig _cfg;
-    private string _contextBlock = "";
-    private string _lastInput = "";
     private Activity? _currentHandleActivity;
-    private readonly List<ToolTraceEntry> _currentToolTrace = new();
 
     public AgentCore(
         ILLMClient llm,
@@ -119,6 +115,7 @@ public sealed class AgentCore : IConfigReload
         AgentConfig cfg,
         ILogger<AgentCore> logger,
         IJsonRepairService jsonRepair,
+        ISessionStateStore? sessionStates = null,
         ToolRegistry? tools = null,
         ToolPolicyEngine? policy = null,
         IApprovalService? approvals = null,
@@ -156,22 +153,31 @@ public sealed class AgentCore : IConfigReload
         _escalationService = escalationService;
         _quotaService = quotaService;
         _quotaGuard = quotaGuard;
+        // task_075 H7 fix: per-session state is externalised. When the caller
+        // doesn't supply a store, we lazily build a process-wide default — keeps
+        // existing single-tenant callers / unit tests working without churn.
+        _sessionStates = sessionStates ?? new InMemorySessionStateStore();
     }
 
+    /// <summary>
+    ///     Default session id used by CLI / single-tenant callers that don't pass a sessionId explicitly.
+    ///     Stable across the agent's lifetime, but per-session mutable state is still externalised
+    ///     in <see cref="ISessionStateStore" /> so that a future multi-session CLI upgrade is non-breaking.
+    /// </summary>
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
-    public int CommandCount { get; private set; }
 
-    /// <summary>Транскрипт текущей сессии (для сохранения памяти).</summary>
-    public IReadOnlyList<ChatTurn> Transcript
-    {
-        get
-        {
-            lock (_transcriptLock)
-            {
-                return _transcript.ToList();
-            }
-        }
-    }
+    /// <summary>
+    ///     Resolve a <see cref="SessionState" /> by sessionId. Falls back to the default
+    ///     <see cref="SessionId" /> when <paramref name="sessionId" /> is null/empty.
+    /// </summary>
+    private SessionState GetState(string? sessionId) =>
+        _sessionStates.GetOrCreate(string.IsNullOrWhiteSpace(sessionId) ? SessionId : sessionId);
+
+    /// <summary>Command count for the default session (backward-compat accessor for CLI/health endpoints).</summary>
+    public int CommandCount => GetState(SessionId).CommandCount;
+
+    /// <summary>Транскрипт default-сессии (для CLI / reflection-engine).</summary>
+    public IReadOnlyList<ChatTurn> Transcript => GetState(SessionId).Transcript;
 
     /// <summary>
     ///     Применить новую конфигурацию агента без перезагрузки.
@@ -184,35 +190,52 @@ public sealed class AgentCore : IConfigReload
         _phase2Config = config.Phase2;
     }
 
-    /// <summary>Инициализация сессии: создать запись и загрузить контекст памяти.</summary>
-    public void StartSession()
+    /// <summary>Инициализация default-сессии: создать запись и загрузить контекст памяти.</summary>
+    public void StartSession() => StartSession(SessionId);
+
+    /// <summary>Инициализация сессии по идентификатору (для multi-session Web API).</summary>
+    public void StartSession(string sessionId)
     {
-        _sessions.StartSession(SessionId);
-        _contextBlock = _memory.BuildContextBlock();
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            throw new ArgumentException("sessionId must be non-empty", nameof(sessionId));
+        }
+
+        _sessions.StartSession(sessionId);
+        var state = _sessionStates.GetOrCreate(sessionId);
+        state.ContextBlock = _memory.BuildContextBlock(sessionId);
     }
 
-    /// <summary>Обработать один запрос пользователя (без per-request bounded-execution override).</summary>
+    /// <summary>Обработать один запрос пользователя в default-сессии.</summary>
     public Task<AgentResponse> HandleAsync(string input, CancellationToken ct = default) =>
-        HandleAsync(input, null, ct);
+        HandleAsync(input, null, SessionId, ct);
 
-    /// <summary>Обработать один запрос пользователя с optional per-request execution limits.</summary>
+    /// <summary>Обработать один запрос пользователя в default-сессии (с bounded-execution override).</summary>
+    public Task<AgentResponse> HandleAsync(string input, BoundedExecutionOptions? options, CancellationToken ct) =>
+        HandleAsync(input, options, SessionId, ct);
+
+    /// <summary>Обработать один запрос в конкретной сессии (multi-session Web API).</summary>
     public async Task<AgentResponse> HandleAsync(
         string input,
         BoundedExecutionOptions? options,
+        string? sessionId = null,
         CancellationToken externalCt = default)
     {
+        var effectiveSessionId = string.IsNullOrWhiteSpace(sessionId) ? SessionId : sessionId;
+        var state = _sessionStates.GetOrCreate(effectiveSessionId);
+
         var handleSw = Stopwatch.StartNew();
 
         // [task_013] Start agent-handle Activity (enclosing span for the whole request)
         _currentHandleActivity = _otel?.StartActivity("AgentCore.Handle", ActivityKind.Server);
-        _otel?.SetTag(_currentHandleActivity, "hercules.session_id", SessionId);
+        _otel?.SetTag(_currentHandleActivity, "hercules.session_id", effectiveSessionId);
         _otel?.SetTag(_currentHandleActivity, "hercules.input_length", input.Length.ToString());
 
         // [task_013] Ensure activity is stopped on every exit path
         AgentResponse? result = null;
         try
         {
-            result = await HandleAsyncCore(input, options, externalCt, handleSw);
+            result = await HandleAsyncCore(input, options, effectiveSessionId, state, externalCt, handleSw);
         }
         finally
         {
@@ -226,25 +249,27 @@ public sealed class AgentCore : IConfigReload
     private async Task<AgentResponse> HandleAsyncCore(
         string input,
         BoundedExecutionOptions? options,
+        string sessionId,
+        SessionState state,
         CancellationToken externalCt,
         Stopwatch handleSw)
     {
-        CommandCount++;
-        _currentToolTrace.Clear();
+        state.CommandCount++;
+        state.ClearToolTrace();
 
         // [task_027] Build context using ContextBuilder (if available)
         string contextBlock;
         if (_contextBuilder is not null && _memory is not null)
         {
-            var ctxAssembly = await _contextBuilder.BuildContextAsync(input, SessionId, null, externalCt);
+            var ctxAssembly = await _contextBuilder.BuildContextAsync(input, sessionId, null, externalCt);
             contextBlock = ctxAssembly.ContextBlock;
             _logger.LogDebug("[ContextBuilder] Built context: {ItemCount} items, {Tokens} tokens, truncated={Truncated}",
                 ctxAssembly.ItemCount, ctxAssembly.Budget.UsedTokens, ctxAssembly.Truncated);
         }
         else
         {
-            // Legacy path: use _memory.BuildContextBlock() result
-            contextBlock = _contextBlock;
+            // Legacy path: use state.ContextBlock (cached at StartSession time, task_075).
+            contextBlock = state.ContextBlock;
         }
 
         // [task_013] Record handle call metric
@@ -253,7 +278,7 @@ public sealed class AgentCore : IConfigReload
         // [task_012] Guardrail pre-check: hard-cap violations stop immediately
         if (_guardrails is not null && _budgetGuard is not null)
         {
-            var preCheck = _guardrails.CheckLimits(SessionId);
+            var preCheck = _guardrails.CheckLimits(sessionId);
             var degradation = _budgetGuard.CheckAndGetDegradationMessage(preCheck);
             if (degradation is not null)
             {
@@ -267,9 +292,9 @@ public sealed class AgentCore : IConfigReload
                 {
                     _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
                     {
-                        RequestId = SessionId,
+                        RequestId = sessionId,
                         AgentId = "hercules-agent",
-                        SessionId = SessionId,
+                        SessionId = sessionId,
                         Type = Hercules.Mesh.Escalation.EscalationType.BudgetExceeded,
                         Severity = Hercules.Mesh.Escalation.EscalationSeverity.High,
                         ActionPlan = "Return budget-degradation message to user",
@@ -307,9 +332,9 @@ public sealed class AgentCore : IConfigReload
                 {
                     _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
                     {
-                        RequestId = SessionId,
+                        RequestId = sessionId,
                         AgentId = "hercules-agent",
-                        SessionId = SessionId,
+                        SessionId = sessionId,
                         Type = Hercules.Mesh.Escalation.EscalationType.BudgetExceeded,
                         Severity = Hercules.Mesh.Escalation.EscalationSeverity.High,
                         ActionPlan = "Return quota-degradation message to user",
@@ -334,7 +359,7 @@ public sealed class AgentCore : IConfigReload
         }
 
         // Reset request counters at the start of each HandleAsync call
-        _guardrails?.ResetRequestCounters(SessionId);
+        _guardrails?.ResetRequestCounters(sessionId);
 
         // Resolve effective bounded-execution parameters
         var maxIterations = options?.MaxIterations ?? _cfg.MaxToolIterations;
@@ -368,7 +393,7 @@ public sealed class AgentCore : IConfigReload
             route = _router.Route(input);
         }
 
-        _lastInput = input;
+        state.LastInput = input;
         var systemPrompt = BuildSystemPrompt(route.MatchedSkill, contextBlock);
         routeSw.Stop();
 
@@ -388,25 +413,25 @@ public sealed class AgentCore : IConfigReload
             LoopStep.SkillRoute, routeSw.ElapsedMilliseconds, route.MatchedSkill?.Meta.Name ?? "(direct)");
 
         // [Loop] Step 2 — LLM call (with tool iteration)
-        var messages = BuildMessages(systemPrompt, input);
+        var messages = BuildMessages(systemPrompt, input, state);
         loopCtx = loopCtx with { CurrentStep = LoopStep.LlmCall };
         _logger.LogDebug("[Loop] {Step} started", loopCtx.CurrentStep);
         LlmResponse llmResp;
         string toolUsed = "";
         try
         {
-            (llmResp, toolUsed, loopCtx) = await RunWithToolsAsync(messages, loopCtx, route.MatchedSkill?.Meta.Id, ct);
+            (llmResp, toolUsed, loopCtx) = await RunWithToolsAsync(messages, loopCtx, route.MatchedSkill?.Meta.Id, state, ct);
         }
         catch (OperationCanceledException) when (lcts.IsWallClockTimeout)
         {
             _logger.LogWarning("[Loop] Wall-clock timeout reached after {Timeout}s — returning graceful degradation",
                 timeoutSeconds);
             // [task_012] Record elapsed time for guardrails
-            _guardrails?.RecordElapsedTime(SessionId, wallClockTimeout is not null ? (long)wallClockTimeout.Value.TotalMilliseconds : 0);
+            _guardrails?.RecordElapsedTime(sessionId, wallClockTimeout is not null ? (long)wallClockTimeout.Value.TotalMilliseconds : 0);
             _otel?.SetErrorStatus(_currentHandleActivity, "timeout");
             handleSw.Stop();
             OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
-            _ = AuditHandleResultAsync(input, "timeout", toolUsed, route.MatchedSkill?.Meta.Id);
+            _ = AuditHandleResultAsync(input, "timeout", toolUsed, route.MatchedSkill?.Meta.Id, sessionId);
             return new AgentResponse
             {
                 Answer = "Запрос превысил максимальное время выполнения. Попробуйте упростить запрос или увеличить лимит.",
@@ -421,7 +446,7 @@ public sealed class AgentCore : IConfigReload
             _otel?.SetErrorStatus(_currentHandleActivity, ex.Message);
             handleSw.Stop();
             OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
-            _ = AuditHandleResultAsync(input, "error", toolUsed, route.MatchedSkill?.Meta.Id, ex.Message);
+            _ = AuditHandleResultAsync(input, "error", toolUsed, route.MatchedSkill?.Meta.Id, ex.Message, sessionId);
             return new AgentResponse
             {
                 Answer = $"Ошибка обращения к LLM: {ex.Message}",
@@ -438,9 +463,9 @@ public sealed class AgentCore : IConfigReload
         {
             _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
             {
-                RequestId = SessionId,
+                RequestId = sessionId,
                 AgentId = "hercules-agent",
-                SessionId = SessionId,
+                SessionId = sessionId,
                 Type = Hercules.Mesh.Escalation.EscalationType.LowConfidence,
                 Severity = Hercules.Mesh.Escalation.EscalationSeverity.Medium,
                 ActionPlan = $"Return low-confidence response to user (answer: {(answer.Length > 80 ? answer[..80] + "..." : answer)})",
@@ -455,7 +480,7 @@ public sealed class AgentCore : IConfigReload
         {
             var tokensUsed = llmResp.InputTokens + llmResp.OutputTokens;
             var cost = EstimateCost(tokensUsed, llmResp.Provider);
-            _guardrails.RecordLlmUsage(SessionId, llmResp.InputTokens, llmResp.OutputTokens, cost, llmResp.Provider);
+            _guardrails.RecordLlmUsage(sessionId, llmResp.InputTokens, llmResp.OutputTokens, cost, llmResp.Provider);
         }
 
         // [task_056] Record quota usage (tokens, messages)
@@ -467,13 +492,14 @@ public sealed class AgentCore : IConfigReload
         }
 
         // [task_027] Compress tool trace into episodic memory if threshold reached
-        if (_contextBuilder is not null && _currentToolTrace.Count > 0)
+        if (_contextBuilder is not null && state.ToolTrace.Count > 0)
         {
+            var traceSnapshot = state.ToolTrace;
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await _contextBuilder.CompressTraceAsync(_currentToolTrace, SessionId, CancellationToken.None);
+                    await _contextBuilder.CompressTraceAsync(traceSnapshot, sessionId, CancellationToken.None);
                 }
                 catch
                 {
@@ -483,11 +509,8 @@ public sealed class AgentCore : IConfigReload
         }
 
         // [Loop] Step 3 — Transcript update
-        lock (_transcriptLock)
-        {
-            _transcript.Add(new ChatTurn(ChatRole.User, input));
-            _transcript.Add(new ChatTurn(ChatRole.Assistant, answer));
-        }
+        state.AppendTranscript(new ChatTurn(ChatRole.User, input));
+        state.AppendTranscript(new ChatTurn(ChatRole.Assistant, answer));
 
         var mode = !string.IsNullOrEmpty(toolUsed)
             ? "tool"
@@ -496,7 +519,7 @@ public sealed class AgentCore : IConfigReload
         // [Loop] Step 4 — Interaction log
         var logCtx = loopCtx with { CurrentStep = LoopStep.LogInteraction };
         _sessions.LogInteraction(new InteractionLog(
-            SessionId, input, answer, confidence, mode,
+            sessionId, input, answer, confidence, mode,
             route.MatchedSkill?.Meta.Id, llmResp.Provider, DateTime.UtcNow));
 
         // Запись использования навыка (успех = уверенность не low)
@@ -513,7 +536,7 @@ public sealed class AgentCore : IConfigReload
         OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
 
         // 5-6. Пороги (skill creation/improvement)
-        var response = BuildResponse(answer, confidence, llmResp.Provider, route.MatchedSkill, toolUsed, mode);
+        var response = BuildResponse(answer, confidence, llmResp.Provider, route.MatchedSkill, toolUsed, mode, state);
 
         // [task_046] Verification pipeline: check response before returning
         if (_verificationPipeline is not null && _verificationPipeline.Config.Enabled)
@@ -531,9 +554,9 @@ public sealed class AgentCore : IConfigReload
                 var verifyCtx = new VerificationContext
                 {
                     VerificationId = "",
-                    RequestId = SessionId,
+                    RequestId = sessionId,
                     AgentId = "hercules-agent",
-                    SessionId = SessionId,
+                    SessionId = sessionId,
                     ResponseText = answer,
                     Mode = mode,
                     ToolUsed = string.IsNullOrEmpty(toolUsed) ? null : toolUsed,
@@ -564,9 +587,9 @@ public sealed class AgentCore : IConfigReload
                         };
                         _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
                         {
-                            RequestId = SessionId,
+                            RequestId = sessionId,
                             AgentId = "hercules-agent",
-                            SessionId = SessionId,
+                            SessionId = sessionId,
                             Type = Hercules.Mesh.Escalation.EscalationType.PolicyDenial,
                             Severity = sev,
                             ActionPlan = "Block verification-blocked response and notify operator",
@@ -638,8 +661,9 @@ public sealed class AgentCore : IConfigReload
     ///     Контекст обновляется после каждого tool execution для observability.
     /// </summary>
     private async Task<(LlmResponse Response, string ToolUsed, LoopContext Context)> RunWithToolsAsync(
-        List<ChatTurn> messages, LoopContext ctx, string? skillId, CancellationToken ct)
+        List<ChatTurn> messages, LoopContext ctx, string? skillId, SessionState state, CancellationToken ct)
     {
+        var sessionId = state.SessionId;
         var toolUsed = "";
         LlmResponse last = default!;
         var maxIter = ctx.MaxIterations;
@@ -679,7 +703,7 @@ public sealed class AgentCore : IConfigReload
                 {
                     ToolName = toolName,
                     ArgumentsJson = argsJson,
-                    SessionId = SessionId,
+                    SessionId = sessionId,
                     SkillId = skillId
                 });
 
@@ -698,7 +722,7 @@ public sealed class AgentCore : IConfigReload
                     _logger.LogWarning("[Policy] Tool '{Name}' requires approval — {Reason}", toolName, policyResult.DeniedReason);
 
                     // task_010: check if the tool was already approved
-                    if (_approvals is not null && _approvals.IsApproved(toolName, SessionId))
+                    if (_approvals is not null && _approvals.IsApproved(toolName, sessionId))
                     {
                         _logger.LogInformation("[Approval] Tool '{Name}' was pre-approved — proceeding with execution", toolName);
                     }
@@ -720,7 +744,7 @@ public sealed class AgentCore : IConfigReload
             ctx = ctx.AfterTool(toolName);
 
             // [task_012] Record tool call for budget guardrails
-            _guardrails?.RecordToolCall(SessionId);
+            _guardrails?.RecordToolCall(sessionId);
 
             // [task_013] Trace tool execution
             var toolSw = System.Diagnostics.Stopwatch.StartNew();
@@ -784,8 +808,8 @@ public sealed class AgentCore : IConfigReload
 
             toolSw.Stop();
 
-            // [task_027] Record tool trace entry for compression
-            _currentToolTrace.Add(new ToolTraceEntry(
+            // [task_027] Record tool trace entry for compression (per-session, task_075)
+            state.AppendToolTrace(new ToolTraceEntry(
                 toolName,
                 argsJson,
                 toolResult.Output,
@@ -871,17 +895,17 @@ public sealed class AgentCore : IConfigReload
 
     private AgentResponse BuildResponse(
         string answer, string confidence, string provider, Skill? usedSkill,
-        string toolUsed, string mode)
+        string toolUsed, string mode, SessionState state)
     {
         // 5. Порог создания навыка: если однотипный запрос повторился >= SkillCreationThreshold раз,
         //    и для него ещё нет навыка (direct-режим) — предложить создать навык.
         string? proposeSkill = null;
         if (usedSkill is null && _cfg.SkillCreationThreshold > 0)
         {
-            var repeatCount = _sessions.IncrementRequestCount(SkillRouter.Normalize(_lastInput));
+            var repeatCount = _sessions.IncrementRequestCount(SkillRouter.Normalize(state.LastInput));
             if (repeatCount >= _cfg.SkillCreationThreshold)
             {
-                proposeSkill = _lastInput;
+                proposeSkill = state.LastInput;
             }
         }
 
@@ -917,7 +941,7 @@ public sealed class AgentCore : IConfigReload
     ///     Псевдоним для <see cref="HandleAsync" /> — используется Web API адаптером.
     /// </summary>
     public Task<AgentResponse> ProcessMessageAsync(string input, CancellationToken ct = default) =>
-        HandleAsync(input, null, ct);
+        HandleAsync(input, null, SessionId, ct);
 
     /// <summary>
     ///     Оценить навык на конкретном запросе: принудительно использует skill,
@@ -930,23 +954,24 @@ public sealed class AgentCore : IConfigReload
     public async Task<AgentResponse> EvaluateSkillAsync(Skill skill, string input, CancellationToken ct = default)
     {
         _logger.LogDebug("[Eval] Evaluating skill '{Name}' with input: {Input}", skill.Meta.Name, input);
-        CommandCount++;
+        var state = GetState(SessionId);
+        state.CommandCount++;
 
         // [task_027] Build context for eval
         string ctxBlock;
         if (_contextBuilder is not null && _memory is not null)
         {
-            var assembly = await _contextBuilder.BuildContextAsync(input, SessionId, skill, ct);
+            var assembly = await _contextBuilder.BuildContextAsync(input, state.SessionId, skill, ct);
             ctxBlock = assembly.ContextBlock;
         }
         else
         {
-            ctxBlock = _contextBlock;
+            ctxBlock = state.ContextBlock;
         }
 
         // Строим system prompt напрямую с навыком (минуя роутер)
         var systemPrompt = BuildSystemPrompt(skill, ctxBlock);
-        var messages = BuildMessages(systemPrompt, input);
+        var messages = BuildMessages(systemPrompt, input, state);
 
         LlmResponse llmResp;
         string toolUsed = "";
@@ -956,6 +981,7 @@ public sealed class AgentCore : IConfigReload
                 messages,
                 LoopContext.Initial(_cfg.MaxToolIterations, _cfg.MaxWallClockTimeoutSeconds > 0 ? TimeSpan.FromSeconds(_cfg.MaxWallClockTimeoutSeconds) : null, _cfg.MaxRecursionDepth),
                 skill.Meta.Id,
+                state,
                 ct);
         }
         catch (Exception ex)
@@ -1003,10 +1029,11 @@ public sealed class AgentCore : IConfigReload
     /// </summary>
     public async Task EndSessionAsync(CancellationToken ct = default)
     {
+        var state = GetState(SessionId);
         // [Loop] Memory update — сохраняем итоги сессии
-        _logger.LogDebug("[Loop] {Step} started — session={SessionId}", LoopStep.MemoryUpdate, SessionId);
-        await _memory.PersistSessionAsync(Transcript, SessionId, ct);
-        _sessions.EndSession(SessionId);
+        _logger.LogDebug("[Loop] {Step} started — session={SessionId}", LoopStep.MemoryUpdate, state.SessionId);
+        await _memory.PersistSessionAsync(state.Transcript, state.SessionId, ct);
+        _sessions.EndSession(state.SessionId);
         _logger.LogDebug("[Loop] {Step} finished", LoopStep.MemoryUpdate);
     }
 
@@ -1043,13 +1070,9 @@ public sealed class AgentCore : IConfigReload
         return sb.ToString();
     }
 
-    private List<ChatTurn> BuildMessages(string systemPrompt, string input)
+    private List<ChatTurn> BuildMessages(string systemPrompt, string input, SessionState state)
     {
-        List<ChatTurn> snapshot;
-        lock (_transcriptLock)
-        {
-            snapshot = _transcript.TakeLast(8).ToList();
-        }
+        var snapshot = state.TakeLastTranscript(8);
 
         var msgs = new List<ChatTurn> { new(ChatRole.System, systemPrompt) };
         msgs.AddRange(snapshot);
@@ -1094,7 +1117,8 @@ public sealed class AgentCore : IConfigReload
         string result,
         string? toolUsed,
         string? skillId,
-        string? error = null)
+        string? error = null,
+        string? sessionId = null)
     {
         if (_auditService is null) return;
         try
@@ -1108,7 +1132,7 @@ public sealed class AgentCore : IConfigReload
                 action: "handle_completed",
                 target: skillId,
                 details: details,
-                sessionId: SessionId,
+                sessionId: sessionId ?? SessionId,
                 result: result);
         }
         catch
