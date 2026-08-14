@@ -2,7 +2,7 @@
 
 **Phase:** 4
 **Initiative:** 26
-**Status:** pending
+**Status:** in_progress
 **Owner:** —
 **Slug:** `mesh-backends-abstraction`
 
@@ -10,7 +10,17 @@
 Интерфейсы `IMeshBus`, `ITaskQueue` и `IMeshStateStore` отделяют mesh-оркестрацию от конкретных бэкендов. Single-host mesh продолжает работать с in-process очередями и SQLite по умолчанию. Бэкенды подключаются через dependency injection и не влияют на публичный API агента.
 
 ## Acceptance criteria
-- [ ] TBD при старте работы (декомпозиция в sub-tasks)
+- [ ] `IMeshBus` interface with Publish/Subscribe/RequestReply semantics
+- [ ] `ITaskQueue` interface with Enqueue/Dequeue/Ack/DLQ semantics
+- [ ] `IMeshStateStore` interface with Get/Set/CompareAndSet/Watch semantics
+- [ ] `InProcessMeshBus` — Channel-based pub/sub + request/reply (default)
+- [ ] `InProcessTaskQueue` — ConcurrentQueue-based task queue (default)
+- [ ] `InProcessMeshStateStore` — ConcurrentDictionary-based state store (default)
+- [ ] Interfaces live in `src/agent/Mesh/Abstractions/`
+- [ ] In-process impls live in `src/agent/Mesh/InProcess/`
+- [ ] All abstractions registered in `MeshServiceCollectionExtensions`
+- [ ] Unit tests for all three interfaces covering happy path + error cases
+- [ ] `dotnet build` passes; `dotnet test` passes
 
 ## Scope / Likely files
 src/agent/Mesh/Abstractions/IMeshBus.cs, src/agent/Mesh/Abstractions/ITaskQueue.cs, src/agent/Mesh/Abstractions/IMeshStateStore.cs, src/agent/Mesh/InProcess/

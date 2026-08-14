@@ -2,12 +2,14 @@ using Hercules.Agent;
 using Hercules.Budget;
 using Hercules.Config;
 using Hercules.Mesh.A2A;
+using Hercules.Mesh.Abstractions;
 using Hercules.Mesh.Aggregation;
 using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Escalation;
 using Hercules.Mesh.Eval;
+using Hercules.Mesh.InProcess;
 using Hercules.Mesh.Observability;
 using Hercules.Mesh.Policy;
 using Hercules.Mesh.Verification;
@@ -434,6 +436,13 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<MeshCentralizedObservabilityConfig>(),
                 sp.GetRequiredService<IOtelService>(),
                 sp.GetRequiredService<ILogger<MeshObservabilityService>>()));
+
+        // Phase 4: Mesh backend abstractions (task_066) — IMeshBus, ITaskQueue, IMeshStateStore
+        // Default: in-process implementation (Channel-based pub/sub, ConcurrentQueue, ConcurrentDictionary)
+        // Tasks 067–070 will replace these with Redis/NATS/PostgreSQL backends via profile
+        services.AddSingleton<IMeshBus, InProcessMeshBus>();
+        services.AddSingleton<ITaskQueue, InProcessTaskQueue>();
+        services.AddSingleton<IMeshStateStore, InProcessMeshStateStore>();
 
         return services;
     }
