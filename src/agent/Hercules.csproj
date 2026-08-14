@@ -28,6 +28,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
+    <!-- task_078: standard resilience handlers (retry + circuit breaker + timeout) for named HttpClient clients -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
 
     <!-- SQLite для логов сессий и метрик -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />

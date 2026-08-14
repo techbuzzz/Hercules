@@ -10,19 +10,64 @@ namespace Hercules.Degradation;
 /// </summary>
 public sealed class OperatorNotificationService : IDisposable
 {
+    /// <summary>Имя named HttpClient-клиента для webhook/telegram notifications (task_078).</summary>
+    public const string HttpClientName = "operator-notify";
+
     private readonly DegradationConfig _config;
     private readonly ILogger<OperatorNotificationService> _log;
-    private readonly HttpClient _http;
+    private readonly IHttpClientFactory? _httpFactory;
+    private readonly HttpClient? _ownedHttp; // legacy fallback
     private bool _disposed;
 
     public OperatorNotificationService(
         DegradationConfig config,
+        ILogger<OperatorNotificationService> log)
+        : this(config, log, httpFactory: null, http: null)
+    {
+    }
+
+    /// <summary>Legacy / unit-test ctor: явный <paramref name="http"/>.</summary>
+    public OperatorNotificationService(
+        DegradationConfig config,
         ILogger<OperatorNotificationService> log,
-        HttpClient? http = null)
+        HttpClient? http)
+        : this(config, log, httpFactory: null, http: http)
+    {
+    }
+
+    /// <summary>
+    ///     DI-friendly конструктор (task_078): <see cref="IHttpClientFactory"/>
+    ///     named-клиент "operator-notify" с standard resilience handler.
+    /// </summary>
+    public OperatorNotificationService(
+        DegradationConfig config,
+        ILogger<OperatorNotificationService> log,
+        IHttpClientFactory httpFactory)
+        : this(config, log, httpFactory, http: null)
+    {
+    }
+
+    private OperatorNotificationService(
+        DegradationConfig config,
+        ILogger<OperatorNotificationService> log,
+        IHttpClientFactory? httpFactory,
+        HttpClient? http)
     {
         _config = config;
         _log = log;
-        _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        _httpFactory = httpFactory;
+        _ownedHttp = http ?? (httpFactory is null
+            ? new HttpClient { Timeout = TimeSpan.FromSeconds(10) }
+            : null);
+    }
+
+    private HttpClient ResolveClient()
+    {
+        if (_httpFactory is not null)
+        {
+            return _httpFactory.CreateClient(HttpClientName);
+        }
+        return _ownedHttp!;
     }
 
     /// <summary>
@@ -135,7 +180,8 @@ public sealed class OperatorNotificationService : IDisposable
                 timestamp = DateTimeOffset.UtcNow
             };
 
-            var response = await _http.PostAsJsonAsync(
+            using var client = ResolveClient();
+            var response = await client.PostAsJsonAsync(
                 _config.Notifications.WebhookUrl,
                 payload,
                 ct);
@@ -173,7 +219,8 @@ public sealed class OperatorNotificationService : IDisposable
                 parse_mode = "Markdown"
             };
 
-            var response = await _http.PostAsJsonAsync(url, payload, ct);
+            using var client = ResolveClient();
+            var response = await client.PostAsJsonAsync(url, payload, ct);
 
             if (response.IsSuccessStatusCode)
             {
@@ -224,6 +271,6 @@ public sealed class OperatorNotificationService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _http.Dispose();
+        _ownedHttp?.Dispose();
     }
 }

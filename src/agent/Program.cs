@@ -14,6 +14,7 @@ using Hercules.Context;
 using Hercules.Context.Summarizer;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.LLM.Providers;
 using Hercules.Lifecycle;
 using Hercules.Mesh.Transport;
 using Hercules.Mcp;
@@ -25,9 +26,6 @@ using Hercules.Observability;
 using Hercules.Quotas;
 using Hercules.Redaction;
 using Hercules.Security;
-using Hercules.Slo;
-using Hercules.Simulation;
-using Hercules.Reflection;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
 using Hercules.Skills.Marketplace;
@@ -35,6 +33,9 @@ using Hercules.Skills.Quality;
 using Hercules.Skills.Routing;
 using Hercules.Skills.Routing.ScoringComponents;
 using Hercules.Skills.Routing.Deterministic;
+using Hercules.Slo;
+using Hercules.Simulation;
+using Hercules.Reflection;
 using Hercules.Storage;
 using Hercules.Tasks;
 using Hercules.Telegram;
@@ -50,6 +51,7 @@ using HerculesBus.InMemory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 
 // ============================================================================
@@ -94,11 +96,111 @@ builder.ConfigureServices((context, services) =>
     // OpenTelemetry (task_013) — tracing + metrics
     services.AddHerculesOtel(appConfig.Otel);
 
+    // task_078: IHttpClientFactory + named clients with standard resilience handlers.
+    // Default factory for ad-hoc CreateClient() calls; named clients used by tools/transport.
+    services.AddHttpClient();
+
+    var httpResilience = appConfig.Http.Resilience ?? new HttpResilienceConfig();
+
+    // LLM health/probe clients (no resilience — these are already best-effort)
+    services.AddHttpClient(ProviderHealthChecker.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(ProviderHealthChecker.HealthCheckTimeout.TotalSeconds);
+        });
+    services.AddHttpClient(ProviderCapabilityDetector.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(8);
+        });
+    services.AddHttpClient(LMStudioClient.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(5);
+        });
+
+    // Degradation/network: short probe
+    services.AddHttpClient(NetworkMonitor.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(appConfig.OfflineSync.NetworkPollTimeoutSeconds);
+        });
+
+    // Inter-agent transports (retry + circuit breaker + timeout)
+    services.AddHttpClient(IntentTransport.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+        }).AddStandardResilienceHandler(o =>
+        {
+            o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+            o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+            o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+            o.Retry.UseJitter = true;
+            o.CircuitBreaker.FailureRatio = httpResilience.CircuitBreakerFailureRatio;
+            o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(httpResilience.CircuitBreakerSamplingDurationSeconds);
+            o.CircuitBreaker.MinimumThroughput = httpResilience.CircuitBreakerMinimumThroughput;
+            o.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(httpResilience.CircuitBreakerBreakDurationSeconds);
+        });
+
+    services.AddHttpClient(HttpTransportAdapter.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+        }).AddStandardResilienceHandler(o =>
+        {
+            o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+            o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+            o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+            o.Retry.UseJitter = true;
+        });
+
+    services.AddHttpClient(GrpcTransportAdapter.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+        });
+
+    // Outbound tool/agent clients (retry on transient)
+    services.AddHttpClient(HttpTool.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(appConfig.Http.TimeoutSeconds);
+        }).AddStandardResilienceHandler(o =>
+        {
+            o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+            o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+            o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+            o.Retry.UseJitter = true;
+        });
+
+    services.AddHttpClient(A2AClient.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(appConfig.A2A.TimeoutSeconds);
+        }).AddStandardResilienceHandler(o =>
+        {
+            o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+            o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+            o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+            o.Retry.UseJitter = true;
+        });
+
+    // Operator notify (webhook/telegram) — best effort, soft retry
+    services.AddHttpClient(OperatorNotificationService.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(10);
+        }).AddStandardResilienceHandler(o =>
+        {
+            o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+            o.Retry.MaxRetryAttempts = Math.Max(1, httpResilience.RetryCount - 1);
+            o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+            o.Retry.UseJitter = true;
+        });
+
+    // Skill marketplace HTTP import
+    services.AddHttpClient(SkillMarketplace.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromMinutes(2);
+        });
+
     // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
     services.AddSingleton<LlmClientFactory>(sp =>
         new LlmClientFactory(
             sp.GetRequiredService<LlmConfig>(),
-            sp.GetRequiredService<ICacheService>()));
+            sp.GetRequiredService<ICacheService>(),
+            sp.GetService<IHttpClientFactory>()));
     services.AddSingleton<RoleRouter>();
     services.AddSingleton<IJsonRepairService, JsonRepairService>();
     services.AddSingleton<ResilientLLMClient>(sp =>
@@ -108,12 +210,17 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<RoleRouter>(),
             sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
     services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
-    services.AddSingleton<ProviderHealthChecker>();
+    services.AddSingleton<ProviderHealthChecker>(sp =>
+        new ProviderHealthChecker(
+            sp.GetRequiredService<LlmConfig>(),
+            sp.GetService<ILogger<ProviderHealthChecker>>(),
+            sp.GetService<IHttpClientFactory>()));
     services.AddSingleton<ProviderCapabilityDetector>(sp =>
         new ProviderCapabilityDetector(
             sp.GetRequiredService<LlmConfig>(),
             sp.GetService<ILogger<ProviderCapabilityDetector>>(),
-            sp.GetRequiredService<ICacheService>()));
+            sp.GetRequiredService<ICacheService>(),
+            sp.GetService<IHttpClientFactory>()));
 
     // Code execution (Stage 2, v2)
     services.AddSingleton<SandboxOptions>(sp =>
@@ -140,8 +247,15 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<ICodeExecutor, DotnetFileBasedExecutor>();
 
     // Tool ecosystem (Stage 3, v2)
-    services.AddSingleton<ITool, HttpTool>();
-    services.AddSingleton<ITool, A2AClient>();
+    services.AddSingleton<ITool, HttpTool>(sp =>
+        new HttpTool(
+            sp.GetRequiredService<HttpConfig>(),
+            sp.GetRequiredService<ILogger<HttpTool>>(),
+            sp.GetService<IHttpClientFactory>()));
+    services.AddSingleton<ITool, A2AClient>(sp =>
+        new A2AClient(
+            sp.GetRequiredService<A2AConfig>(),
+            sp.GetService<IHttpClientFactory>()));
     services.AddSingleton<ITool, CodeExecutionTool>();
     // Tool policy engine (task_009) — registered before ToolRegistry so it can be injected
     services.AddSingleton(sp =>
@@ -370,7 +484,8 @@ builder.ConfigureServices((context, services) =>
         new SkillMarketplace(
             sp.GetRequiredService<StorageConfig>(),
             sp.GetRequiredService<SkillPackager>(),
-            sp.GetRequiredService<IMarketplaceSigningService>()));
+            sp.GetRequiredService<IMarketplaceSigningService>(),
+            sp.GetService<IHttpClientFactory>()));
     services.AddSingleton<AgentTemplateManager>();
 
     // Fleet templates (task_062)
@@ -495,14 +610,22 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<SqliteSessionStore>(),
             sp.GetRequiredService<OfflineSyncConfig>(),
             sp.GetRequiredService<ILogger<SqliteOutboxStore>>()));
-    services.AddSingleton<NetworkMonitor>();
+    services.AddSingleton<NetworkMonitor>(sp =>
+        new NetworkMonitor(
+            sp.GetRequiredService<OfflineSyncConfig>(),
+            sp.GetRequiredService<ILogger<NetworkMonitor>>(),
+            sp.GetService<IHttpClientFactory>()!));
     services.AddSingleton<INetworkMonitor>(sp => sp.GetRequiredService<NetworkMonitor>());
     services.AddSingleton<OfflineSyncService>(); // BackgroundService
 
     // task_061: Local-first degradation — deterministic fallback, operator notifications, observability
     services.AddSingleton(appConfig.Degradation);
     services.AddSingleton<DegradationObservability>();
-    services.AddSingleton<OperatorNotificationService>();
+    services.AddSingleton<OperatorNotificationService>(sp =>
+        new OperatorNotificationService(
+            sp.GetRequiredService<DegradationConfig>(),
+            sp.GetRequiredService<ILogger<OperatorNotificationService>>(),
+            sp.GetService<IHttpClientFactory>()!));
     services.AddSingleton<DegradationManager>(); // BackgroundService
 
     // task_063: Backup & Recovery — encrypted backup archives, scheduled backups, restore

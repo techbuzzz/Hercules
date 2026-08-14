@@ -505,6 +505,41 @@ public sealed class HttpConfig
     public int RateLimitPerMinute { get; set; } = 60;
     public int TimeoutSeconds { get; set; } = 10;
     public int MaxResponseSizeKb { get; set; } = 256;
+
+    /// <summary>
+    ///     task_078: Polly-style resilience defaults for named HttpClient clients
+    ///     (http-tool, a2a-client, operator-notify, llm-health, network-monitor,
+    ///     skill-marketplace). Bound at registration time in Program.cs.
+    /// </summary>
+    public HttpResilienceConfig Resilience { get; set; } = new();
+}
+
+/// <summary>
+///     Resilience settings used by Microsoft.Extensions.Http.Resilience
+///     (AddStandardResilienceHandler) on named HttpClient clients.
+/// </summary>
+public sealed class HttpResilienceConfig
+{
+    /// <summary>Total request timeout (per attempt + retries).</summary>
+    public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Number of retry attempts on transient failures.</summary>
+    public int RetryCount { get; set; } = 3;
+
+    /// <summary>Base delay between retries (ms); the standard handler applies exponential backoff + jitter.</summary>
+    public int RetryBaseDelayMs { get; set; } = 200;
+
+    /// <summary>Circuit breaker failure ratio (0.0–1.0) over the sampling window.</summary>
+    public double CircuitBreakerFailureRatio { get; set; } = 0.5;
+
+    /// <summary>Sampling window duration (seconds) for circuit breaker.</summary>
+    public int CircuitBreakerSamplingDurationSeconds { get; set; } = 30;
+
+    /// <summary>Minimum throughput in the sampling window before the breaker can trip.</summary>
+    public int CircuitBreakerMinimumThroughput { get; set; } = 10;
+
+    /// <summary>How long the breaker stays open before allowing probes (seconds).</summary>
+    public int CircuitBreakerBreakDurationSeconds { get; set; } = 15;
 }
 
 /// <summary>

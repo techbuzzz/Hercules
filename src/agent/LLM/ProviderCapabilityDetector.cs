@@ -10,10 +10,45 @@ namespace Hercules.LLM;
 ///     Определяет vision, function calling, streaming, max tokens из /v1/models или конфига.
 ///     Results are cached via ICacheService (task_028).
 /// </summary>
-public sealed class ProviderCapabilityDetector(LlmConfig cfg, ILogger<ProviderCapabilityDetector>? logger = null, ICacheService? cache = null)
+public sealed class ProviderCapabilityDetector
 {
-    private readonly ILogger<ProviderCapabilityDetector>? _logger = logger;
-    private readonly ICacheService _cache = cache ?? NullCacheService.Instance;
+    /// <summary>Имя named HttpClient-клиента для LLM capability detection (task_078).</summary>
+    public const string HttpClientName = "llm-capabilities";
+
+    private readonly LlmConfig _cfg;
+    private readonly ILogger<ProviderCapabilityDetector>? _logger;
+    private readonly ICacheService _cache;
+    private readonly IHttpClientFactory? _httpFactory;
+
+    public ProviderCapabilityDetector(
+        LlmConfig cfg,
+        ILogger<ProviderCapabilityDetector>? logger = null,
+        ICacheService? cache = null)
+        : this(cfg, logger, cache, httpFactory: null)
+    {
+    }
+
+    /// <summary>DI-friendly конструктор (task_078): named-клиент "llm-capabilities".</summary>
+    public ProviderCapabilityDetector(
+        LlmConfig cfg,
+        ILogger<ProviderCapabilityDetector>? logger,
+        ICacheService? cache,
+        IHttpClientFactory? httpFactory)
+    {
+        _cfg = cfg;
+        _logger = logger;
+        _cache = cache ?? NullCacheService.Instance;
+        _httpFactory = httpFactory;
+    }
+
+    private HttpClient ResolveClient()
+    {
+        if (_httpFactory is not null)
+        {
+            return _httpFactory.CreateClient(HttpClientName);
+        }
+        return new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+    }
 
     /// <summary>Detect capabilities for a specific provider (cached).</summary>
     public async Task<ProviderCapabilities> DetectAsync(string provider, CancellationToken ct = default)
@@ -33,11 +68,11 @@ public sealed class ProviderCapabilityDetector(LlmConfig cfg, ILogger<ProviderCa
         {
             return provider.ToLowerInvariant() switch
             {
-                "yandexgpt" or "yandex" => await DetectFromOpenAIEndpointAsync("yandexgpt", cfg.YandexGpt.Endpoint, cfg.YandexGpt.Model, ct),
-                "ollama-cloud" => await DetectOllamaModelsAsync("ollama-cloud", cfg.OllamaCloud.Endpoint, cfg.OllamaCloud.Model, ct),
-                "ollama-local" or "ollama" => await DetectOllamaModelsAsync("ollama-local", cfg.OllamaLocal.Endpoint, cfg.OllamaLocal.Model, ct),
-                "lmstudio" => await DetectFromOpenAIEndpointAsync("lmstudio", cfg.OpenAICompatible.Endpoint, cfg.OpenAICompatible.Model, ct),
-                "openai-compatible" => await DetectFromOpenAIEndpointAsync("openai-compatible", cfg.OpenAICompatible.Endpoint, cfg.OpenAICompatible.Model, ct),
+                "yandexgpt" or "yandex" => await DetectFromOpenAIEndpointAsync("yandexgpt", _cfg.YandexGpt.Endpoint, _cfg.YandexGpt.Model, ct),
+                "ollama-cloud" => await DetectOllamaModelsAsync("ollama-cloud", _cfg.OllamaCloud.Endpoint, _cfg.OllamaCloud.Model, ct),
+                "ollama-local" or "ollama" => await DetectOllamaModelsAsync("ollama-local", _cfg.OllamaLocal.Endpoint, _cfg.OllamaLocal.Model, ct),
+                "lmstudio" => await DetectFromOpenAIEndpointAsync("lmstudio", _cfg.OpenAICompatible.Endpoint, _cfg.OpenAICompatible.Model, ct),
+                "openai-compatible" => await DetectFromOpenAIEndpointAsync("openai-compatible", _cfg.OpenAICompatible.Endpoint, _cfg.OpenAICompatible.Model, ct),
                 _ => new ProviderCapabilities { Provider = provider }
             };
         }
@@ -51,8 +86,8 @@ public sealed class ProviderCapabilityDetector(LlmConfig cfg, ILogger<ProviderCa
     /// <summary>Detect capabilities for all configured providers.</summary>
     public async Task<IReadOnlyList<ProviderCapabilities>> DetectAllAsync(CancellationToken ct = default)
     {
-        var providers = new[] { cfg.Provider }
-            .Concat(cfg.Fallback)
+        var providers = new[] { _cfg.Provider }
+            .Concat(_cfg.Fallback)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -64,7 +99,7 @@ public sealed class ProviderCapabilityDetector(LlmConfig cfg, ILogger<ProviderCa
     private async Task<ProviderCapabilities> DetectFromOpenAIEndpointAsync(
         string name, string endpoint, string configuredModel, CancellationToken ct)
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        using var http = ResolveClient();
         var baseUrl = endpoint.TrimEnd('/').Replace("/v1", "");
         var modelsUrl = $"{baseUrl}/v1/models";
 
@@ -126,7 +161,7 @@ public sealed class ProviderCapabilityDetector(LlmConfig cfg, ILogger<ProviderCa
     private async Task<ProviderCapabilities> DetectOllamaModelsAsync(
         string name, string endpoint, string configuredModel, CancellationToken ct)
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        using var http = ResolveClient();
         var baseUrl = endpoint.TrimEnd('/').Replace("/v1", "");
         var tagsUrl = $"{baseUrl}/api/tags";
 

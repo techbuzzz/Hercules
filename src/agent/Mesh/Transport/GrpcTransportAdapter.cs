@@ -18,6 +18,9 @@ namespace Hercules.Mesh.Transport;
 /// </remarks>
 public sealed class GrpcTransportAdapter : ITransport, IDisposable
 {
+    /// <summary>Имя named HttpClient-клиента для gRPC HTTP/2 transport (task_078).</summary>
+    public const string HttpClientName = "grpc-transport";
+
     private readonly ICapabilityLookup _registry;
     private readonly HttpClient _http;
     private readonly GrpcChannel _channel;

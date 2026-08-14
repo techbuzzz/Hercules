@@ -111,7 +111,7 @@
 | 75 | 46 | [DI lifetime fixes: captive dependency and AgentCore singleton](tasks/task_075.md) | `di-lifetime-fixes` | done |
 | 76 | 46 | [ResilientLLMClient per-call provider/model](tasks/task_076.md) | `resilient-llm-per-call-provider` | pending |
 | 77 | 46 | [Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController](tasks/task_077.md) | `sync-over-async-sweep` | pending |
-| 78 | 46 | [IHttpClientFactory adoption and standard resilience handlers](tasks/task_078.md) | `httpclient-factory-adoption` | pending |
+| 78 | 46 | [IHttpClientFactory adoption and standard resilience handlers](tasks/task_078.md) | `httpclient-factory-adoption` | done |
 | 79 | 46 | [Real health checks infrastructure](tasks/task_079.md) | `health-checks-infrastructure` | pending |
 | 80 | 46 | [Graceful shutdown and drain](tasks/task_080.md) | `graceful-shutdown-drain` | pending |
 | 81 | 46 | [Kestrel tuning, framework rate limiter, compression, output cache](tasks/task_081.md) | `kestrel-rate-limiter-compression` | pending |

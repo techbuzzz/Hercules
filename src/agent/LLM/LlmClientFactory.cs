@@ -10,17 +10,27 @@ namespace Hercules.LLM;
 ///     Provider clients are cached via ICacheService (task_028) for reuse across requests.
 ///     task_077: cache uses a sync in-memory lookup so the sync <see cref="Create" /> path
 ///     never blocks on async I/O. Async callers can use <see cref="CreateAsync" />.
+///     task_078: <see cref="IHttpClientFactory"/> проброшен в <see cref="LMStudioClient"/>
+///     для использования named-клиента "lm-studio-info" вместо per-call <c>new HttpClient</c>.
 /// </summary>
 public sealed class LlmClientFactory : ILLMClientFactory
 {
     private readonly LlmConfig _cfg;
     private readonly ICacheService _cache;
+    private readonly IHttpClientFactory? _httpFactory;
     private readonly ConcurrentDictionary<string, ILLMClient> _localCache = new(StringComparer.OrdinalIgnoreCase);
 
     public LlmClientFactory(LlmConfig cfg, ICacheService? cache = null)
+        : this(cfg, cache, httpFactory: null)
+    {
+    }
+
+    /// <summary>DI-friendly конструктор (task_078): пробрасывает <see cref="IHttpClientFactory"/>.</summary>
+    public LlmClientFactory(LlmConfig cfg, ICacheService? cache, IHttpClientFactory? httpFactory)
     {
         _cfg = cfg ?? throw new ArgumentNullException(nameof(cfg));
         _cache = cache ?? NullCacheService.Instance;
+        _httpFactory = httpFactory;
     }
 
     /// <summary>Создать клиент по имени провайдера. Кэширует результат в локальном concurrent-кеше.</summary>
@@ -66,7 +76,7 @@ public sealed class LlmClientFactory : ILLMClientFactory
                 MaxTokens = _cfg.OpenAICompatible.MaxTokens,
                 DisplayName = "LM Studio",
                 Description = "LM Studio local inference"
-            }),
+            }, logger: null, httpFactory: _httpFactory),
             "openai-compatible" => new OpenAICompatibleClient(_cfg.OpenAICompatible, "openai-compatible"),
             _ => throw new ArgumentException($"Неизвестный LLM-провайдер: {provider}")
         };

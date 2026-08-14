@@ -9,14 +9,17 @@ using Hercules.Config;
 using Hercules.Config.Rollout;
 using Hercules.Context;
 using Hercules.Context.Summarizer;
+using Hercules.Degradation;
 using Hercules.Lifecycle;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.LLM.Providers;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Mesh.A2A;
 using Hercules.Mesh.Auth;
 using Hercules.Observability;
+using Hercules.Offline;
 using Hercules.Quotas;
 using Hercules.Redaction;
 using Hercules.Simulation;
@@ -43,6 +46,7 @@ using Hercules.WebApi.Controllers;
 using HerculesBus;
 using HerculesBus.Core;
 using HerculesBus.InMemory;
+using Microsoft.Extensions.Http.Resilience;
 
 // ============================================================================
 //  Hercules Web API — ASP.NET Core Minimal API поверх ядра агента.
@@ -108,11 +112,106 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
     builder.Services.AddHerculesOtel(appConfig.Otel);
 builder.Services.AddSingleton(webCfg);
 
+// task_078: IHttpClientFactory + named clients with standard resilience handlers
+builder.Services.AddHttpClient();
+
+var httpResilience = appConfig.Http.Resilience ?? new HttpResilienceConfig();
+
+// LLM health/probe clients
+builder.Services.AddHttpClient(ProviderHealthChecker.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(ProviderHealthChecker.HealthCheckTimeout.TotalSeconds);
+});
+builder.Services.AddHttpClient(ProviderCapabilityDetector.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(8);
+});
+builder.Services.AddHttpClient(LMStudioClient.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(5);
+});
+builder.Services.AddHttpClient(NetworkMonitor.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(appConfig.OfflineSync.NetworkPollTimeoutSeconds);
+});
+
+// Inter-agent transports (retry + circuit breaker + timeout)
+builder.Services.AddHttpClient(IntentTransport.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+}).AddStandardResilienceHandler(o =>
+{
+    o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+    o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+    o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+    o.Retry.UseJitter = true;
+    o.CircuitBreaker.FailureRatio = httpResilience.CircuitBreakerFailureRatio;
+    o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(httpResilience.CircuitBreakerSamplingDurationSeconds);
+    o.CircuitBreaker.MinimumThroughput = httpResilience.CircuitBreakerMinimumThroughput;
+    o.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(httpResilience.CircuitBreakerBreakDurationSeconds);
+});
+
+builder.Services.AddHttpClient(HttpTransportAdapter.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+}).AddStandardResilienceHandler(o =>
+{
+    o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+    o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+    o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+    o.Retry.UseJitter = true;
+});
+
+builder.Services.AddHttpClient(GrpcTransportAdapter.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+});
+
+// Outbound tool/agent clients
+builder.Services.AddHttpClient(HttpTool.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(appConfig.Http.TimeoutSeconds);
+}).AddStandardResilienceHandler(o =>
+{
+    o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+    o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+    o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+    o.Retry.UseJitter = true;
+});
+
+builder.Services.AddHttpClient(A2AClient.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(appConfig.A2A.TimeoutSeconds);
+}).AddStandardResilienceHandler(o =>
+{
+    o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+    o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+    o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+    o.Retry.UseJitter = true;
+});
+
+builder.Services.AddHttpClient(OperatorNotificationService.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(10);
+}).AddStandardResilienceHandler(o =>
+{
+    o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+    o.Retry.MaxRetryAttempts = Math.Max(1, httpResilience.RetryCount - 1);
+    o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+    o.Retry.UseJitter = true;
+});
+
+builder.Services.AddHttpClient(SkillMarketplace.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromMinutes(2);
+});
+
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
 builder.Services.AddSingleton<LlmClientFactory>(sp =>
         new LlmClientFactory(
             sp.GetRequiredService<LlmConfig>(),
-            sp.GetRequiredService<ICacheService>()));
+            sp.GetRequiredService<ICacheService>(),
+            sp.GetService<IHttpClientFactory>()));
 builder.Services.AddSingleton<RoleRouter>();
 builder.Services.AddSingleton<IJsonRepairService, JsonRepairService>();
 builder.Services.AddSingleton<ResilientLLMClient>(sp =>
@@ -122,12 +221,17 @@ builder.Services.AddSingleton<ResilientLLMClient>(sp =>
         sp.GetRequiredService<RoleRouter>(),
         sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
 builder.Services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
-builder.Services.AddSingleton<ProviderHealthChecker>();
+builder.Services.AddSingleton<ProviderHealthChecker>(sp =>
+    new ProviderHealthChecker(
+        sp.GetRequiredService<LlmConfig>(),
+        sp.GetService<ILogger<ProviderHealthChecker>>(),
+        sp.GetService<IHttpClientFactory>()));
 builder.Services.AddSingleton<ProviderCapabilityDetector>(sp =>
     new ProviderCapabilityDetector(
         sp.GetRequiredService<LlmConfig>(),
         sp.GetService<ILogger<ProviderCapabilityDetector>>(),
-        sp.GetRequiredService<ICacheService>()));
+        sp.GetRequiredService<ICacheService>(),
+        sp.GetService<IHttpClientFactory>()));
 
 // Code execution (Stage 2, v2)
 builder.Services.AddSingleton<SandboxOptions>(sp =>
@@ -154,8 +258,15 @@ builder.Services.AddSingleton<SandboxOptions>(sp =>
 builder.Services.AddSingleton<ICodeExecutor, DotnetFileBasedExecutor>();
 
 // Tool ecosystem (Stage 3, v2)
-builder.Services.AddSingleton<ITool, HttpTool>();
-builder.Services.AddSingleton<ITool, A2AClient>();
+builder.Services.AddSingleton<ITool, HttpTool>(sp =>
+    new HttpTool(
+        sp.GetRequiredService<HttpConfig>(),
+        sp.GetRequiredService<ILogger<HttpTool>>(),
+        sp.GetService<IHttpClientFactory>()));
+builder.Services.AddSingleton<ITool, A2AClient>(sp =>
+    new A2AClient(
+        sp.GetRequiredService<A2AConfig>(),
+        sp.GetService<IHttpClientFactory>()));
 builder.Services.AddSingleton<ITool, CodeExecutionTool>();
 // Tool policy engine (task_009)
 builder.Services.AddSingleton(sp =>
@@ -354,7 +465,8 @@ builder.Services.AddSingleton<SkillMarketplace>(sp =>
     new SkillMarketplace(
         sp.GetRequiredService<StorageConfig>(),
         sp.GetRequiredService<SkillPackager>(),
-        sp.GetRequiredService<IMarketplaceSigningService>()));
+        sp.GetRequiredService<IMarketplaceSigningService>(),
+        sp.GetService<IHttpClientFactory>()));
 builder.Services.AddSingleton<AgentTemplateManager>();
 
 // Template simulation (task_031)

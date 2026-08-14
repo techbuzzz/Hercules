@@ -13,6 +13,9 @@ namespace Hercules.Skills;
 /// </summary>
 public sealed class SkillMarketplace
 {
+    /// <summary>Имя named HttpClient-клиента для импорта пакетов по URL (task_078).</summary>
+    public const string HttpClientName = "skill-marketplace";
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -22,22 +25,31 @@ public sealed class SkillMarketplace
     private readonly SkillPackager _packager;
     private readonly IMarketplaceSigningService? _signing;
     private readonly DependencyResolver _resolver;
+    private readonly IHttpClientFactory? _httpFactory;
 
     public SkillMarketplace(StorageConfig cfg, SkillPackager packager)
+        : this(cfg, packager, signing: null, httpFactory: null)
     {
-        DirectoryPath = Path.Combine(cfg.DataRoot, cfg.SkillsDir, cfg.Phase2?.MarketplaceDir ?? "marketplace");
-        Directory.CreateDirectory(DirectoryPath);
-        _packager = packager ?? throw new ArgumentNullException(nameof(packager));
-        _resolver = new DependencyResolver();
     }
 
     public SkillMarketplace(StorageConfig cfg, SkillPackager packager, IMarketplaceSigningService signing)
+        : this(cfg, packager, signing, httpFactory: null)
+    {
+    }
+
+    /// <summary>DI-friendly конструктор (task_078): использует named-клиент для HTTP-импорта.</summary>
+    public SkillMarketplace(
+        StorageConfig cfg,
+        SkillPackager packager,
+        IMarketplaceSigningService? signing,
+        IHttpClientFactory? httpFactory)
     {
         DirectoryPath = Path.Combine(cfg.DataRoot, cfg.SkillsDir, cfg.Phase2?.MarketplaceDir ?? "marketplace");
         Directory.CreateDirectory(DirectoryPath);
         _packager = packager ?? throw new ArgumentNullException(nameof(packager));
         _signing = signing;
         _resolver = new DependencyResolver();
+        _httpFactory = httpFactory;
     }
 
     /// <summary>Каталог маркетплейса (data/Skills/marketplace/).</summary>
@@ -242,7 +254,9 @@ public sealed class SkillMarketplace
     /// </summary>
     public async Task<Skill> ImportFromUrlAsync(string url, HttpClient? httpClient = null, CancellationToken ct = default)
     {
-        var client = httpClient ?? new HttpClient();
+        HttpClient client = httpClient
+            ?? _httpFactory?.CreateClient(HttpClientName)
+            ?? new HttpClient();
         var bytes = await client.GetByteArrayAsync(url, ct);
 
         // Проверяем размер

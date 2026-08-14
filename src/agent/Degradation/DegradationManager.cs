@@ -211,12 +211,12 @@ public sealed class DegradationManager : BackgroundService
             }
             else
             {
-                // Check using HTTP
-                using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-                var response = await http.GetAsync("https://www.google.com", ct);
+                // task_078: removed hardcoded google.com ping. If no NetworkMonitor
+                // is registered, mark network as Degraded (cannot determine status
+                // without a configured probe endpoint).
                 state.RecordCheck(
-                    response.IsSuccessStatusCode ? ServiceHealth.Healthy : ServiceHealth.Degraded,
-                    response.IsSuccessStatusCode ? "Network available" : "Network check failed");
+                    ServiceHealth.Degraded,
+                    "NetworkMonitor not registered; cannot probe network health");
             }
         }
         catch (Exception ex)
