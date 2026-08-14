@@ -1,0 +1,12 @@
+{
+  "cpu": "ARM Cortex-A7 dual-core @ 1.0 GHz (MediaTek MT7688) or ESP32-S3",
+  "ram_gb": 1,
+  "storage_gb": 8,
+  "storage_type": "eMMC or SPI flash",
+  "network": "Ethernet 100 Mbps or Wi-Fi 802.11n (4G LTE optional)",
+  "power_watts": 5,
+  "operating_temp": "-10°C to +45°C (indoor) / -25°C to +55°C (outdoor models)",
+  "form_factor": "Internal MDB/CCTalk controller board",
+  "supported_sensors": ["temperature", "inventory-shelf", "coin-acceptor", "bill-validator", "door-switch", "motion-detector"],
+  "notes": "Typically integrated into existing MDB/CCTalk vending controller. Requires TTL or RS232 serial to USB adapter for connectivity. Outdoor models need extended temperature range components and UV-resistant enclosure."
+}

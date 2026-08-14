@@ -1,0 +1,12 @@
+{
+  "cpu": "ARM Cortex-A53 4-core @ 1.2 GHz or ESP32-S3 dual-core",
+  "ram_gb": 2,
+  "storage_gb": 16,
+  "storage_type": "eMMC or SPI flash",
+  "network": "LTE Cat-M1 / NB-IoT + GPS",
+  "power_watts": 3,
+  "operating_temp": "-40°C to +85°C",
+  "form_factor": "IP67 sealed enclosure, magnet mount",
+  "supported_sensors": ["temperature", "gps", "door-switch", "shock-detector", "humidity"],
+  "notes": "Dedicated cold-chain tracker device with LTE-M/NB-IoT for remote areas. Temperature probe: PT1000 RTD, IP68, food-grade. Battery: 3.7V LiPo 5000mAh minimum for 72h operation."
+}

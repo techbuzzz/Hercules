@@ -1,0 +1,7 @@
+{
+  "default_degradation_mode": "Degraded",
+  "allowed_offline_skills": ["sensor-monitor", "irrigation-control", "alert-notify"],
+  "enable_outbox_queue": true,
+  "sync_interval_seconds": 60,
+  "enable_queued_work": true
+}

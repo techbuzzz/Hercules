@@ -1,0 +1,7 @@
+{
+  "name": "Cold-Chain Logistics Fleet",
+  "description": "Fleet template for cold-chain logistics: temperature monitoring, GPS tracking, spoilage alerts, compliance logging. Validated for refrigerated transport.",
+  "version": 1,
+  "vertical": "cold-chain",
+  "agent_template_file": "cold-chain.agenttemplate"
+}

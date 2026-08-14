@@ -1,0 +1,19 @@
+{
+  "metric_thresholds": {
+    "cpu_pct": { "warning": 80.0, "critical": 95.0, "unit": "%", "window_seconds": 30 },
+    "memory_pct": { "warning": 85.0, "critical": 95.0, "unit": "%", "window_seconds": 30 },
+    "disk_pct": { "warning": 85.0, "critical": 95.0, "unit": "%", "window_seconds": 300 },
+    "temperature_c": { "warning": 28.0, "critical": 35.0, "unit": "°C", "window_seconds": 30 },
+    "humidity_pct": { "warning": 65.0, "critical": 80.0, "unit": "%", "window_seconds": 60 },
+    "task_queue_depth": { "warning": 30.0, "critical": 80.0, "unit": "", "window_seconds": 30 },
+    "pdu_load_pct": { "warning": 75.0, "critical": 90.0, "unit": "%", "window_seconds": 60 }
+  },
+  "alert_rules": [
+    { "id": "server-room-overheat", "description": "Server room temperature critical — risk of thermal shutdown", "severity": "Critical", "condition": "temperature_c > 35", "cooldown_seconds": 60 },
+    { "id": "server-room-high-humidity", "description": "Server room humidity critically high — condensation/corrosion risk", "severity": "Critical", "condition": "humidity_pct > 80", "cooldown_seconds": 300 },
+    { "id": "server-room-pdu-overload", "description": "PDU load critical — risk of circuit breaker trip", "severity": "Critical", "condition": "pdu_load_pct > 90", "cooldown_seconds": 120 },
+    { "id": "server-room-task-queue-full", "description": "Task queue at capacity — incident response delayed", "severity": "Warning", "condition": "task_queue_depth > 80", "cooldown_seconds": 60 }
+  ],
+  "min_log_level": "Warning",
+  "metrics_export_interval_seconds": 15
+}

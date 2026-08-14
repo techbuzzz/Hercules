@@ -1,0 +1,19 @@
+{
+  "metric_thresholds": {
+    "cpu_pct": { "warning": 70.0, "critical": 90.0, "unit": "%", "window_seconds": 60 },
+    "memory_pct": { "warning": 75.0, "critical": 90.0, "unit": "%", "window_seconds": 60 },
+    "disk_pct": { "warning": 80.0, "critical": 95.0, "unit": "%", "window_seconds": 300 },
+    "temperature_c": { "warning": -18.0, "critical": -15.0, "unit": "°C", "window_seconds": 30 },
+    "battery_pct": { "warning": 20.0, "critical": 10.0, "unit": "%", "window_seconds": 60 },
+    "task_queue_depth": { "warning": 20.0, "critical": 50.0, "unit": "", "window_seconds": 60 },
+    "gps_signal_strength": { "warning": -100.0, "critical": -110.0, "unit": "dBm", "window_seconds": 60 }
+  },
+  "alert_rules": [
+    { "id": "cold-chain-breach", "description": "Cold-chain temperature breach — cargo spoilage risk", "severity": "Critical", "condition": "temperature_c > -15", "cooldown_seconds": 60 },
+    { "id": "cold-chain-low-battery", "description": "Tracker battery critically low — risk of tracking loss", "severity": "Critical", "condition": "battery_pct < 10", "cooldown_seconds": 600 },
+    { "id": "cold-chain-gps-loss", "description": "GPS signal lost — vehicle may be in dead zone or tampered", "severity": "Warning", "condition": "gps_signal_strength < -110", "cooldown_seconds": 300 },
+    { "id": "cold-chain-queue-full", "description": "Task queue at capacity", "severity": "Warning", "condition": "task_queue_depth > 50", "cooldown_seconds": 120 }
+  ],
+  "min_log_level": "Information",
+  "metrics_export_interval_seconds": 15
+}

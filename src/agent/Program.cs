@@ -6,6 +6,7 @@ using Hercules.CLI;
 using Hercules.CodeExecution;
 using Hercules.Degradation;
 using Hercules.Edge;
+using Hercules.Fleet;
 using Hercules.Cache;
 using Hercules.Config;
 using Hercules.Context;
@@ -343,6 +344,9 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<SkillPackager>(),
             sp.GetRequiredService<IMarketplaceSigningService>()));
     services.AddSingleton<AgentTemplateManager>();
+
+    // Fleet templates (task_062)
+    services.AddSingleton<IFleetTemplateManager, FleetTemplateManager>();
 
     // Template simulation (task_031)
     services.AddSingleton<ISensorSimulator>(sp =>

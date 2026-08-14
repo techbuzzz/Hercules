@@ -342,6 +342,9 @@ public sealed class Phase2Config
     public string ToolsDir { get; set; } = "Tools";
     public string TemplatesDir { get; set; } = "Templates";
 
+    /// <summary>Fleet templates directory (data/FleetTemplates/). Default: "FleetTemplates".</summary>
+    public string FleetTemplatesDir { get; set; } = "FleetTemplates";
+
     /// <summary>
     ///     Веса scoring-компонентов для семантической маршрутизации (task_022).
     ///     Key = имя компонента, Value = вес [0..1]. Сумма не обязана равняться 1 (нормализуется в engine).
