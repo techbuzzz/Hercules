@@ -6,6 +6,7 @@ using Hercules.Budget;
 using Hercules.Cache;
 using Hercules.CodeExecution;
 using Hercules.Config;
+using Hercules.Config.Rollout;
 using Hercules.Context;
 using Hercules.Context.Summarizer;
 using Hercules.Lifecycle;
@@ -439,6 +440,13 @@ builder.Services.AddSingleton<ILifecycleService>(sp =>
         sp.GetRequiredService<ITransport>(),
         sp.GetRequiredService<ILogger<LifecycleService>>()));
 
+// task_058: Config & policy rollout — staged signed bundles with expiry and LKG fallback
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ConfigRollout);
+builder.Services.AddSingleton<ISignedBundleValidator, SignedBundleValidator>();
+builder.Services.AddSingleton<LocalConfigValidator>();
+builder.Services.AddSingleton<IRolloutManager, RolloutManager>();
+builder.Services.AddHostedService<RolloutExpiryChecker>();
+
 // --- CORS: разрешаем localhost-источники фронтенда ---
 const string corsPolicy = "frontend";
 builder.Services.AddCors(options =>
@@ -556,6 +564,7 @@ app.MapSkillQuality();
 app.MapMemory();
 app.MapStats();
 app.MapConfig();
+app.MapRollout();
 app.MapMesh();
 app.MapMeshObservability();
 app.MapLifecycle();

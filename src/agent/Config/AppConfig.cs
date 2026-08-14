@@ -141,6 +141,48 @@ public sealed class AppConfig
 
     /// <summary>Rate limits and quotas config (task_056): per-agent, per-skill, per-user, per-tenant limits on calls, tokens, cost, storage, message volume.</summary>
     public QuotasConfig Quotas { get; set; } = new();
+
+    /// <summary>Config and policy rollout config (task_058): signed bundles, staged rollout, expiry, LKG fallback.</summary>
+    public ConfigRolloutConfig ConfigRollout { get; set; } = new();
+}
+
+/// <summary>
+///     Конфигурация staged rollout конфигурационных и policy бандлов (task_058).
+/// </summary>
+public sealed class ConfigRolloutConfig
+{
+    /// <summary>Включить staged rollout. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Директория для хранения бандлов и state. Default: "data/rollout".</summary>
+    public string BundlesPath { get; set; } = "data/rollout";
+
+    /// <summary>Требовать подпись бандлов. Default: false.</summary>
+    public bool RequireBundleSignature { get; set; } = false;
+
+    /// <summary>Требовать, чтобы подписант был в trusted signers list. Default: false.</summary>
+    public bool RequireTrustedSigner { get; set; } = false;
+
+    /// <summary>Автоматически продвигать в staging после apply. Default: true.</summary>
+    public bool AutoPromoteToStaging { get; set; } = true;
+
+    /// <summary>Default signer ID для подписи бандлов. Default: "hercules-agent".</summary>
+    public string DefaultSignerId { get; set; } = "hercules-agent";
+
+    /// <summary>Максимальный размер payload бандла в байтах. Default: 5 MB.</summary>
+    public int MaxPayloadBytes { get; set; } = 5 * 1024 * 1024;
+
+    /// <summary>Список staging groups (если bundle.StagingGroup не в списке — apply отклоняется). Пустой = все разрешены.</summary>
+    public List<string> AllowedStagingGroups { get; set; } = new();
+
+    /// <summary>Включить автопроверку expiry по таймеру (через BackgroundService). Default: true.</summary>
+    public bool EnableExpiryChecker { get; set; } = true;
+
+    /// <summary>Интервал проверки expiry в минутах. Default: 5.</summary>
+    public int ExpiryCheckIntervalMinutes { get; set; } = 5;
+
+    /// <summary>Default время на staging в минутах. Default: 60.</summary>
+    public int DefaultStagingDurationMinutes { get; set; } = 60;
 }
 
 /// <summary>

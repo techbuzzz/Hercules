@@ -104,10 +104,10 @@
 |---|------------|------|------|--------|
 | 53 | 32 | [Mesh dashboard](tasks/task_053.md) | `mesh-dashboard` | done |
 | 54 | 33 | [Централизованные логи и трейсы](tasks/task_054.md) | `centralized-observability` | done |
-| 55 | 40 | [Security operations](tasks/task_055.md) | `security-ops` | pending |
-| 56 | 35 | [Rate limits и квоты](tasks/task_056.md) | `rate-limits-quotas` | pending |
+| 55 | 40 | [Security operations](tasks/task_055.md) | `security-ops` | done |
+| 56 | 35 | [Rate limits и квоты](tasks/task_056.md) | `rate-limits-quotas` | done |
 | 57 | 36 | [Управление жизненным циклом](tasks/task_057.md) | `lifecycle-management` | done |
-| 58 | 41 | [Configuration и policy rollout](tasks/task_058.md) | `config-policy-rollout` | pending |
+| 58 | 41 | [Configuration и policy rollout](tasks/task_058.md) | `config-policy-rollout` | done |
 | 59 | 37 | [Edge provisioning](tasks/task_059.md) | `edge-provisioning` | pending |
 | 60 | 38 | [Offline resilience](tasks/task_060.md) | `offline-resilience` | pending |
 | 61 | 42 | [Local-first degradation](tasks/task_061.md) | `local-degradation` | pending |
