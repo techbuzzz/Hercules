@@ -57,7 +57,7 @@ public static class SkillHarnessController
                             EvaluatedAt = regressionResult.EvaluatedAt
                         },
                         req?.RecordedBy ?? "user",
-                        req?.Reason ?? "manual");
+                        req?.Reason ?? "manual", ct);
 
                     return Results.Created($"/api/skills/{id}/eval/baseline", record);
                 }

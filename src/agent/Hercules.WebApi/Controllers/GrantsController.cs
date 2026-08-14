@@ -1,114 +1,102 @@
 using Hercules.Tools.Grants;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
 ///     WebAPI endpoints для управления skill grants (least-privilege).
 /// </summary>
-[ApiController]
-[Route("api/grants")]
-public sealed class GrantsController : ControllerBase
+public static class GrantsController
 {
-    private readonly ISkillGrantService _grants;
-
-    public GrantsController(ISkillGrantService grants)
+    public static void MapGrants(this IEndpointRouteBuilder app)
     {
-        _grants = grants ?? throw new ArgumentNullException(nameof(grants));
-    }
-
-    /// <summary>Получить все grants для навыка.</summary>
-    [HttpGet("{skillId}")]
-    public async Task<IActionResult> GetGrants(string skillId, [FromQuery] string? sessionId = null)
-    {
-        var grants = await _grants.GetGrantsAsync(skillId, sessionId);
-        return Ok(grants.Select(g => new GrantDto
+        // GET /api/grants/{skillId}?sessionId=xxx — все grants для навыка.
+        app.MapGet("/api/grants/{skillId}", async (string skillId, string? sessionId, ISkillGrantService grants) =>
         {
-            Id = g.Id,
-            SkillId = g.SkillId,
-            Permission = g.Permission.ToString(),
-            Scope = g.Scope.ToString(),
-            SessionId = g.SessionId,
-            Grantor = g.Grantor,
-            GrantedAt = g.GrantedAt,
-            ExpiresAt = g.ExpiresAt,
-            IsActive = g.IsActive
-        }));
-    }
+            var results = await grants.GetGrantsAsync(skillId, sessionId);
+            return Results.Ok(results.Select(g => new GrantDto
+            {
+                Id = g.Id,
+                SkillId = g.SkillId,
+                Permission = g.Permission.ToString(),
+                Scope = g.Scope.ToString(),
+                SessionId = g.SessionId,
+                Grantor = g.Grantor,
+                GrantedAt = g.GrantedAt,
+                ExpiresAt = g.ExpiresAt,
+                IsActive = g.IsActive
+            }));
+        }).WithName("GetGrants");
 
-    /// <summary>Выдать grant навыку.</summary>
-    [HttpPost]
-    public async Task<IActionResult> Grant([FromBody] GrantRequestDto dto)
-    {
-        if (string.IsNullOrWhiteSpace(dto.SkillId) || string.IsNullOrWhiteSpace(dto.Permission))
+        // POST /api/grants — выдать grant навыку.
+        app.MapPost("/api/grants", async (GrantRequestDto dto, ISkillGrantService grants) =>
         {
-            return BadRequest("SkillId and Permission are required.");
-        }
+            if (string.IsNullOrWhiteSpace(dto.SkillId) || string.IsNullOrWhiteSpace(dto.Permission))
+            {
+                return Results.BadRequest("SkillId and Permission are required.");
+            }
 
-        var request = new GrantRequest
+            var request = new GrantRequest
+            {
+                SkillId = dto.SkillId,
+                Permission = dto.Permission,
+                Scope = Enum.TryParse<GrantScope>(dto.Scope, true, out var s) ? s : GrantScope.Skill,
+                SessionId = dto.SessionId,
+                DurationMinutes = dto.DurationMinutes,
+                Grantor = dto.Grantor ?? "user"
+            };
+
+            var grant = await grants.GrantAsync(request);
+            return Results.Created($"/api/grants/{grant.SkillId}/{grant.Id}", new GrantDto
+            {
+                Id = grant.Id,
+                SkillId = grant.SkillId,
+                Permission = grant.Permission.ToString(),
+                Scope = grant.Scope.ToString(),
+                SessionId = grant.SessionId,
+                Grantor = grant.Grantor,
+                GrantedAt = grant.GrantedAt,
+                ExpiresAt = grant.ExpiresAt,
+                IsActive = grant.IsActive
+            });
+        }).WithName("GrantSkill");
+
+        // DELETE /api/grants/{skillId}?permission=xxx — удалить все grants навыка (или конкретный permission).
+        app.MapDelete("/api/grants/{skillId}", async (string skillId, string? permission, ISkillGrantService grants) =>
         {
-            SkillId = dto.SkillId,
-            Permission = dto.Permission,
-            Scope = Enum.TryParse<GrantScope>(dto.Scope, true, out var s) ? s : GrantScope.Skill,
-            SessionId = dto.SessionId,
-            DurationMinutes = dto.DurationMinutes,
-            Grantor = dto.Grantor ?? "user"
-        };
+            await grants.RevokeAsync(skillId, permission);
+            return Results.NoContent();
+        }).WithName("RevokeGrants");
 
-        var grant = await _grants.GrantAsync(request);
-        return Created($"/api/grants/{grant.SkillId}/{grant.Id}", new GrantDto
+        // DELETE /api/grants/by-id/{grantId} — удалить конкретный grant по ID.
+        app.MapDelete("/api/grants/by-id/{grantId}", async (string grantId, ISkillGrantService grants) =>
         {
-            Id = grant.Id,
-            SkillId = grant.SkillId,
-            Permission = grant.Permission.ToString(),
-            Scope = grant.Scope.ToString(),
-            SessionId = grant.SessionId,
-            Grantor = grant.Grantor,
-            GrantedAt = grant.GrantedAt,
-            ExpiresAt = grant.ExpiresAt,
-            IsActive = grant.IsActive
-        });
-    }
+            await grants.RevokeByIdAsync(grantId);
+            return Results.NoContent();
+        }).WithName("RevokeGrantById");
 
-    /// <summary>Удалить все grants навыка (или конкретный permission).</summary>
-    [HttpDelete("{skillId}")]
-    public async Task<IActionResult> Revoke(string skillId, [FromQuery] string? permission = null)
-    {
-        await _grants.RevokeAsync(skillId, permission);
-        return NoContent();
-    }
-
-    /// <summary>Удалить конкретный grant по ID.</summary>
-    [HttpDelete("by-id/{grantId}")]
-    public async Task<IActionResult> RevokeById(string grantId)
-    {
-        await _grants.RevokeByIdAsync(grantId);
-        return NoContent();
-    }
-
-    /// <summary>Проверить, есть ли у навыка конкретный permission.</summary>
-    [HttpGet("{skillId}/check")]
-    public async Task<IActionResult> Check(string skillId, [FromQuery] string permission, [FromQuery] string? sessionId = null)
-    {
-        if (string.IsNullOrWhiteSpace(permission))
+        // GET /api/grants/{skillId}/check?permission=xxx&sessionId=xxx — проверить наличие permission.
+        app.MapGet("/api/grants/{skillId}/check", async (string skillId, string permission, string? sessionId, ISkillGrantService grants) =>
         {
-            return BadRequest("Permission query parameter is required.");
-        }
+            if (string.IsNullOrWhiteSpace(permission))
+            {
+                return Results.BadRequest("Permission query parameter is required.");
+            }
 
-        var perm = Hercules.Tools.Policy.ToolPermissionExtensions.ParseFromString(permission);
-        var result = await _grants.CheckPermissionAsync(skillId, perm, sessionId);
-        return Ok(new GrantCheckResultDto
-        {
-            SkillId = skillId,
-            Permission = permission,
-            IsValid = result.IsValid,
-            GrantedPermissions = result.GrantedPermissions.ToString(),
-            MissingPermissions = result.MissingPermissions.ToString(),
-            IsExpired = result.IsExpired,
-            NotFound = result.NotFound,
-            Scope = result.Scope.ToString(),
-            Message = result.Message
-        });
+            var perm = Hercules.Tools.Policy.ToolPermissionExtensions.ParseFromString(permission);
+            var result = await grants.CheckPermissionAsync(skillId, perm, sessionId);
+            return Results.Ok(new GrantCheckResultDto
+            {
+                SkillId = skillId,
+                Permission = permission,
+                IsValid = result.IsValid,
+                GrantedPermissions = result.GrantedPermissions.ToString(),
+                MissingPermissions = result.MissingPermissions.ToString(),
+                IsExpired = result.IsExpired,
+                NotFound = result.NotFound,
+                Scope = result.Scope.ToString(),
+                Message = result.Message
+            });
+        }).WithName("CheckGrant");
     }
 }
 

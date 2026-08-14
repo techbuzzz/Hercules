@@ -114,12 +114,9 @@ public static class RolloutController
         group.MapGet("/bundle/{id}", (string id, IRolloutManager manager) =>
         {
             var bundle = manager.GetBundle(id);
-            if (bundle == null)
-            {
-                return Results.NotFound(new { error = $"Bundle '{id}' not found." });
-            }
-
-            return Results.Ok(new { bundle });
+            return bundle == null
+                ? Results.NotFound(new { error = $"Bundle '{id}' not found." })
+                : Results.Ok(new { bundle });
         }).WithName("GetRolloutBundle");
     }
 }

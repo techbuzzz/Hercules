@@ -1,69 +1,58 @@
 using Hercules.Backup;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
 ///     Backup and restore endpoints (task_063).
 /// </summary>
-[ApiController]
-[Route("api/backups")]
-public sealed class BackupController : ControllerBase
+public static class BackupController
 {
-    private readonly IBackupService _backup;
-
-    public BackupController(IBackupService backup)
+    public static void MapBackups(this IEndpointRouteBuilder app)
     {
-        _backup = backup ?? throw new ArgumentNullException(nameof(backup));
-    }
+        // POST /api/backups — создать новый backup archive.
+        app.MapPost("/api/backups", async (CreateBackupRequest? request, IBackupService backup, CancellationToken ct) =>
+        {
+            var result = await backup.CreateBackupAsync(request?.Passphrase, ct);
+            return Results.Ok(result);
+        }).WithName("CreateBackup");
 
-    /// <summary>Creates a new backup archive.</summary>
-    [HttpPost]
-    public async Task<ActionResult<BackupResult>> CreateBackup(
-        [FromBody] CreateBackupRequest? request,
-        CancellationToken ct)
-    {
-        var result = await _backup.CreateBackupAsync(request?.Passphrase, ct);
-        return Ok(result);
-    }
+        // GET /api/backups — список всех доступных backups.
+        app.MapGet("/api/backups", async (IBackupService backup, CancellationToken ct) =>
+        {
+            var backups = await backup.ListBackupsAsync(ct);
+            return Results.Ok(backups);
+        }).WithName("ListBackups");
 
-    /// <summary>Lists all available backups.</summary>
-    [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<BackupSummary>>> ListBackups(CancellationToken ct)
-    {
-        var backups = await _backup.ListBackupsAsync(ct);
-        return Ok(backups);
-    }
+        // POST /api/backups/{backupId}/restore — восстановить из backup archive.
+        app.MapPost("/api/backups/{backupId}/restore", async (string backupId, RestoreBackupRequest? request, IBackupService backup, CancellationToken ct) =>
+        {
+            var result = await backup.RestoreAsync(backupId, request?.Passphrase, request?.TargetDir, ct);
+            if (!result.Success && result.Errors.Count > 0)
+            {
+                return Results.UnprocessableEntity(result);
+            }
 
-    /// <summary>Restores a backup archive.</summary>
-    [HttpPost("{backupId}/restore")]
-    public async Task<ActionResult<RestoreResult>> Restore(
-        string backupId,
-        [FromBody] RestoreBackupRequest? request,
-        CancellationToken ct)
-    {
-        var result = await _backup.RestoreAsync(backupId, request?.Passphrase, request?.TargetDir, ct);
-        if (!result.Success && result.Errors.Count > 0)
-            return UnprocessableEntity(result);
-        return Ok(result);
-    }
+            return Results.Ok(result);
+        }).WithName("RestoreBackup");
 
-    /// <summary>Verifies integrity of a backup archive.</summary>
-    [HttpGet("{backupId}/verify")]
-    public async Task<ActionResult<VerifyResult>> Verify(string backupId, [FromQuery] string? passphrase, CancellationToken ct)
-    {
-        var result = await _backup.VerifyBackupAsync(backupId, passphrase, ct);
-        if (!result.Valid)
-            return UnprocessableEntity(result);
-        return Ok(result);
-    }
+        // GET /api/backups/{backupId}/verify — проверить целостность backup archive.
+        app.MapGet("/api/backups/{backupId}/verify", async (string backupId, string? passphrase, IBackupService backup, CancellationToken ct) =>
+        {
+            var result = await backup.VerifyBackupAsync(backupId, passphrase, ct);
+            if (!result.Valid)
+            {
+                return Results.UnprocessableEntity(result);
+            }
 
-    /// <summary>Deletes a backup archive.</summary>
-    [HttpDelete("{backupId}")]
-    public async Task<ActionResult> Delete(string backupId, CancellationToken ct)
-    {
-        await _backup.DeleteBackupAsync(backupId, ct);
-        return NoContent();
+            return Results.Ok(result);
+        }).WithName("VerifyBackup");
+
+        // DELETE /api/backups/{backupId} — удалить backup archive.
+        app.MapDelete("/api/backups/{backupId}", async (string backupId, IBackupService backup, CancellationToken ct) =>
+        {
+            await backup.DeleteBackupAsync(backupId, ct);
+            return Results.NoContent();
+        }).WithName("DeleteBackup");
     }
 }
 

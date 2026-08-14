@@ -21,7 +21,7 @@ public static class ConfigController
     public static void MapConfig(this IEndpointRouteBuilder app)
     {
         // GET /api/config — текущая "живая" конфигурация
-        app.MapGet("/api/config", (RuntimeConfigStore store) => { return Results.Ok(new { config = store.Current, source = "runtime" }); }).WithName("GetConfig");
+        app.MapGet("/api/config", (RuntimeConfigStore store) => Results.Ok(new { config = store.Current, source = "runtime" })).WithName("GetConfig");
 
         // PUT /api/config — полная замена конфигурации
         app.MapPut("/api/config", (JsonElement body, RuntimeConfigStore store) =>

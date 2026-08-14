@@ -11,40 +11,29 @@ namespace Hercules.WebApi.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/marketplace")]
-public sealed class MarketplaceController : ControllerBase
+public sealed class MarketplaceController(SkillMarketplace marketplace, SkillPackager packager) : ControllerBase
 {
-    private readonly SkillMarketplace _marketplace;
-    private readonly SkillPackager _packager;
-
-    public MarketplaceController(SkillMarketplace marketplace, SkillPackager packager)
-    {
-        _marketplace = marketplace;
-        _packager = packager;
-    }
-
     /// <summary>Список всех пакетов в маркетплейсе.</summary>
     [HttpGet]
     public ActionResult<List<MarketplaceEntry>> List()
     {
-        return Ok(_marketplace.List());
+        return Ok(marketplace.List());
     }
 
     /// <summary>Поиск пакетов по запросу.</summary>
     [HttpGet("search")]
     public ActionResult<List<MarketplaceEntry>> Search([FromQuery] string q)
     {
-        if (string.IsNullOrWhiteSpace(q))
-        {
-            return Ok(_marketplace.List());
-        }
-        return Ok(_marketplace.Search(q));
+        return Ok(string.IsNullOrWhiteSpace(q)
+            ? marketplace.List()
+            : marketplace.Search(q));
     }
 
     /// <summary>Проверить integrity (hash + signature) пакета.</summary>
     [HttpGet("{file}/verify")]
     public ActionResult<PackageVerificationResult> Verify(string file)
     {
-        var result = _marketplace.VerifyPackage(file);
+        var result = marketplace.VerifyPackage(file);
         if (!result.IsValid && result.Error is not null)
         {
             return BadRequest(result);
@@ -56,7 +45,7 @@ public sealed class MarketplaceController : ControllerBase
     [HttpGet("{file}/deps")]
     public ActionResult<List<DependencyInfo>> GetDeps(string file)
     {
-        var deps = _marketplace.GetDependencies(file);
+        var deps = marketplace.GetDependencies(file);
         return Ok(deps);
     }
 
@@ -71,7 +60,7 @@ public sealed class MarketplaceController : ControllerBase
 
         try
         {
-            var skill = _marketplace.Install(req.FileName, req.ConflictResolution);
+            var skill = marketplace.Install(req.FileName, req.ConflictResolution);
             return Ok(skill.Meta);
         }
         catch (FileNotFoundException ex)
@@ -91,7 +80,7 @@ public sealed class MarketplaceController : ControllerBase
 
         try
         {
-            var skills = _marketplace.InstallWithDeps(req.FileName);
+            var skills = marketplace.InstallWithDeps(req.FileName);
             return Ok(skills.Select(s => s.Meta).ToList());
         }
         catch (FileNotFoundException ex)
@@ -104,7 +93,7 @@ public sealed class MarketplaceController : ControllerBase
     [HttpDelete("{file}")]
     public ActionResult Remove(string file)
     {
-        var removed = _marketplace.Remove(file);
+        var removed = marketplace.Remove(file);
         if (!removed)
         {
             return NotFound($"Package '{file}' not found in marketplace.");
@@ -115,7 +104,7 @@ public sealed class MarketplaceController : ControllerBase
     /// <summary>Опубликовать .skillpkg в маркетплейс (multipart upload).</summary>
     [HttpPost("publish")]
     [RequestSizeLimit(52428800)] // 50 MB
-    public async Task<ActionResult> Publish(IFormFile package, CancellationToken ct)
+    public async Task<ActionResult> Publish(IFormFile? package, CancellationToken ct)
     {
         if (package is null || package.Length == 0)
         {
@@ -133,12 +122,15 @@ public sealed class MarketplaceController : ControllerBase
 
             try
             {
-                var destPath = _marketplace.Publish(tempPath);
+                var destPath = marketplace.Publish(tempPath);
                 return Ok(new { path = destPath, fileName = Path.GetFileName(destPath) });
             }
             finally
             {
-                if (System.IO.File.Exists(tempPath)) System.IO.File.Delete(tempPath);
+                if (System.IO.File.Exists(tempPath))
+                {
+                    System.IO.File.Delete(tempPath);
+                }
             }
         }
         catch (FileNotFoundException ex)
@@ -154,7 +146,7 @@ public sealed class MarketplaceController : ControllerBase
     /// <summary>Импортировать .skillpkg в локальные навыки (multipart upload).</summary>
     [HttpPost("import")]
     [RequestSizeLimit(52428800)] // 50 MB
-    public async Task<ActionResult<SkillMeta>> Import(IFormFile package, [FromQuery] string? conflict, CancellationToken ct)
+    public async Task<ActionResult<SkillMeta>> Import(IFormFile? package, [FromQuery] string? conflict, CancellationToken ct)
     {
         if (package is null || package.Length == 0)
         {
@@ -174,12 +166,15 @@ public sealed class MarketplaceController : ControllerBase
                 var resolution = Enum.TryParse<ConflictResolution>(conflict, ignoreCase: true, out var parsed)
                     ? parsed
                     : ConflictResolution.Rename;
-                var skill = _packager.Import(tempPath, resolution);
+                var skill = packager.Import(tempPath, resolution);
                 return Ok(skill.Meta);
             }
             finally
             {
-                if (System.IO.File.Exists(tempPath)) System.IO.File.Delete(tempPath);
+                if (System.IO.File.Exists(tempPath))
+                {
+                    System.IO.File.Delete(tempPath);
+                }
             }
         }
         catch (Exception ex)
@@ -199,7 +194,7 @@ public sealed class MarketplaceController : ControllerBase
 
         try
         {
-            var skill = await _marketplace.ImportFromUrlAsync(req.Url, httpClient: null, ct);
+            var skill = await marketplace.ImportFromUrlAsync(req.Url, httpClient: null, ct);
             return Ok(skill.Meta);
         }
         catch (HttpRequestException ex)

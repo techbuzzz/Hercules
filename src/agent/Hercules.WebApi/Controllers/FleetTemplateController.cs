@@ -1,89 +1,80 @@
 using Hercules.Fleet;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
-///     WebAPI controller for fleet templates (task_062).
+///     Minimal API endpoints for fleet templates (task_062).
 ///     Lists, shows info, and applies fleet-level bundles: agent template + monitoring + policy + offline defaults.
 /// </summary>
-[ApiController]
-[Route("api/fleet-templates")]
-public sealed class FleetTemplateController : ControllerBase
+public static class FleetTemplateController
 {
-    private readonly IFleetTemplateManager _manager;
-
-    public FleetTemplateController(IFleetTemplateManager manager)
+    public static void MapFleetTemplates(this IEndpointRouteBuilder app)
     {
-        _manager = manager ?? throw new ArgumentNullException(nameof(manager));
-    }
+        // GET /api/fleet-templates — список всех доступных fleet templates.
+        app.MapGet("/api/fleet-templates", (IFleetTemplateManager manager) =>
+        {
+            var entries = manager.List();
+            return Results.Ok(entries.Select(e => new FleetTemplateEntryDto(
+                e.FileName,
+                e.Name,
+                e.Description,
+                e.Vertical,
+                e.Version,
+                e.FilePath)).ToList());
+        }).WithName("ListFleetTemplates");
 
-    /// <summary>List all available fleet templates.</summary>
-    [HttpGet]
-    public ActionResult<List<FleetTemplateEntryDto>> List()
-    {
-        var entries = _manager.List();
-        return Ok(entries.Select(e => new FleetTemplateEntryDto(
-            e.FileName,
-            e.Name,
-            e.Description,
-            e.Vertical,
-            e.Version,
-            e.FilePath)).ToList());
-    }
+        // GET /api/fleet-templates/{fileName} — манифест fleet template.
+        app.MapGet("/api/fleet-templates/{fileName}", (string fileName, IFleetTemplateManager manager) =>
+        {
+            try
+            {
+                var manifest = manager.GetManifest(fileName);
+                return Results.Ok(new FleetTemplateManifestDto(
+                    manifest.Name,
+                    manifest.Description,
+                    manifest.Version,
+                    manifest.Vertical,
+                    manifest.AgentTemplateFile,
+                    manifest.HardwareBom,
+                    manifest.Monitoring,
+                    manifest.Policy,
+                    manifest.Offline));
+            }
+            catch (FileNotFoundException ex)
+            {
+                return Results.NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(ex.Message);
+            }
+        }).WithName("GetFleetTemplate");
 
-    /// <summary>Get fleet template manifest.</summary>
-    [HttpGet("{fileName}")]
-    public ActionResult<FleetTemplateManifestDto> Get(string fileName)
-    {
-        try
+        // POST /api/fleet-templates/{fileName}/apply — применить fleet template:
+        // extract agent template и write fleet config files.
+        app.MapPost("/api/fleet-templates/{fileName}/apply", (string fileName, ApplyFleetTemplateRequest? body, IFleetTemplateManager manager) =>
         {
-            var manifest = _manager.GetManifest(fileName);
-            return Ok(new FleetTemplateManifestDto(
-                manifest.Name,
-                manifest.Description,
-                manifest.Version,
-                manifest.Vertical,
-                manifest.AgentTemplateFile,
-                manifest.HardwareBom,
-                manifest.Monitoring,
-                manifest.Policy,
-                manifest.Offline));
-        }
-        catch (FileNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
-
-    /// <summary>Apply a fleet template: extract agent template and write fleet config files.</summary>
-    [HttpPost("{fileName}/apply")]
-    public ActionResult<ApplyFleetTemplateResultDto> Apply(string fileName, [FromBody] ApplyFleetTemplateRequest? body)
-    {
-        var conflict = body?.ConflictResolution ?? FleetConflictResolution.Rename;
-        try
-        {
-            var result = _manager.Apply(fileName, conflict);
-            return Ok(new ApplyFleetTemplateResultDto(
-                result.TemplateName,
-                result.Vertical,
-                result.AgentTemplateApplied,
-                result.InstalledConfigFiles,
-                result.Errors,
-                result.HasErrors));
-        }
-        catch (FileNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+            var conflict = body?.ConflictResolution ?? FleetConflictResolution.Rename;
+            try
+            {
+                var result = manager.Apply(fileName, conflict);
+                return Results.Ok(new ApplyFleetTemplateResultDto(
+                    result.TemplateName,
+                    result.Vertical,
+                    result.AgentTemplateApplied,
+                    result.InstalledConfigFiles,
+                    result.Errors,
+                    result.HasErrors));
+            }
+            catch (FileNotFoundException ex)
+            {
+                return Results.NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(ex.Message);
+            }
+        }).WithName("ApplyFleetTemplate");
     }
 }
 

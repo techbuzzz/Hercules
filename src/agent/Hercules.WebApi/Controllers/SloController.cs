@@ -1,5 +1,4 @@
 using Hercules.Slo;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Hercules.WebApi.Controllers;
 
@@ -7,72 +6,59 @@ namespace Hercules.WebApi.Controllers;
 ///     Operational SLO endpoints (task_064).
 ///     Availability, response-time, data-loss, recovery-time, cost tracking and reporting.
 /// </summary>
-[ApiController]
-[Route("api/slos")]
-public sealed class SloController : ControllerBase
+public static class SloController
 {
-    private readonly ISloService _slo;
-
-    public SloController(ISloService slo)
+    public static void MapSlos(this IEndpointRouteBuilder app)
     {
-        _slo = slo ?? throw new ArgumentNullException(nameof(slo));
-    }
+        // GET /api/slos — сводка по SLO-статусу всех вертикалей.
+        app.MapGet("/api/slos", (ISloService slo) =>
+        {
+            var summary = slo.GetSummary();
+            return Results.Ok(summary);
+        }).WithName("SloSummary");
 
-    /// <summary>Returns summary of all verticals SLO status.</summary>
-    [HttpGet]
-    public ActionResult<SloSummary> GetSummary()
-    {
-        var summary = _slo.GetSummary();
-        return Ok(summary);
-    }
+        // GET /api/slos/{vertical}/definition — SLO-определение для вертикали.
+        app.MapGet("/api/slos/{vertical}/definition", (string vertical, ISloService slo) =>
+        {
+            var def = slo.GetDefinition(vertical);
+            if (def == null)
+            {
+                return Results.NotFound(new { error = $"No SLO definition found for vertical: {vertical}" });
+            }
 
-    /// <summary>Returns the SLO definition for a specific vertical.</summary>
-    [HttpGet("{vertical}/definition")]
-    public ActionResult<SloDefinition> GetDefinition(string vertical)
-    {
-        var def = _slo.GetDefinition(vertical);
-        if (def == null)
-            return NotFound(new { error = $"No SLO definition found for vertical: {vertical}" });
-        return Ok(def);
-    }
+            return Results.Ok(def);
+        }).WithName("SloDefinition");
 
-    /// <summary>Returns the current SLO status for a vertical.</summary>
-    [HttpGet("{vertical}")]
-    public ActionResult<SloStatus> GetStatus(string vertical)
-    {
-        var status = _slo.GetStatus(vertical);
-        return Ok(status);
-    }
+        // GET /api/slos/{vertical} — текущий SLO-статус для вертикали.
+        app.MapGet("/api/slos/{vertical}", (string vertical, ISloService slo) =>
+        {
+            var status = slo.GetStatus(vertical);
+            return Results.Ok(status);
+        }).WithName("SloStatus");
 
-    /// <summary>Returns a full SLO report for a vertical (status + definition + compliance).</summary>
-    [HttpGet("{vertical}/report")]
-    public ActionResult<SloReport> GetReport(string vertical)
-    {
-        var report = _slo.GetReport(vertical);
-        if (report.Definition.Vertical == null)
-            return NotFound(new { error = $"No SLO definition found for vertical: {vertical}" });
-        return Ok(report);
-    }
+        // GET /api/slos/{vertical}/report — полный SLO-отчёт по вертикали.
+        app.MapGet("/api/slos/{vertical}/report", (string vertical, ISloService slo) =>
+        {
+            var report = slo.GetReport(vertical);
+            return Results.Ok(report);
+        }).WithName("SloReport");
 
-    /// <summary>
-    ///     Acknowledge a specific SLO violation (suppresses repeat alerts).
-    /// </summary>
-    [HttpPost("{vertical}/ack/{violationId}")]
-    public ActionResult Acknowledge(string vertical, string violationId, [FromQuery] string? acknowledgedBy = null)
-    {
-        var who = acknowledgedBy ?? "operator";
-        _slo.AcknowledgeViolation(vertical, violationId, who);
-        return Ok(new { acknowledged = true, violationId, by = who });
-    }
+        // POST /api/slos/{vertical}/ack/{violationId}?acknowledgedBy=xxx —
+        // подтвердить конкретное нарушение (подавляет повторные алерты).
+        app.MapPost("/api/slos/{vertical}/ack/{violationId}", (string vertical, string violationId, string? acknowledgedBy, ISloService slo) =>
+        {
+            var who = acknowledgedBy ?? "operator";
+            slo.AcknowledgeViolation(vertical, violationId, who);
+            return Results.Ok(new { acknowledged = true, violationId, by = who });
+        }).WithName("SloAcknowledgeViolation");
 
-    /// <summary>
-    ///     Acknowledge all active SLO violations for a vertical.
-    /// </summary>
-    [HttpPost("{vertical}/ack")]
-    public ActionResult AcknowledgeAll(string vertical, [FromQuery] string? acknowledgedBy = null)
-    {
-        var who = acknowledgedBy ?? "operator";
-        _slo.AcknowledgeAll(vertical, who);
-        return Ok(new { acknowledgedAll = true, vertical, by = who });
+        // POST /api/slos/{vertical}/ack?acknowledgedBy=xxx —
+        // подтвердить все активные нарушения для вертикали.
+        app.MapPost("/api/slos/{vertical}/ack", (string vertical, string? acknowledgedBy, ISloService slo) =>
+        {
+            var who = acknowledgedBy ?? "operator";
+            slo.AcknowledgeAll(vertical, who);
+            return Results.Ok(new { acknowledgedAll = true, vertical, by = who });
+        }).WithName("SloAcknowledgeAll");
     }
 }

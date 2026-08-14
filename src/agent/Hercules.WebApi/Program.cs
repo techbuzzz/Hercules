@@ -301,16 +301,15 @@ builder.Services.AddSingleton<ISkillScoringEngine>(sp =>
     new SkillScoringEngine(
         sp.GetRequiredService<SkillManager>(),
         sp.GetRequiredService<Phase2Config>(),
-        new ISkillScorer[]
-        {
+        [
             sp.GetRequiredService<EmbeddingScorer>(),
             sp.GetRequiredService<LexicalScorer>(),
             sp.GetRequiredService<SchemaCompatibilityScorer>(),
             sp.GetRequiredService<HistoricalQualityScorer>(),
             sp.GetRequiredService<LatencyScorer>(),
             sp.GetRequiredService<PolicyEligibilityScorer>(),
-            sp.GetRequiredService<SkillQualityScorer>(),
-        },
+            sp.GetRequiredService<SkillQualityScorer>()
+        ],
         sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>(),
         sp.GetService<EmbeddingScorer>()));
 // Task 023: Deterministic router (offline-safe keyword + tag + type matching)
@@ -504,8 +503,8 @@ app.MapGet("/", () => Results.Ok(new
 {
     name = "Hercules Web API",
     version = "1.0",
-    endpoints = new[]
-    {
+    endpoints = (string[])
+    [
         "POST /api/chat", "GET /api/skills", "POST /api/skills",
         "GET /api/skills/{id}", "PUT /api/skills/{id}", "POST /api/skills/{id}/improve",
         "GET /api/skills/{id}/export", "POST /api/skills/import",
@@ -538,7 +537,7 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/mesh/capabilities/search", "POST /api/mesh/intent",
         "GET /api/tools", "GET /api/tools/{name}", "GET /api/tools/{name}/health",
         "GET /api/tools/categories", "POST /api/tools/{name}/enable", "POST /api/tools/{name}/disable"
-    }
+    ]
 }));
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", time = DateTime.UtcNow }));
 
@@ -547,14 +546,15 @@ app.MapGet("/agent-card.json", () =>
 {
     // agent-card.json публикуется в dataRoot при старте;.TryReadFromFile чтобы избежать
     // NRE если файл ещё не создан (например, CLI-only запуск)
-    string dataRoot = app.Services.GetRequiredService<StorageConfig>().DataRoot;
-    string cardPath = Path.Combine(dataRoot, "agent-card.json");
-    if (File.Exists(cardPath))
+    var dataRoot = app.Services.GetRequiredService<StorageConfig>().DataRoot;
+    var cardPath = Path.Combine(dataRoot, "agent-card.json");
+    if (!File.Exists(cardPath))
     {
-        string json = File.ReadAllText(cardPath);
-        return Results.Text(json, "application/json");
+        return Results.NotFound(new { error = "agent-card.json not published yet" });
     }
-    return Results.NotFound(new { error = "agent-card.json not published yet" });
+
+    var json = File.ReadAllText(cardPath);
+    return Results.Text(json, "application/json");
 });
 
 // --- Доменные эндпоинты ---
@@ -580,7 +580,7 @@ try
     if (errors.Count > 0)
     {
         Console.WriteLine($"[Manifest] Опубликован с предупреждениями: {manifestService.ManifestPath}");
-        foreach (string err in errors)
+        foreach (var err in errors)
         {
             Console.WriteLine($"  ⚠ {err}");
         }
@@ -602,7 +602,7 @@ try
     var a2aConfig = app.Services.GetRequiredService<A2AConfig>();
     if (a2aConfig.AgentCard.Publish)
     {
-        string path = await agentCardService.PublishAsync();
+        var path = await agentCardService.PublishAsync();
         Console.WriteLine($"[AgentCard] Published: {path}");
     }
     else
@@ -619,6 +619,12 @@ app.MapBudget();
 app.MapQuotas();
 app.MapAudit();
 app.MapLlm();
+app.MapA2A();
+app.MapBackups();
+app.MapFleetTemplates();
+app.MapGrants();
+app.MapSimulation();
+app.MapSlos();
 app.MapApprovals();
 app.MapEscalations();
 app.MapObservability();
