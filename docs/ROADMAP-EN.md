@@ -177,6 +177,35 @@ flowchart TD
 
 ---
 
+## Epic — Hercules Studio (Q1 2028)
+
+Goal: a desktop IDE application (Electron + Vue 3) for managing, configuring, and orchestrating multiple Hercules agents from a single workstation. Studio connects to already-running agents, scans the machine, provides fine-grained configuration, a skill editor with C# file-based apps, a mesh explorer, an agent consensus mode, and a BPMN-like workflow designer.
+
+> Full Epic documentation: [docs/EPIC_Hercules_Studio/](EPIC_Hercules_Studio/README.md)
+> Backend prerequisites: [Phase 8 in backlog](roadmap/backlog.md#phase-8--hercules-studio-backend-prerequisites)
+
+```mermaid
+flowchart TD
+    Studio["Hercules Studio\nElectron + Vue 3"] -->|REST API\nX-Api-Key| AgentA["Agent A\n:8421"]
+    Studio -->|REST API| AgentB["Agent B\n:8422"]
+    Studio -->|REST API| AgentC["Agent C\n:8423"]
+    AgentA <-->|mesh intent| AgentB
+    AgentB <-->|mesh intent| AgentC
+    Studio -->|clientId/secret| WFS["hercules-\nworkflow-server"]
+    WFS -->|mesh intent| AgentA
+    WFS -->|mesh intent| AgentB
+    WFS -->|mesh intent| AgentC
+```
+
+| # | Initiative | Outcome |
+| - | ----------- | ------- |
+| 48 | **Hercules Studio IDE** | Desktop IDE application: agent scanning, multi-agent management, CheckIn/CheckOut, chat, skill editor with Monaco, mesh explorer, tool/MCP management, fine-grained config, agent consensus, BPMN workflow designer. |
+| 49 | **Backend prerequisites** | Port migration to 8421, dual API keys (contribute+system), CheckIn/CheckOut protocol, system restart, MCP hot-reload, SkillSdk NuGet, context distillation, Postgres session store, hercules-workflow-server, workflow graph model + executor, DelegatedTask persistence, parent/child tasks, checkpoint persistence. |
+
+**Deliverable:** operators manage multiple Hercules agents from a single IDE, create and push skills with C# file-based apps, configure LLM/mesh/quotas at runtime, convene agent consensus, and design and run multi-agent BPMN workflows.
+
+---
+
 ## Long-term vision
 
 Hercules becomes a **runtime for agent meshes**: tiny, self-improving, single-purpose agents that discover each other, delegate work, share skills, and learn collectively. A mesh can live on one machine, across a LAN, or in the cloud — composed like microservices, but with built-in reasoning, memory, and adaptation.

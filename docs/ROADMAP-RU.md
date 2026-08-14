@@ -177,9 +177,32 @@ flowchart TD
 
 ---
 
-## Долгосрочное видение
+## Epic — Hercules Studio (Q1 2028)
 
-Hercules становится **runtime для agent meshes**: крошечные, самообучающиеся, single-purpose агенты, которые находят друг друга, делегируют работу, делятся навыками и учатся коллективно. Mesh может жить на одной машине, в локальной сети или в облаке — компонуется как микросервисы, но со встроенным reasoning, памятью и адаптацией.
+Цель: десктопное IDE-приложение (Electron + Vue 3) для управления, настройки и оркестрации нескольких агентов Hercules с одного рабочего места. Studio подключается к уже запущенным агентам, сканирует машину, обеспечивает тонкую настройку, редактор навыков с C# file-based apps, mesh explorer, консилиум агентов и BPMN-подобную оркестрацию.
+
+> Полная документация Epic: [docs/EPIC_Hercules_Studio/](EPIC_Hercules_Studio/README.md)
+> Backend prerequisites: [Phase 8 в backlog](roadmap/backlog.md#phase-8--hercules-studio-backend-prerequisites)
+
+```mermaid
+flowchart TD
+    Studio["Hercules Studio\nElectron + Vue 3"] -->|REST API\nX-Api-Key| AgentA["Агент A\n:8421"]
+    Studio -->|REST API| AgentB["Агент B\n:8422"]
+    Studio -->|REST API| AgentC["Агент C\n:8423"]
+    AgentA <-->|mesh intent| AgentB
+    AgentB <-->|mesh intent| AgentC
+    Studio -->|clientId/secret| WFS["hercules-\nworkflow-server"]
+    WFS -->|mesh intent| AgentA
+    WFS -->|mesh intent| AgentB
+    WFS -->|mesh intent| AgentC
+```
+
+| # | Инициатива | Результат |
+| - | ---------- | --------- |
+| 48 | **Hercules Studio IDE** | Десктопное IDE-приложение: сканирование агентов, multi-agent management, CheckIn/CheckOut, чат, редактор навыков с Monaco, mesh explorer, tool/MCP management, тонкая настройка, консилиум, BPMN workflow designer. |
+| 49 | **Backend prerequisites** | Port migration 8421, dual API keys (contribute+system), CheckIn/CheckOut protocol, system restart, MCP hot-reload, SkillSdk NuGet, context distillation, Postgres session store, hercules-workflow-server, workflow graph model + executor, DelegatedTask persistence, parent/child tasks, checkpoint persistence. |
+
+**Доставляемый результат:** операторы управляют несколькими агентами Hercules из единого IDE, создают и пушат навыки с C# file-based apps, настраивают LLM/mesh/quotas в runtime, собирают консилиум агентов, проектируют и запускают multi-agent BPMN workflows.
 
 ---
 
