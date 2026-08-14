@@ -151,6 +151,10 @@ public sealed class AppConfig
     // task_060: Offline resilience — bounded outbox queue for sensor logs, task results, alerts
     /// <summary>Offline resilience config (task_060): bounded queue, TTL, flush interval, network polling.</summary>
     public Offline.OfflineSyncConfig OfflineSync { get; set; } = new();
+
+    // task_061: Local-first degradation — fallback strategies, operator notifications, observability
+    /// <summary>Local-first degradation config (task_061): health checks, fallback strategies, notifications.</summary>
+    public Degradation.DegradationConfig Degradation { get; set; } = new();
 }
 
 /// <summary>

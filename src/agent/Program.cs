@@ -4,6 +4,7 @@ using Hercules.Audit;
 using Hercules.Budget;
 using Hercules.CLI;
 using Hercules.CodeExecution;
+using Hercules.Degradation;
 using Hercules.Edge;
 using Hercules.Cache;
 using Hercules.Config;
@@ -465,6 +466,12 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<NetworkMonitor>();
     services.AddSingleton<INetworkMonitor>(sp => sp.GetRequiredService<NetworkMonitor>());
     services.AddSingleton<OfflineSyncService>(); // BackgroundService
+
+    // task_061: Local-first degradation — deterministic fallback, operator notifications, observability
+    services.AddSingleton(appConfig.Degradation);
+    services.AddSingleton<DegradationObservability>();
+    services.AddSingleton<OperatorNotificationService>();
+    services.AddSingleton<DegradationManager>(); // BackgroundService
 
     // Агент
     services.AddSingleton<SkillManager>();
