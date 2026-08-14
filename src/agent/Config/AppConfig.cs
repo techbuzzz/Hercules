@@ -144,6 +144,9 @@ public sealed class AppConfig
 
     /// <summary>Config and policy rollout config (task_058): signed bundles, staged rollout, expiry, LKG fallback.</summary>
     public ConfigRolloutConfig ConfigRollout { get; set; } = new();
+
+    /// <summary>Edge provisioning config (task_059): enrollment URL, device ID, Wi-Fi, secure defaults.</summary>
+    public EdgeConfig Edge { get; set; } = new();
 }
 
 /// <summary>

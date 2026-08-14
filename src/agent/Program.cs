@@ -4,6 +4,7 @@ using Hercules.Audit;
 using Hercules.Budget;
 using Hercules.CLI;
 using Hercules.CodeExecution;
+using Hercules.Edge;
 using Hercules.Cache;
 using Hercules.Config;
 using Hercules.Context;
@@ -441,6 +442,18 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<IAuditService>(),
             sp.GetRequiredService<ILogger<SecurityAuditExporterService>>()));
 
+    // task_059: Edge provisioning — identity enrollment, cert activation, secure defaults on Raspberry Pi
+    services.AddSingleton(appConfig.Edge);
+    services.AddSingleton<IEdgeProvisioningService>(sp =>
+        new EdgeProvisioningService(
+            sp.GetRequiredService<EdgeConfig>(),
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<StorageConfig>(),
+            sp.GetRequiredService<IFleetIdentityService>(),
+            sp.GetRequiredService<ICertificateService>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<EdgeProvisioningService>>()));
+
     // Агент
     services.AddSingleton<SkillManager>();
     services.AddSingleton<SkillRouter>();
@@ -481,6 +494,29 @@ builder.ConfigureServices((context, services) =>
 using var host = builder.Build();
 
 var appConfig = host.Services.GetRequiredService<AppConfig>();
+
+// task_059: Edge provisioning — enroll on startup if not already enrolled
+try
+{
+    var edgeService = host.Services.GetRequiredService<IEdgeProvisioningService>();
+    if (!edgeService.IsEnrolled)
+    {
+        var result = await edgeService.EnsureEnrolledAsync();
+        if (result.Success)
+        {
+            Console.WriteLine($"[Edge] Device enrolled: {result.DeviceId}");
+        }
+        else
+        {
+            Console.WriteLine($"[Edge] Enrollment deferred: {result.ErrorMessage}");
+        }
+    }
+}
+catch (Exception ex)
+{
+    // Enrollment failure is non-fatal — agent starts in standalone mode
+    Console.WriteLine($"[Edge] Enrollment error (non-fatal): {ex.Message}");
+}
 
 // Tool registry discovery (task_024)
 try
