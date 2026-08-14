@@ -147,6 +147,10 @@ public sealed class AppConfig
 
     /// <summary>Edge provisioning config (task_059): enrollment URL, device ID, Wi-Fi, secure defaults.</summary>
     public EdgeConfig Edge { get; set; } = new();
+
+    // task_060: Offline resilience — bounded outbox queue for sensor logs, task results, alerts
+    /// <summary>Offline resilience config (task_060): bounded queue, TTL, flush interval, network polling.</summary>
+    public Offline.OfflineSyncConfig OfflineSync { get; set; } = new();
 }
 
 /// <summary>

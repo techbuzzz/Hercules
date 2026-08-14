@@ -17,6 +17,7 @@ using Hercules.Mcp;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Mesh.Verification;
+using Hercules.Offline;
 using Hercules.Observability;
 using Hercules.Quotas;
 using Hercules.Redaction;
@@ -453,6 +454,17 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<ICertificateService>(),
             sp.GetRequiredService<IAuditService>(),
             sp.GetRequiredService<ILogger<EdgeProvisioningService>>()));
+
+    // task_060: Offline resilience — bounded outbox queue for sensor logs, task results, alerts
+    services.AddSingleton(appConfig.OfflineSync);
+    services.AddSingleton<IOutboxStore>(sp =>
+        new SqliteOutboxStore(
+            sp.GetRequiredService<SqliteSessionStore>(),
+            sp.GetRequiredService<OfflineSyncConfig>(),
+            sp.GetRequiredService<ILogger<SqliteOutboxStore>>()));
+    services.AddSingleton<NetworkMonitor>();
+    services.AddSingleton<INetworkMonitor>(sp => sp.GetRequiredService<NetworkMonitor>());
+    services.AddSingleton<OfflineSyncService>(); // BackgroundService
 
     // Агент
     services.AddSingleton<SkillManager>();
