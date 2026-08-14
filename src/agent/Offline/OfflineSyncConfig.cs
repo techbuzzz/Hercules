@@ -58,4 +58,31 @@ public sealed class OfflineSyncConfig
     ///     or reject new items. Default true = drop oldest synced.
     /// </summary>
     public bool DropOldestSyncedOnCap { get; set; } = true;
+
+    /// <summary>
+    ///     Soft threshold for the Synced tail. When <c>GetSyncedCountAsync()</c>
+    ///     exceeds this value, <c>PruneSyncedToCapAsync(PruneSyncedKeep)</c> is
+    ///     invoked during <c>EnqueueAsync</c> to bring the tail back to
+    ///     <see cref="PruneSyncedKeep"/>. Default 500.
+    /// </summary>
+    public int PruneSyncedThreshold { get; set; } = 500;
+
+    /// <summary>
+    ///     Number of Synced rows to keep after pruning. Older Synced rows are
+    ///     deleted (FIFO by <c>synced_at</c>). Default 500.
+    /// </summary>
+    public int PruneSyncedKeep { get; set; } = 500;
+
+    /// <summary>
+    ///     Default deadline (minutes) attached to the <c>IntentEnvelope</c> for
+    ///     each outbox item. Was previously hardcoded to 5 minutes inside
+    ///     <c>OfflineSyncService.ToEnvelope</c>. Default 5.
+    /// </summary>
+    public int DefaultDeadlineMinutes { get; set; } = 5;
+
+    /// <summary>
+    ///     Upper bound for exponential backoff between retries of the same item
+    ///     (milliseconds). Default 5 minutes.
+    /// </summary>
+    public int MaxBackoffMs { get; set; } = 5 * 60 * 1000;
 }

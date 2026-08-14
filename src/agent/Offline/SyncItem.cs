@@ -42,8 +42,16 @@ public sealed class OutboxItem
 {
     public long Id { get; set; }
 
-    /// <summary>Уникальный идентификатор (ULID string) для deduplication.</summary>
-    public string ItemId { get; set; } = Ulid.NewId();
+    /// <summary>
+    ///     Уникальный идентификатор (ULID string) для deduplication.
+    ///     Не инициализируется здесь — каждая factory-метод
+    ///     (<see cref="SensorLog"/>, <see cref="TaskResult"/>, <see cref="Alert"/>)
+    ///     генерирует свой ULID. Default-инициализатор был убран в task_073,
+    ///     потому что он создавал ULID при каждом `new OutboxItem()` (даже для
+    ///     unit-тестов и mock-данных), а factory-методы всё равно перезаписывали
+    ///     это значение, теряя первое поколение ID.
+    /// </summary>
+    public string ItemId { get; set; } = string.Empty;
 
     public OutboxItemType Type { get; set; }
 

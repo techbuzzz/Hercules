@@ -128,6 +128,22 @@ public sealed class OfflineSyncService : BackgroundService
                 failure++;
                 _log.LogWarning(ex, "OfflineSync: failed to sync item {ItemId}, retry {RetryCount}",
                     item.ItemId, item.RetryCount + 1);
+
+                // Exponential backoff with cap, to avoid hammering the mesh
+                // bus when the entire queue is failing. Skipped on
+                // cancellation so shutdown is prompt.
+                var backoff = ComputeBackoffMs(item.RetryCount + 1);
+                if (backoff > 0)
+                {
+                    try
+                    {
+                        await Task.Delay(backoff, ct);
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        break;
+                    }
+                }
             }
         }
 
@@ -151,29 +167,42 @@ public sealed class OfflineSyncService : BackgroundService
     {
         if (!_config.Enabled) return;
 
+        // Fresh CTS for async event handlers: stoppingToken is already cancelled
+        // by the time shutdown is observed, so capturing it inside the
+        // OnReconnected closure would cause any post-shutdown flush to throw
+        // immediately. We instead use a dedicated CTS that we cancel in
+        // StopAsync so the handler can run to completion during graceful drain.
+        var reconnectCts = new CancellationTokenSource();
+        var combinedCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, reconnectCts.Token);
+        _reconnectCts = reconnectCts;
+
         // Clean up expired items on startup
-        await CleanupExpiredAsync(stoppingToken);
+        await CleanupExpiredAsync(combinedCts.Token);
 
         // Subscribe to network events
         _network.OnReconnected += async (_, _) =>
         {
             _log.LogInformation("OfflineSync: network reconnected, triggering flush");
-            try { await FlushAsync(stoppingToken); }
+            try { await FlushAsync(combinedCts.Token); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // Shutdown in progress — silently exit.
+            }
             catch (Exception ex) { _log.LogError(ex, "OfflineSync: flush on reconnect failed"); }
         };
 
         // Start network monitor polling
-        _ = RunNetworkMonitorAsync(stoppingToken);
+        _ = RunNetworkMonitorAsync(combinedCts.Token);
 
         // Periodic flush loop
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(_config.FlushIntervalSeconds), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(_config.FlushIntervalSeconds), combinedCts.Token);
                 if (_network.IsOnline)
                 {
-                    await FlushAsync(stoppingToken);
+                    await FlushAsync(combinedCts.Token);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -183,9 +212,26 @@ public sealed class OfflineSyncService : BackgroundService
             catch (Exception ex)
             {
                 _log.LogError(ex, "OfflineSync: periodic flush failed");
-                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), combinedCts.Token);
+                }
+                catch (OperationCanceledException) { break; }
             }
         }
+
+        // Best-effort cleanup of the CTS — the field may already be cleared by StopAsync.
+        _reconnectCts = null;
+        combinedCts.Dispose();
+    }
+
+    private CancellationTokenSource? _reconnectCts;
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        // Cancel the reconnect CTS so any in-flight async flush handler exits cleanly.
+        try { _reconnectCts?.Cancel(); } catch (ObjectDisposedException) { /* already disposed */ }
+        await base.StopAsync(cancellationToken);
     }
 
     private async Task RunNetworkMonitorAsync(CancellationToken stoppingToken)
@@ -251,7 +297,22 @@ public sealed class OfflineSyncService : BackgroundService
             Sender = _meshConfig.AgentId,
             Intent = "offline.sync",
             Payload = item.Payload,
-            Deadline = DateTimeOffset.UtcNow.AddMinutes(5)
+            Deadline = DateTimeOffset.UtcNow.AddMinutes(_config.DefaultDeadlineMinutes)
         };
+    }
+
+    /// <summary>
+    ///     Exponential backoff: <c>RetryBaseDelayMs * 2^retryCount</c>, capped at
+    ///     <see cref="OfflineSyncConfig.MaxBackoffMs"/>. <c>retryCount = 1</c>
+    ///     yields the base delay; the first failure thus waits the shortest
+    ///     possible time and subsequent failures escalate.
+    /// </summary>
+    private int ComputeBackoffMs(int retryCount)
+    {
+        if (retryCount < 1) retryCount = 1;
+        long shift = retryCount >= 30 ? 30 : retryCount; // avoid overflow
+        long computed = (long)_config.RetryBaseDelayMs * (1L << (int)shift);
+        int cap = _config.MaxBackoffMs > 0 ? _config.MaxBackoffMs : int.MaxValue;
+        return (int)Math.Min(computed, cap);
     }
 }

@@ -42,6 +42,12 @@ public interface IOutboxStore
     Task<int> GetPendingCountAsync(CancellationToken ct = default);
 
     /// <summary>
+    ///     Count of Synced items currently retained for bounded-queue policy
+    ///     (pruned to <c>PruneSyncedKeep</c> by <c>EnqueueAsync</c>).
+    /// </summary>
+    Task<int> GetSyncedCountAsync(CancellationToken ct = default);
+
+    /// <summary>
     ///     Count of pending items by type.
     /// </summary>
     Task<int> GetPendingCountByTypeAsync(OutboxItemType type, CancellationToken ct = default);
