@@ -151,6 +151,32 @@ flowchart TD
 
 ---
 
+## Phase 6 — Performance и high availability hardening (Q4 2027)
+
+Цель: закрыть все critical и high-severity находки из performance и HA review. Сделать агент и mesh безопасным под конкурентной нагрузкой, production-grade наблюдаемым и устойчивым к частичным сбоям без silent data loss или thread starvation.
+
+```mermaid
+flowchart TD
+    Req["Конкурентный запрос"] --> AgentCore["AgentCore\nscoped session state"]
+    AgentCore -->|async| Storage["SQLite / Memory\nthread-safe, без sync-over-async"]
+    AgentCore -->|async| LLM["ResilientLLMClient\nper-call provider/model"]
+    AgentCore -->|IHttpClientFactory| Tools["Tools / Mesh transport\nresilience handlers"]
+    Req --> Kestrel["Kestrel\nrate limiter + compression"]
+    Kestrel --> HealthChecks["Health checks\nSQLite, LLM, mesh, disk"]
+    Shutdown["Graceful shutdown"] --> Drain["Drain in-flight\nстоп приёма новых"]
+    Backpressure["Backpressure"] --> Bounded["Bounded channels\nDLQ fixes"]
+```
+
+| # | Инициатива | Результат |
+| - | ---------- | --------- |
+| 45 | **Critical correctness fixes** | Доступ к SQLite потокобезопасен без sync-over-async обёрток; NATS JetStream сообщения корректно ack/nak/term; QuotaService rate-limit baskets корректно очищаются; outbox synced-state сохраняет bounded-queue prune логику. |
+| 46 | **High-availability fixes** | Captive DI зависимости и singleton mutable state устранены; `ResilientLLMClient` несёт provider/model per call; весь sync-over-async в горячих путях и background timers убран; `IHttpClientFactory` со standard resilience handlers используется везде; real health checks backs liveness/readiness probes; graceful shutdown drains in-flight requests; Kestrel limits, framework rate limiter, response compression и output cache настроены; router health, Redis CAS, Postgres reconnect и DI registration anti-patterns исправлены. |
+| 47 | **Performance polish** | Cache stampede предотвращён через per-key dedup; eviction O(log n) через sorted expiry index; ProposalStore кешируется с FileSystemWatcher; StringBuilder pooling снижает GC pressure; OTel console exporter gated, process instrumentation включён, histogram buckets явные, retry logging sampled; bounded channels и DLQ requeue обеспечивают backpressure; miscellaneous hardening покрывает DelegationBoundary TTL, ResilientTransport semaphore trim, CORS defaults, backup passphrase enforcement, SLO real metrics, audit filters и silent-catch logging. |
+
+**Доставляемый результат:** Агент и mesh Hercules выдерживают конкурентную нагрузку без thread starvation или data corruption, деградируют gracefully при частичных сбоях с real health-check видимостью, drain in-flight work при shutdown и production-observable с корректной per-call атрибуцией и sampled logging.
+
+---
+
 ## Долгосрочное видение
 
 Hercules становится **runtime для agent meshes**: крошечные, самообучающиеся, single-purpose агенты, которые находят друг друга, делегируют работу, делятся навыками и учатся коллективно. Mesh может жить на одной машине, в локальной сети или в облаке — компонуется как микросервисы, но со встроенным reasoning, памятью и адаптацией.

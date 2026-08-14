@@ -13,6 +13,7 @@
 - [Phase 3 — Inter-agent protocol (Q1 2027)](#phase-3--inter-agent-protocol-q1-2027)
 - [Phase 4 — Mesh orchestration (Q2 2027)](#phase-4--mesh-orchestration-q2-2027)
 - [Phase 5 — IoT/edge fleet and mesh operations (Q3 2027)](#phase-5--iotedge-fleet-and-mesh-operations-q3-2027)
+- [Phase 6 — Performance and high availability hardening (Q4 2027)](#phase-6--performance-and-high-availability-hardening-q4-2027)
 - [Workflow](#workflow)
 - [Roadmap cron](#roadmap-cron)
 
@@ -114,6 +115,28 @@
 | 62 | 39 | [Fleet templates](tasks/task_062.md) | `fleet-templates` | pending |
 | 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | done |
 | 64 | 44 | [Операционные SLO](tasks/task_064.md) | `operational-slos` | pending |
+
+## Phase 6 — Performance and high availability hardening (Q4 2027)
+
+| # | Initiative | Task | Slug | Status |
+|---|------------|------|------|--------|
+| 71 | 45 | [SQLite thread-safety and sync-over-async removal](tasks/task_071.md) | `sqlite-thread-safety` | pending |
+| 72 | 45 | [QuotaService cleanup fix and distributed quotas](tasks/task_072.md) | `quota-cleanup-fix` | pending |
+| 73 | 45 | [Outbox synced-state and bounded-queue prune fix](tasks/task_073.md) | `outbox-synced-fix` | pending |
+| 74 | 45 | [NATS JetStream ack/fail implementation](tasks/task_074.md) | `nats-jetstream-ack` | pending |
+| 75 | 46 | [DI lifetime fixes: captive dependency and AgentCore singleton](tasks/task_075.md) | `di-lifetime-fixes` | pending |
+| 76 | 46 | [ResilientLLMClient per-call provider/model](tasks/task_076.md) | `resilient-llm-per-call-provider` | pending |
+| 77 | 46 | [Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController](tasks/task_077.md) | `sync-over-async-sweep` | pending |
+| 78 | 46 | [IHttpClientFactory adoption and standard resilience handlers](tasks/task_078.md) | `httpclient-factory-adoption` | pending |
+| 79 | 46 | [Real health checks infrastructure](tasks/task_079.md) | `health-checks-infrastructure` | pending |
+| 80 | 46 | [Graceful shutdown and drain](tasks/task_080.md) | `graceful-shutdown-drain` | pending |
+| 81 | 46 | [Kestrel tuning, framework rate limiter, compression, output cache](tasks/task_081.md) | `kestrel-rate-limiter-compression` | pending |
+| 82 | 46 | [RouterHealthTracker, Redis CAS, Postgres reconnect, BuildServiceProvider](tasks/task_082.md) | `router-redis-postgres-di-fixes` | pending |
+| 83 | 47 | [CacheService stampede, eviction, and sliding expiration](tasks/task_083.md) | `cache-stampede-eviction` | pending |
+| 84 | 47 | [ProposalStore caching, async I/O, and hot-path allocations](tasks/task_084.md) | `proposal-store-hotpath-alloc` | pending |
+| 85 | 47 | [OpenTelemetry polish: console gating, process instrumentation, histogram buckets, async logging](tasks/task_085.md) | `otel-logging-polish` | pending |
+| 86 | 47 | [Backpressure, bounded channels, and DLQ/requeue fixes](tasks/task_086.md) | `backpressure-bounded-channels-dlq` | pending |
+| 87 | 47 | [Misc hardening: DelegationBoundary TTL, ResilientTransport trim, CORS, backup passphrase, SLO real metrics](tasks/task_087.md) | `misc-hardening` | pending |
 
 ## Workflow
 
