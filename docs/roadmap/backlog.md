@@ -107,7 +107,7 @@
 | 71 | 45 | [SQLite thread-safety and sync-over-async removal](tasks/task_071.md) | `sqlite-thread-safety` | done |
 | 72 | 45 | [QuotaService cleanup fix and distributed quotas](tasks/task_072.md) | `quota-cleanup-fix` | done |
 | 73 | 45 | [Outbox synced-state and bounded-queue prune fix](tasks/task_073.md) | `outbox-synced-fix` | done |
-| 74 | 45 | [NATS JetStream ack/fail implementation](tasks/task_074.md) | `nats-jetstream-ack` | pending |
+| 74 | 45 | [NATS JetStream ack/fail implementation](tasks/task_074.md) | `nats-jetstream-ack` | done |
 | 75 | 46 | [DI lifetime fixes: captive dependency and AgentCore singleton](tasks/task_075.md) | `di-lifetime-fixes` | pending |
 | 76 | 46 | [ResilientLLMClient per-call provider/model](tasks/task_076.md) | `resilient-llm-per-call-provider` | pending |
 | 77 | 46 | [Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController](tasks/task_077.md) | `sync-over-async-sweep` | pending |
@@ -134,10 +134,10 @@
 | 58 | 41 | [Configuration и policy rollout](tasks/task_058.md) | `config-policy-rollout` | done |
 | 59 | 37 | [Edge provisioning](tasks/task_059.md) | `edge-provisioning` | done |
 | 60 | 38 | [Offline resilience](tasks/task_060.md) | `offline-resilience` | done |
-| 61 | 42 | [Local-first degradation](tasks/task_061.md) | `local-degradation` | pending |
-| 62 | 39 | [Fleet templates](tasks/task_062.md) | `fleet-templates` | pending |
+| 61 | 42 | [Local-first degradation](tasks/task_061.md) | `local-degradation` | done |
+| 62 | 39 | [Fleet templates](tasks/task_062.md) | `fleet-templates` | done |
 | 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | done |
-| 64 | 44 | [Операционные SLO](tasks/task_064.md) | `operational-slos` | pending |
+| 64 | 44 | [Операционные SLO](tasks/task_064.md) | `operational-slos` | done |
 
 ## Phase 7 — Web UI follow-ups (cross-cutting)
 
