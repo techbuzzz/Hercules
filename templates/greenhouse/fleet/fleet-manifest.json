@@ -1,0 +1,7 @@
+{
+  "name": "Greenhouse Assistant Fleet",
+  "description": "Fleet template for greenhouse monitoring: climate control, irrigation, pest alerts, yield forecasting. Validated for Raspberry Pi 4B edge deployment.",
+  "version": 1,
+  "vertical": "greenhouse",
+  "agent_template_file": "greenhouse.agenttemplate"
+}

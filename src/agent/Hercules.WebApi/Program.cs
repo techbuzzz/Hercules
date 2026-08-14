@@ -3,20 +3,38 @@ using System.Text.Encodings.Web;
 using Hercules.Agent;
 using Hercules.Audit;
 using Hercules.Budget;
+using Hercules.Cache;
 using Hercules.CodeExecution;
 using Hercules.Config;
+using Hercules.Config.Rollout;
+using Hercules.Context;
+using Hercules.Context.Summarizer;
+using Hercules.Lifecycle;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
+using Hercules.Mesh.A2A;
+using Hercules.Mesh.Auth;
 using Hercules.Observability;
+using Hercules.Quotas;
 using Hercules.Redaction;
+using Hercules.Simulation;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
+using Hercules.Skills.Marketplace;
+using Hercules.Skills.Quality;
+using Hercules.Skills.Routing;
+using Hercules.Skills.Routing.ScoringComponents;
+using Hercules.Skills.Routing.Deterministic;
 using Hercules.Storage;
+using Hercules.Mesh.Transport;
+using Hercules.Tasks;
+using Hercules.Telegram;
 using Hercules.Tools;
 using Hercules.Tools.Approval;
 using Hercules.Tools.Policy;
+using Hercules.Tools.Registry;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
 using Hercules.WebApi.Auth;
@@ -71,6 +89,7 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.A2A);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Mesh);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ToolPolicy);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ToolRegistry);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Approval);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Memory);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Budget);
@@ -78,13 +97,22 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Audit);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Secrets);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Eval);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SelfImprovement);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Tasks);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Phase2);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SkillQuality);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.LeastPrivilege);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Cache);
 
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
 builder.Services.AddSingleton(webCfg);
 
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
-builder.Services.AddSingleton<LlmClientFactory>();
+builder.Services.AddSingleton<LlmClientFactory>(sp =>
+        new LlmClientFactory(
+            sp.GetRequiredService<LlmConfig>(),
+            sp.GetRequiredService<ICacheService>()));
 builder.Services.AddSingleton<RoleRouter>();
 builder.Services.AddSingleton<IJsonRepairService, JsonRepairService>();
 builder.Services.AddSingleton<ResilientLLMClient>(sp =>
@@ -95,7 +123,11 @@ builder.Services.AddSingleton<ResilientLLMClient>(sp =>
         sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
 builder.Services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
 builder.Services.AddSingleton<ProviderHealthChecker>();
-builder.Services.AddSingleton<ProviderCapabilityDetector>();
+builder.Services.AddSingleton<ProviderCapabilityDetector>(sp =>
+    new ProviderCapabilityDetector(
+        sp.GetRequiredService<LlmConfig>(),
+        sp.GetService<ILogger<ProviderCapabilityDetector>>(),
+        sp.GetRequiredService<ICacheService>()));
 
 // Code execution (Stage 2, v2)
 builder.Services.AddSingleton<SandboxOptions>(sp =>
@@ -143,9 +175,14 @@ builder.Services.AddSingleton<ToolPolicyEngine>(sp =>
         sp.GetRequiredService<ToolPermissionSet>(),
         sp.GetRequiredService<ILogger<ToolPolicyEngine>>(),
         sp.GetRequiredService<IApprovalService>(),
-        sp.GetRequiredService<IAuditService>()));
+        sp.GetRequiredService<IAuditService>(),
+        sp.GetRequiredService<Hercules.Tools.Grants.ISkillGrantService>()));
 builder.Services.AddSingleton<ToolRegistry>();
-builder.Services.AddSingleton<McpClient>();
+builder.Services.AddSingleton<IToolRegistryService, ToolRegistryService>();
+builder.Services.AddHostedService<ToolHealthService>();
+builder.Services.AddSingleton<Hercules.Mcp.McpClientService>();
+// McpServerHost (stdio MCP server) is registered in CLI Program.cs only —
+// stdio transport requires console stdin/stdout which are unavailable in WebAPI mode.
 
 // WASM sandbox (v3) — Wasmtime-based code execution с capability-based isolation.
 // Регистрируем IWasmSandbox, CompilerRegistry, WasmTool и адаптер к ITool для AgentCore.
@@ -166,7 +203,7 @@ builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
 builder.Services.AddSingleton<Bus>();
 
 // Phase 3: Inter-agent mesh (manifest, capability registry, intent routing, transport)
-builder.Services.AddMeshServices(appConfig.Mesh, appConfig.Storage.DataRoot);
+builder.Services.AddMeshServices(appConfig, appConfig.Storage.DataRoot);
 
 // Reactor подписывается на изменения конфигурации и перезагружает runtime-зависимости
 builder.Services.AddHostedService<RuntimeConfigHostedService>();
@@ -180,9 +217,25 @@ builder.Services.AddSingleton<MemoryStore>(sp =>
         sp.GetRequiredService<ISecretMaskingService>()));
 builder.Services.AddSingleton<SqliteSessionStore>();
 
+// task_026: Least-privilege grants
+builder.Services.AddSingleton(sp =>
+    new Hercules.Tools.Grants.SkillGrantStore(
+        Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, "grants.db")));
+builder.Services.AddSingleton<Hercules.Tools.Grants.ISkillGrantService, Hercules.Tools.Grants.SkillGrantService>();
+
 // Hybrid storage services (task_003)
 builder.Services.AddSingleton<IBudgetService, BudgetService>();
 builder.Services.AddSingleton<IAuditLog, AuditLogService>();
+
+// Durable task lifecycle (task_018)
+builder.Services.AddSingleton<ITaskRepository>(sp =>
+    new SqliteTaskRepository(sp.GetRequiredService<SqliteSessionStore>()));
+builder.Services.AddSingleton<TaskRetryHandler>();
+builder.Services.AddSingleton<ITaskExecutionService>(sp =>
+    new TaskExecutionService(
+        sp.GetRequiredService<ITaskRepository>(),
+        sp.GetRequiredService<TaskConfig>(),
+        sp.GetRequiredService<ILogger<TaskExecutionService>>()));
 
 // Budget and guardrails (task_012)
 builder.Services.AddSingleton<IGuardrailService>(sp =>
@@ -194,6 +247,16 @@ builder.Services.AddSingleton<BudgetGuard>(sp =>
         sp.GetRequiredService<BudgetConfig>(),
         sp.GetRequiredService<ILogger<BudgetGuard>>()));
 
+// Rate limits and quotas (task_056)
+builder.Services.AddSingleton(appConfig.Quotas);
+builder.Services.AddSingleton<IQuotaService>(sp =>
+    new QuotaService(
+        sp.GetRequiredService<QuotasConfig>(),
+        sp.GetRequiredService<ILogger<QuotaService>>()));
+builder.Services.AddSingleton<QuotaGuard>(sp =>
+    new QuotaGuard(
+        sp.GetRequiredService<ILogger<QuotaGuard>>()));
+
 // Layered memory (task_011)
 builder.Services.AddScoped<IWorkingMemory, WorkingMemoryService>();
 builder.Services.AddSingleton<IDurableFactsStore, DurableFactsService>();
@@ -201,26 +264,111 @@ builder.Services.AddSingleton<IEpisodicStore, EpisodicStore>();
 builder.Services.AddSingleton<LayerMetadataExtractor>();
 builder.Services.AddSingleton<LayeredMemoryManager>();
 
-// Phase 2: Skill packager (export/import .skillpkg)
+// Phase 2: Skill packager (export/import .skillpkg) + signing (task_021)
+builder.Services.AddSingleton(appConfig.Marketplace);
+builder.Services.AddSingleton<IMarketplaceSigningService>(sp =>
+    new MarketplaceSigningService(sp.GetRequiredService<MarketplaceConfig>()));
 builder.Services.AddSingleton<SkillPackager>(sp =>
     new SkillPackager(
         sp.GetRequiredService<FileSkillRepository>(),
         sp.GetRequiredService<SecretsConfig>(),
-        sp.GetRequiredService<ISecretMaskingService>()));
+        sp.GetRequiredService<ISecretMaskingService>(),
+        sp.GetRequiredService<IMarketplaceSigningService>(),
+        sp.GetRequiredService<Hercules.Config.LeastPrivilegeConfig>(),
+        sp.GetRequiredService<Hercules.Tools.Grants.ISkillGrantService>()));
 
 // Phase 2: Semantic routing (embedding-based). Stub provider — offline.
+// Phase 2: Semantic routing (task_022) — scoring components
 builder.Services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();
-builder.Services.AddSingleton<EmbeddingSkillRouter>();
+builder.Services.AddSingleton<LexicalScorer>();
+builder.Services.AddSingleton<HistoricalQualityScorer>();
+builder.Services.AddSingleton<SchemaCompatibilityScorer>(sp =>
+    new SchemaCompatibilityScorer(
+        sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>()));
+builder.Services.AddSingleton<LatencyScorer>();
+builder.Services.AddSingleton<PolicyEligibilityScorer>(sp =>
+    new PolicyEligibilityScorer(
+        sp.GetService<ToolPolicyConfig>(),
+        sp.GetService<ToolPolicyConfig>()?.AgentPermissions.Split('|') ?? Enumerable.Empty<string>(),
+        sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>()));
+builder.Services.AddSingleton<EmbeddingScorer>(sp =>
+    new EmbeddingScorer(
+        sp.GetRequiredService<IEmbeddingProvider>(),
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<Phase2Config>().SimilarityThreshold,
+        sp.GetRequiredService<ICacheService>()));
+builder.Services.AddSingleton<ISkillScoringEngine>(sp =>
+    new SkillScoringEngine(
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<Phase2Config>(),
+        [
+            sp.GetRequiredService<EmbeddingScorer>(),
+            sp.GetRequiredService<LexicalScorer>(),
+            sp.GetRequiredService<SchemaCompatibilityScorer>(),
+            sp.GetRequiredService<HistoricalQualityScorer>(),
+            sp.GetRequiredService<LatencyScorer>(),
+            sp.GetRequiredService<PolicyEligibilityScorer>(),
+            sp.GetRequiredService<SkillQualityScorer>()
+        ],
+        sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>(),
+        sp.GetService<EmbeddingScorer>()));
+// Task 023: Deterministic router (offline-safe keyword + tag + type matching)
+builder.Services.AddSingleton<IDeterministicRouter>(sp =>
+    new DeterministicRouter(
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<Phase2Config>().DeterministicRouting,
+        sp.GetRequiredService<ICacheService>()));
 
-// Phase 2: Skill marketplace + agent templates
-builder.Services.AddSingleton<SkillMarketplace>();
+builder.Services.AddSingleton<EmbeddingSkillRouter>(sp =>
+    new EmbeddingSkillRouter(
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<Phase2Config>(),
+        sp.GetRequiredService<SkillRouter>(),
+        sp.GetService<ISkillScoringEngine>(),
+        sp.GetService<IDeterministicRouter>()));
+
+// Phase 2: Skill marketplace + agent templates (task_021)
+builder.Services.AddSingleton<SkillQualityStore>(sp =>
+    new SkillQualityStore(sp.GetRequiredService<StorageConfig>()));
+builder.Services.AddSingleton<ISkillQualityService>(sp =>
+    new SkillQualityService(
+        sp.GetRequiredService<SkillQualityStore>(),
+        sp.GetRequiredService<SkillQualityConfig>()));
+builder.Services.AddSingleton<SkillQualityScorer>(sp =>
+    new SkillQualityScorer(sp.GetRequiredService<ISkillQualityService>()));
+
+builder.Services.AddSingleton<SkillMarketplace>(sp =>
+    new SkillMarketplace(
+        sp.GetRequiredService<StorageConfig>(),
+        sp.GetRequiredService<SkillPackager>(),
+        sp.GetRequiredService<IMarketplaceSigningService>()));
 builder.Services.AddSingleton<AgentTemplateManager>();
+
+// Template simulation (task_031)
+builder.Services.AddSingleton<ISensorSimulator>(sp =>
+    new FileSensorSimulator(sp.GetRequiredService<ILogger<FileSensorSimulator>>())
+    {
+        TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, "templates")
+    });
+builder.Services.AddSingleton<FailureScenarioEngine>();
+builder.Services.AddSingleton<TemplateSimulationService>();
 
 // Skill lifecycle: policy, deprecation, evaluation
 builder.Services.AddSingleton<SkillLifecyclePolicy>();
 builder.Services.AddSingleton<SkillDeprecationManager>();
 builder.Services.AddSingleton<SkillEvaluationEngine>();
 builder.Services.AddSingleton<SkillLifecycleService>();
+
+// Skill manifest & compatibility (task_020)
+builder.Services.AddSingleton(appConfig.Phase2.SkillManifest);
+builder.Services.AddSingleton<SkillManifestValidator>(sp =>
+{
+    var cfg = sp.GetRequiredService<SkillManifestConfig>();
+    var allowedLevels = cfg.AllowedRiskLevels.Count > 0
+        ? cfg.AllowedRiskLevels.Select(i => (Hercules.Skills.SkillRiskLevel)i).ToList()
+        : (IReadOnlyList<Hercules.Skills.SkillRiskLevel>?)null;
+    return new SkillManifestValidator(cfg.CurrentHerculesVersion, null, allowedLevels);
+});
 
 // Eval harness (task_016)
 builder.Services.AddSingleton<BaselineManager>();
@@ -247,11 +395,32 @@ builder.Services.AddSingleton<ISecretMaskingService>(sp =>
         sp.GetRequiredService<SecretsConfig>(),
         sp.GetRequiredService<IRedactionService>()));
 
+// Self-improvement (task_017)
+builder.Services.AddSingleton<Hercules.Reflection.ProposalStore>();
+builder.Services.AddSingleton<Hercules.Reflection.ProposalDiffer>();
+builder.Services.AddSingleton<Hercules.Reflection.MaintenanceWorkflow>();
+builder.Services.AddSingleton<Hercules.Reflection.SelfImprovementService>();
+
 // Агент
 builder.Services.AddSingleton<SkillManager>();
 builder.Services.AddSingleton<SkillRouter>();
 builder.Services.AddSingleton<MemoryManager>();
 builder.Services.AddSingleton<LayeredMemoryManager>();
+
+// [task_027] Context Assembly
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Context);
+builder.Services.AddSingleton<ITraceSummarizer, Hercules.Context.Summarizer.TraceSummarizer>();
+builder.Services.AddSingleton<IContextBuilder>(sp =>
+    new Hercules.Context.ContextBuilder(
+        sp.GetRequiredService<LayeredMemoryManager>(),
+        sp.GetRequiredService<ContextConfig>(),
+        sp.GetRequiredService<ILogger<Hercules.Context.ContextBuilder>>(),
+        sp.GetRequiredService<ITraceSummarizer>()));
+
+// [task_028] Caching — unified cache service
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Cache);
+builder.Services.AddSingleton<ICacheService, CacheService>();
+
 builder.Services.AddSingleton<ReflectionEngine>();
 builder.Services.AddSingleton<AgentCore>();
 // Регистрируем сервисы, поддерживающие hot-reload конфигурации, как IConfigReload
@@ -261,6 +430,22 @@ builder.Services.AddSingleton<IConfigReload>(sp => sp.GetRequiredService<SkillMa
 
 // Адаптер Web API
 builder.Services.AddSingleton<WebApiAdapter>();
+
+// task_057: Lifecycle management
+builder.Services.AddSingleton<ILifecycleService>(sp =>
+    new LifecycleService(
+        sp.GetRequiredService<AgentCore>(),
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<CapabilityRegistry>(),
+        sp.GetRequiredService<ITransport>(),
+        sp.GetRequiredService<ILogger<LifecycleService>>()));
+
+// task_058: Config & policy rollout — staged signed bundles with expiry and LKG fallback
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ConfigRollout);
+builder.Services.AddSingleton<ISignedBundleValidator, SignedBundleValidator>();
+builder.Services.AddSingleton<LocalConfigValidator>();
+builder.Services.AddSingleton<IRolloutManager, RolloutManager>();
+builder.Services.AddHostedService<RolloutExpiryChecker>();
 
 // --- CORS: разрешаем localhost-источники фронтенда ---
 const string corsPolicy = "frontend";
@@ -307,6 +492,8 @@ app.UseCors(corsPolicy);
 app.UseMiddleware<RequestBodyLimitMiddleware>();
 app.UseMiddleware<ApiKeyMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
+// task_039: peer auth middleware for /api/mesh/* endpoints
+app.UseMiddleware<PeerAuthMiddleware>();
 
 // --- Инициализация сессии агента ---
 app.Services.GetRequiredService<WebApiAdapter>().EnsureSessionStarted();
@@ -316,8 +503,8 @@ app.MapGet("/", () => Results.Ok(new
 {
     name = "Hercules Web API",
     version = "1.0",
-    endpoints = new[]
-    {
+    endpoints = (string[])
+    [
         "POST /api/chat", "GET /api/skills", "POST /api/skills",
         "GET /api/skills/{id}", "PUT /api/skills/{id}", "POST /api/skills/{id}/improve",
         "GET /api/skills/{id}/export", "POST /api/skills/import",
@@ -337,32 +524,148 @@ app.MapGet("/", () => Results.Ok(new
         "POST /api/approvals/{id}/approve", "POST /api/approvals/{id}/deny",
         "POST /api/skills/{id}/eval/harness", "POST /api/skills/{id}/eval/baseline",
         "GET /api/skills/{id}/eval/baseline", "GET /api/skills/{id}/eval/history",
+        "GET /api/skills/{id}/manifest", "POST /api/skills/{id}/manifest/validate",
+        "POST /api/skills/manifest/validate-all",
         "GET /api/eval/baselines",
+        "POST /api/maintenance/run", "POST /api/maintenance/run-all",
+        "GET /api/maintenance/proposals", "GET /api/maintenance/proposals/{id}",
+        "POST /api/maintenance/proposals/{id}/approve",
+        "POST /api/maintenance/proposals/{id}/reject",
         "GET /agent.manifest.json", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
         "GET /api/mesh/agents/{id}", "DELETE /api/mesh/agents/{id}",
         "GET /api/mesh/capabilities", "GET /api/mesh/capabilities/{name}",
-        "GET /api/mesh/capabilities/search", "POST /api/mesh/intent"
-    }
+        "GET /api/mesh/capabilities/search", "POST /api/mesh/intent",
+        "GET /api/tools", "GET /api/tools/{name}", "GET /api/tools/{name}/health",
+        "GET /api/tools/categories", "POST /api/tools/{name}/enable", "POST /api/tools/{name}/disable"
+    ]
 }));
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", time = DateTime.UtcNow }));
+
+// A2A Agent Card — статический файл по спецификации (task_033)
+app.MapGet("/agent-card.json", () =>
+{
+    // agent-card.json публикуется в dataRoot при старте;.TryReadFromFile чтобы избежать
+    // NRE если файл ещё не создан (например, CLI-only запуск)
+    var dataRoot = app.Services.GetRequiredService<StorageConfig>().DataRoot;
+    var cardPath = Path.Combine(dataRoot, "agent-card.json");
+    if (!File.Exists(cardPath))
+    {
+        return Results.NotFound(new { error = "agent-card.json not published yet" });
+    }
+
+    var json = File.ReadAllText(cardPath);
+    return Results.Text(json, "application/json");
+});
 
 // --- Доменные эндпоинты ---
 app.MapChat();
 app.MapSkills();
 app.MapSkillLifecycle();
+app.MapSkillQuality();
 app.MapMemory();
 app.MapStats();
 app.MapConfig();
+app.MapRollout();
 app.MapMesh();
+app.MapMeshProfiles();
+app.MapMeshObservability();
+app.MapLifecycle();
+
+// Agent manifest — публикация на startup (task_032)
+try
+{
+    var manifestService = app.Services.GetRequiredService<AgentManifestService>();
+    var manifest = manifestService.Save();
+    var errors = manifestService.Validate();
+    if (errors.Count > 0)
+    {
+        Console.WriteLine($"[Manifest] Опубликован с предупреждениями: {manifestService.ManifestPath}");
+        foreach (var err in errors)
+        {
+            Console.WriteLine($"  ⚠ {err}");
+        }
+    }
+    else
+    {
+        Console.WriteLine($"[Manifest] Опубликован: {manifestService.ManifestPath}");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[Manifest] Publishing failed: {ex.Message}");
+}
+
+// A2A Agent Card — публикация на startup (task_033)
+try
+{
+    var agentCardService = app.Services.GetRequiredService<IAgentCardService>();
+    var a2aConfig = app.Services.GetRequiredService<A2AConfig>();
+    if (a2aConfig.AgentCard.Publish)
+    {
+        var path = await agentCardService.PublishAsync();
+        Console.WriteLine($"[AgentCard] Published: {path}");
+    }
+    else
+    {
+        Console.WriteLine("[AgentCard] Publishing disabled (A2A.AgentCard.Publish = false)");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[AgentCard] Publishing failed: {ex.Message}");
+}
+
 app.MapBudget();
+app.MapQuotas();
 app.MapAudit();
 app.MapLlm();
+app.MapA2A();
+app.MapBackups();
+app.MapFleetTemplates();
+app.MapGrants();
+app.MapSimulation();
+app.MapSlos();
 app.MapApprovals();
+app.MapEscalations();
 app.MapObservability();
 app.MapSkillHarness();
+app.MapSelfImprovement();
+app.MapSkillManifest();
+app.MapTasks();
+app.MapContext();
+app.MapCache();
+app.MapCache();
+app.MapToolRegistry();
+app.MapMcpEndpoints();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");
 Console.WriteLine($"💾 Данные: {appConfig.Storage.DataRoot}");
+
+// Tool registry discovery (task_024)
+try
+{
+    var registry = app.Services.GetRequiredService<IToolRegistryService>();
+    var policyEngine = app.Services.GetService<ToolPolicyEngine>();
+    var logger = app.Services.GetService<ILogger<Program>>();
+    var discovered = ToolDiscovery.Discover(appConfig, registry, policyEngine, logger);
+    Console.WriteLine($"[ToolRegistry] {discovered} tools discovered from file system");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[ToolRegistry] Discovery failed: {ex.Message}");
+}
+
+// MCP client initialization (task_025)
+try
+{
+    var mcpService = app.Services.GetRequiredService<Hercules.Mcp.McpClientService>();
+    await mcpService.InitializeAsync();
+    Console.WriteLine($"[MCP] Client initialized: {mcpService.ServerStates.Count} servers configured");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[MCP] Initialization failed: {ex.Message}");
+}
 
 app.Run();

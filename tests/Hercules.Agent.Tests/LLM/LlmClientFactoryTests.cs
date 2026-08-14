@@ -1,6 +1,9 @@
+using Hercules.Cache;
 using Hercules.Config;
 using Hercules.LLM;
 using Hercules.LLM.Providers;
+using Microsoft.Extensions.Logging;
+using Moq;
 using Xunit;
 
 namespace Hercules.Agent.Tests.LLM;
@@ -110,5 +113,33 @@ public class LlmClientFactoryTests
         var factory = CreateFactory();
         var client = factory.Create(provider); // Should not throw
         Assert.NotNull(client);
+    }
+
+    [Fact]
+    public void Create_withNullCache_UsesNullCacheService()
+    {
+        // NullCacheService is used when no ICacheService provided
+        var factory = new LlmClientFactory(BuildConfig(), null);
+        var client = factory.Create("yandexgpt");
+        Assert.NotNull(client);
+        Assert.Equal("yandexgpt", client.ProviderName);
+    }
+
+    [Fact]
+    public void Create_Uncached_returnsCorrectType_EvenWithoutCache()
+    {
+        // CreateUncached bypasses cache — useful for testing
+        var factory = CreateFactory();
+        var client = factory.CreateUncached("ollama-cloud");
+        Assert.IsType<LocalLLMClient>(client);
+        Assert.Equal("ollama-cloud", client.ProviderName);
+    }
+
+    [Fact]
+    public void CreateUncached_Unknown_throws()
+    {
+        var factory = CreateFactory();
+        var ex = Assert.Throws<ArgumentException>(() => factory.CreateUncached("nonexistent"));
+        Assert.Contains("nonexistent", ex.Message);
     }
 }

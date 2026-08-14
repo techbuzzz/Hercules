@@ -1,0 +1,19 @@
+{
+  "metric_thresholds": {
+    "cpu_pct": { "warning": 70.0, "critical": 90.0, "unit": "%", "window_seconds": 60 },
+    "memory_pct": { "warning": 75.0, "critical": 90.0, "unit": "%", "window_seconds": 60 },
+    "disk_pct": { "warning": 80.0, "critical": 95.0, "unit": "%", "window_seconds": 300 },
+    "temperature_c": { "warning": 25.0, "critical": 35.0, "unit": "°C", "window_seconds": 60 },
+    "inventory_pct": { "warning": 20.0, "critical": 10.0, "unit": "%", "window_seconds": 3600 },
+    "task_queue_depth": { "warning": 20.0, "critical": 50.0, "unit": "", "window_seconds": 60 },
+    "coin-acceptor-error-rate": { "warning": 0.05, "critical": 0.15, "unit": "", "window_seconds": 300 }
+  },
+  "alert_rules": [
+    { "id": "vending-high-temp", "description": "Vending machine interior temperature high — perishable goods at risk", "severity": "Critical", "condition": "temperature_c > 35", "cooldown_seconds": 300 },
+    { "id": "vending-low-inventory", "description": "Vending inventory critically low — predictive restock needed", "severity": "Warning", "condition": "inventory_pct < 10", "cooldown_seconds": 3600 },
+    { "id": "vending-coin-acceptor-fault", "description": "Coin acceptor error rate high — mechanical failure", "severity": "Warning", "condition": "coin-acceptor-error-rate > 0.15", "cooldown_seconds": 600 },
+    { "id": "vending-queue-full", "description": "Task queue at capacity", "severity": "Warning", "condition": "task_queue_depth > 50", "cooldown_seconds": 120 }
+  ],
+  "min_log_level": "Information",
+  "metrics_export_interval_seconds": 60
+}

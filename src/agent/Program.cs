@@ -1,23 +1,47 @@
 using System.Text;
 using Hercules.Agent;
 using Hercules.Audit;
+using Hercules.Backup;
 using Hercules.Budget;
 using Hercules.CLI;
 using Hercules.CodeExecution;
+using Hercules.Degradation;
+using Hercules.Edge;
+using Hercules.Fleet;
+using Hercules.Cache;
 using Hercules.Config;
+using Hercules.Context;
+using Hercules.Context.Summarizer;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.Lifecycle;
+using Hercules.Mesh.Transport;
+using Hercules.Mcp;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
+using Hercules.Mesh.Verification;
+using Hercules.Offline;
 using Hercules.Observability;
+using Hercules.Quotas;
 using Hercules.Redaction;
+using Hercules.Security;
+using Hercules.Slo;
+using Hercules.Simulation;
+using Hercules.Reflection;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
+using Hercules.Skills.Marketplace;
+using Hercules.Skills.Quality;
+using Hercules.Skills.Routing;
+using Hercules.Skills.Routing.ScoringComponents;
+using Hercules.Skills.Routing.Deterministic;
 using Hercules.Storage;
+using Hercules.Tasks;
 using Hercules.Telegram;
 using Hercules.Tools;
 using Hercules.Tools.Approval;
 using Hercules.Tools.Policy;
+using Hercules.Tools.Registry;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
 using HerculesBus;
@@ -61,13 +85,20 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton(appConfig.Mcp);
     services.AddSingleton(appConfig.A2A);
     services.AddSingleton(appConfig.Mesh);
+    services.AddSingleton(appConfig.MeshProfiles);
     services.AddSingleton(appConfig.ToolPolicy);
+    services.AddSingleton(appConfig.Phase2);
+    services.AddSingleton(appConfig.SkillQuality);
+    services.AddSingleton(appConfig.LeastPrivilege);
 
     // OpenTelemetry (task_013) — tracing + metrics
     services.AddHerculesOtel(appConfig.Otel);
 
     // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
-    services.AddSingleton<LlmClientFactory>();
+    services.AddSingleton<LlmClientFactory>(sp =>
+        new LlmClientFactory(
+            sp.GetRequiredService<LlmConfig>(),
+            sp.GetRequiredService<ICacheService>()));
     services.AddSingleton<RoleRouter>();
     services.AddSingleton<IJsonRepairService, JsonRepairService>();
     services.AddSingleton<ResilientLLMClient>(sp =>
@@ -78,7 +109,11 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
     services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
     services.AddSingleton<ProviderHealthChecker>();
-    services.AddSingleton<ProviderCapabilityDetector>();
+    services.AddSingleton<ProviderCapabilityDetector>(sp =>
+        new ProviderCapabilityDetector(
+            sp.GetRequiredService<LlmConfig>(),
+            sp.GetService<ILogger<ProviderCapabilityDetector>>(),
+            sp.GetRequiredService<ICacheService>()));
 
     // Code execution (Stage 2, v2)
     services.AddSingleton<SandboxOptions>(sp =>
@@ -128,9 +163,14 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<ToolPermissionSet>(),
             sp.GetRequiredService<ILogger<ToolPolicyEngine>>(),
             sp.GetRequiredService<IApprovalService>(),
-            sp.GetRequiredService<IAuditService>()));
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<Hercules.Tools.Grants.ISkillGrantService>()));
     services.AddSingleton<ToolRegistry>();
-    services.AddSingleton<McpClient>();
+    services.AddSingleton(appConfig.ToolRegistry);
+    services.AddSingleton<IToolRegistryService, ToolRegistryService>();
+    services.AddHostedService<ToolHealthService>();
+    services.AddSingleton<Hercules.Mcp.McpClientService>();
+    services.AddHostedService<Hercules.Mcp.McpServerHost>();
 
     // WASM sandbox (v3)
     services.AddSingleton<IWasmSandbox, WasmtimeSandbox>();
@@ -150,7 +190,15 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<Bus>();
 
     // Phase 3: Inter-agent mesh
-    services.AddMeshServices(appConfig.Mesh, appConfig.Storage.DataRoot);
+    services.AddMeshServices(appConfig, appConfig.Storage.DataRoot);
+
+    // Phase 4: Verification pipeline (task_046)
+    // Register no-op pipeline as fallback; AddMeshServices overrides with real pipeline when enabled.
+    services.AddSingleton<IVerificationPipeline>(sp =>
+        new VerificationPipeline(
+            Array.Empty<IVerifier>(),
+            new VerificationConfig { Enabled = false },
+            sp.GetRequiredService<ILogger<VerificationPipeline>>()));
 
     // Хранилища
     services.AddSingleton<FileSkillRepository>();
@@ -160,6 +208,12 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<SecretsConfig>(),
             sp.GetRequiredService<ISecretMaskingService>()));
     services.AddSingleton<SqliteSessionStore>();
+
+    // task_026: Least-privilege grants
+    services.AddSingleton(sp =>
+        new Hercules.Tools.Grants.SkillGrantStore(
+            Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, "grants.db")));
+    services.AddSingleton<Hercules.Tools.Grants.ISkillGrantService, Hercules.Tools.Grants.SkillGrantService>();
 
     // Layered memory (task_011)
     services.AddSingleton(appConfig.Memory);
@@ -196,20 +250,115 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<BudgetConfig>(),
             sp.GetRequiredService<ILogger<BudgetGuard>>()));
 
+    // Rate limits and quotas (task_056)
+    services.AddSingleton(appConfig.Quotas);
+    services.AddSingleton<IQuotaService>(sp =>
+        new QuotaService(
+            sp.GetRequiredService<QuotasConfig>(),
+            sp.GetRequiredService<ILogger<QuotaService>>()));
+    services.AddSingleton<QuotaGuard>(sp =>
+        new QuotaGuard(
+            sp.GetRequiredService<ILogger<QuotaGuard>>()));
+
     // Phase 2: Skill packager
+    services.AddSingleton(appConfig.Marketplace);
+    services.AddSingleton<IMarketplaceSigningService>(sp =>
+        new MarketplaceSigningService(sp.GetRequiredService<MarketplaceConfig>()));
     services.AddSingleton<SkillPackager>(sp =>
         new SkillPackager(
             sp.GetRequiredService<FileSkillRepository>(),
             sp.GetRequiredService<SecretsConfig>(),
-            sp.GetRequiredService<ISecretMaskingService>()));
+            sp.GetRequiredService<ISecretMaskingService>(),
+            sp.GetRequiredService<IMarketplaceSigningService>(),
+            sp.GetRequiredService<Hercules.Config.LeastPrivilegeConfig>(),
+            sp.GetRequiredService<Hercules.Tools.Grants.ISkillGrantService>()));
 
-    // Phase 2: Semantic routing
+    // Phase 2: Semantic routing (task_022)
     services.AddSingleton<IEmbeddingProvider, StubEmbeddingProvider>();
-    services.AddSingleton<EmbeddingSkillRouter>();
 
-    // Phase 2: Skill marketplace + agent templates
-    services.AddSingleton<SkillMarketplace>();
+    // Scoring components
+    services.AddSingleton<LexicalScorer>();
+    services.AddSingleton<HistoricalQualityScorer>();
+    services.AddSingleton<SchemaCompatibilityScorer>(sp =>
+        new SchemaCompatibilityScorer(
+            sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>()));
+    services.AddSingleton<LatencyScorer>();
+    services.AddSingleton<PolicyEligibilityScorer>(sp =>
+        new PolicyEligibilityScorer(
+            sp.GetService<ToolPolicyConfig>(),
+            sp.GetService<ToolPolicyConfig>()?.AgentPermissions.Split('|') ?? Enumerable.Empty<string>(),
+            sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>()));
+
+    // Embedding scorer (requires IEmbeddingProvider)
+    services.AddSingleton<EmbeddingScorer>(sp =>
+        new EmbeddingScorer(
+            sp.GetRequiredService<IEmbeddingProvider>(),
+            sp.GetRequiredService<SkillManager>(),
+            sp.GetRequiredService<Phase2Config>().SimilarityThreshold,
+            sp.GetRequiredService<ICacheService>()));
+
+    // Skill scoring engine
+    services.AddSingleton<ISkillScoringEngine>(sp =>
+        new SkillScoringEngine(
+            sp.GetRequiredService<SkillManager>(),
+            sp.GetRequiredService<Phase2Config>(),
+            new ISkillScorer[]
+            {
+                sp.GetRequiredService<EmbeddingScorer>(),
+                sp.GetRequiredService<LexicalScorer>(),
+                sp.GetRequiredService<SchemaCompatibilityScorer>(),
+                sp.GetRequiredService<HistoricalQualityScorer>(),
+                sp.GetRequiredService<LatencyScorer>(),
+                sp.GetRequiredService<PolicyEligibilityScorer>(),
+                sp.GetRequiredService<SkillQualityScorer>(),
+            },
+            sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>(),
+            sp.GetService<EmbeddingScorer>()));
+
+    // Task 023: Deterministic router (offline-safe keyword + tag + type matching)
+    services.AddSingleton<IDeterministicRouter>(sp =>
+        new DeterministicRouter(
+            sp.GetRequiredService<SkillManager>(),
+            sp.GetRequiredService<Phase2Config>().DeterministicRouting,
+            sp.GetRequiredService<ICacheService>()));
+
+    // EmbeddingSkillRouter (wraps SkillScoringEngine)
+    services.AddSingleton<EmbeddingSkillRouter>(sp =>
+        new EmbeddingSkillRouter(
+            sp.GetRequiredService<SkillManager>(),
+            sp.GetRequiredService<Phase2Config>(),
+            sp.GetRequiredService<SkillRouter>(),
+            sp.GetService<ISkillScoringEngine>(),
+            sp.GetService<IDeterministicRouter>()));
+
+    // Phase 2: Skill marketplace + agent templates (task_021)
+    services.AddSingleton<SkillQualityStore>(sp =>
+        new SkillQualityStore(sp.GetRequiredService<StorageConfig>()));
+    services.AddSingleton<ISkillQualityService>(sp =>
+        new SkillQualityService(
+            sp.GetRequiredService<SkillQualityStore>(),
+            sp.GetRequiredService<SkillQualityConfig>()));
+    services.AddSingleton<SkillQualityScorer>(sp =>
+        new SkillQualityScorer(sp.GetRequiredService<ISkillQualityService>()));
+
+    services.AddSingleton<SkillMarketplace>(sp =>
+        new SkillMarketplace(
+            sp.GetRequiredService<StorageConfig>(),
+            sp.GetRequiredService<SkillPackager>(),
+            sp.GetRequiredService<IMarketplaceSigningService>()));
     services.AddSingleton<AgentTemplateManager>();
+
+    // Fleet templates (task_062)
+    services.AddSingleton<IFleetTemplateManager, FleetTemplateManager>();
+
+    // Template simulation (task_031)
+    services.AddSingleton<ISensorSimulator>(sp =>
+        new FileSensorSimulator(sp.GetRequiredService<ILogger<FileSensorSimulator>>())
+        {
+            TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, "templates")
+        });
+    services.AddSingleton<FailureScenarioEngine>();
+    services.AddSingleton<TemplateSimulationService>();
 
     // Skill lifecycle (task_005)
     services.AddSingleton<SkillLifecyclePolicy>();
@@ -217,11 +366,40 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<SkillEvaluationEngine>();
     services.AddSingleton<SkillLifecycleService>();
 
+    // Skill manifest & compatibility (task_020)
+    services.AddSingleton(appConfig.Phase2.SkillManifest);
+    services.AddSingleton<SkillManifestValidator>(sp =>
+    {
+        var cfg = sp.GetRequiredService<SkillManifestConfig>();
+        var allowedLevels = cfg.AllowedRiskLevels.Count > 0
+            ? cfg.AllowedRiskLevels.Select(i => (Hercules.Skills.SkillRiskLevel)i).ToList()
+            : (IReadOnlyList<Hercules.Skills.SkillRiskLevel>?)null;
+        return new SkillManifestValidator(cfg.CurrentHerculesVersion, null, allowedLevels);
+    });
+
     // Eval harness (task_016)
     services.AddSingleton(appConfig.Eval);
     services.AddSingleton<BaselineManager>();
     services.AddSingleton<SkillTestGenerator>();
     services.AddSingleton<IEvalHarnessService, EvalHarnessService>();
+
+    // Self-improvement (task_017)
+    services.AddSingleton(appConfig.SelfImprovement);
+    services.AddSingleton<global::Hercules.Reflection.ProposalStore>();
+    services.AddSingleton<global::Hercules.Reflection.ProposalDiffer>();
+    services.AddSingleton<global::Hercules.Reflection.MaintenanceWorkflow>();
+    services.AddSingleton<global::Hercules.Reflection.SelfImprovementService>();
+
+    // Durable task lifecycle (task_018)
+    services.AddSingleton(appConfig.Tasks);
+    services.AddSingleton<ITaskRepository>(sp =>
+        new SqliteTaskRepository(sp.GetRequiredService<SqliteSessionStore>()));
+    services.AddSingleton<TaskRetryHandler>();
+    services.AddSingleton<ITaskExecutionService>(sp =>
+        new TaskExecutionService(
+            sp.GetRequiredService<ITaskRepository>(),
+            sp.GetRequiredService<TaskConfig>(),
+            sp.GetRequiredService<ILogger<TaskExecutionService>>()));
 
     // Audit and privacy (task_014)
     services.AddSingleton(appConfig.Audit);
@@ -245,13 +423,116 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<SecretsConfig>(),
             sp.GetRequiredService<IRedactionService>()));
 
+    // Security operations (task_055): fleet identity, certificates, package signing, vulnerability reporting, audit export
+    services.AddSingleton(appConfig.SecurityOps);
+    services.AddSingleton<IFleetIdentityService>(sp =>
+        new FleetIdentityService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<FleetIdentityService>>()));
+    services.AddSingleton<ICertificateService>(sp =>
+        new CertificateService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<CertificateService>>()));
+    services.AddSingleton<IPackageSigningService>(sp =>
+        new PackageSigningService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<PackageSigningService>>()));
+    services.AddSingleton<IVulnerabilityReporter>(sp =>
+        new VulnerabilityReporterService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<VulnerabilityReporterService>>()));
+    services.AddSingleton<ISecurityAuditExporter>(sp =>
+        new SecurityAuditExporterService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<SecurityAuditExporterService>>()));
+
+    // task_059: Edge provisioning — identity enrollment, cert activation, secure defaults on Raspberry Pi
+    services.AddSingleton(appConfig.Edge);
+    services.AddSingleton<IEdgeProvisioningService>(sp =>
+        new EdgeProvisioningService(
+            sp.GetRequiredService<EdgeConfig>(),
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<StorageConfig>(),
+            sp.GetRequiredService<IFleetIdentityService>(),
+            sp.GetRequiredService<ICertificateService>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<EdgeProvisioningService>>()));
+
+    // task_060: Offline resilience — bounded outbox queue for sensor logs, task results, alerts
+    services.AddSingleton(appConfig.OfflineSync);
+    services.AddSingleton<IOutboxStore>(sp =>
+        new SqliteOutboxStore(
+            sp.GetRequiredService<SqliteSessionStore>(),
+            sp.GetRequiredService<OfflineSyncConfig>(),
+            sp.GetRequiredService<ILogger<SqliteOutboxStore>>()));
+    services.AddSingleton<NetworkMonitor>();
+    services.AddSingleton<INetworkMonitor>(sp => sp.GetRequiredService<NetworkMonitor>());
+    services.AddSingleton<OfflineSyncService>(); // BackgroundService
+
+    // task_061: Local-first degradation — deterministic fallback, operator notifications, observability
+    services.AddSingleton(appConfig.Degradation);
+    services.AddSingleton<DegradationObservability>();
+    services.AddSingleton<OperatorNotificationService>();
+    services.AddSingleton<DegradationManager>(); // BackgroundService
+
+    // task_063: Backup & Recovery — encrypted backup archives, scheduled backups, restore
+    services.AddSingleton(appConfig.Backup);
+    services.AddSingleton<EncryptionService>();
+    services.AddSingleton<IBackupService>(sp =>
+        new BackupService(
+            sp.GetRequiredService<BackupConfig>(),
+            sp.GetRequiredService<EncryptionService>(),
+            sp.GetRequiredService<ILogger<BackupService>>(),
+            sp.GetRequiredService<StorageConfig>().DataRoot));
+    services.AddHostedService<BackupScheduler>();
+
+    // task_064: Operational SLOs — availability, response-time, data-loss, recovery-time, cost targets
+    services.AddSingleton(appConfig.Slos);
+    services.AddSingleton<ISloService>(sp =>
+        new SloService(
+            sp.GetRequiredService<SlosConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<Hercules.Mesh.Observability.IMeshObservabilityService>(),
+            sp.GetService<Hercules.Offline.IOutboxStore>(),
+            sp.GetService<IBudgetService>(),
+            sp.GetRequiredService<ILogger<SloService>>()));
+
     // Агент
     services.AddSingleton<SkillManager>();
     services.AddSingleton<SkillRouter>();
     services.AddSingleton<MemoryManager>();
     services.AddSingleton<LayeredMemoryManager>();
+
+    // [task_027] Context Assembly
+    services.AddSingleton(appConfig.Context);
+    services.AddSingleton<ITraceSummarizer, TraceSummarizer>();
+    services.AddSingleton<IContextBuilder>(sp =>
+        new ContextBuilder(
+            sp.GetRequiredService<LayeredMemoryManager>(),
+            sp.GetRequiredService<ContextConfig>(),
+            sp.GetRequiredService<ILogger<ContextBuilder>>(),
+            sp.GetRequiredService<ITraceSummarizer>()));
+
+    // [task_028] Caching — unified cache service
+    services.AddSingleton(appConfig.Cache);
+    services.AddSingleton<ICacheService, CacheService>();
+
     services.AddSingleton<ReflectionEngine>();
     services.AddSingleton<AgentCore>();
+
+    // task_057: Lifecycle management
+    services.AddSingleton<ILifecycleService>(sp =>
+        new LifecycleService(
+            sp.GetRequiredService<AgentCore>(),
+            sp.GetRequiredService<SkillManager>(),
+            sp.GetRequiredService<CapabilityRegistry>(),
+            sp.GetRequiredService<ITransport>(),
+            sp.GetRequiredService<ILogger<LifecycleService>>()));
 
     // Интерфейсы
     services.AddSingleton<ConsoleUI>();
@@ -261,6 +542,79 @@ builder.ConfigureServices((context, services) =>
 using var host = builder.Build();
 
 var appConfig = host.Services.GetRequiredService<AppConfig>();
+
+// task_059: Edge provisioning — enroll on startup if not already enrolled
+try
+{
+    var edgeService = host.Services.GetRequiredService<IEdgeProvisioningService>();
+    if (!edgeService.IsEnrolled)
+    {
+        var result = await edgeService.EnsureEnrolledAsync();
+        if (result.Success)
+        {
+            Console.WriteLine($"[Edge] Device enrolled: {result.DeviceId}");
+        }
+        else
+        {
+            Console.WriteLine($"[Edge] Enrollment deferred: {result.ErrorMessage}");
+        }
+    }
+}
+catch (Exception ex)
+{
+    // Enrollment failure is non-fatal — agent starts in standalone mode
+    Console.WriteLine($"[Edge] Enrollment error (non-fatal): {ex.Message}");
+}
+
+// Tool registry discovery (task_024)
+try
+{
+    var registry = host.Services.GetRequiredService<IToolRegistryService>();
+    var policyEngine = host.Services.GetService<ToolPolicyEngine>();
+    var logger = host.Services.GetService<ILogger>();
+    var discovered = ToolDiscovery.Discover(appConfig, registry, policyEngine, logger);
+    Console.WriteLine($"[ToolRegistry] {discovered} tools discovered from file system");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[ToolRegistry] Discovery failed: {ex.Message}");
+}
+
+// MCP client initialization (task_025)
+try
+{
+    var mcpService = host.Services.GetRequiredService<Hercules.Mcp.McpClientService>();
+    await mcpService.InitializeAsync();
+    Console.WriteLine($"[MCP] Client initialized: {mcpService.ServerStates.Count} servers configured");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[MCP] Initialization failed: {ex.Message}");
+}
+
+// Agent manifest — публикация на startup (task_032)
+try
+{
+    var manifestService = host.Services.GetRequiredService<AgentManifestService>();
+    var manifest = manifestService.Save();
+    var errors = manifestService.Validate();
+    if (errors.Count > 0)
+    {
+        Console.WriteLine($"[Manifest] Опубликован с предупреждениями: {manifestService.ManifestPath}");
+        foreach (string err in errors)
+        {
+            Console.WriteLine($"  ⚠ {err}");
+        }
+    }
+    else
+    {
+        Console.WriteLine($"[Manifest] Опубликован: {manifestService.ManifestPath}");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[Manifest] Publishing failed: {ex.Message}");
+}
 
 // --- Выбор режима запуска ---
 using var cts = new CancellationTokenSource();

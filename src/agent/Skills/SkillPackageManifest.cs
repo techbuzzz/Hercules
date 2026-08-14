@@ -65,15 +65,26 @@ public sealed class SkillTestSuite
 }
 
 /// <summary>
-///     Манифест пакета навыка (skill.package.json).
+///     Манифест пакета навыка (skill.package.json, ZIP only).
 ///     Описывает содержимое пакета: метаданные навыка, инструменты, тесты, версия формата.
-///     Один пакет = одна папка с файлами: skill.meta.json, skill.prompt.md, skill.description.md,
-///     skill.tests.json, tool.schema.json (опционально), skill.usage.json (опционально).
+///     Для folder-структуры авторитетные данные лежат в skill.meta.json, skill.prompt.md, etc.
 /// </summary>
 public sealed class SkillPackageManifest
 {
-    /// <summary>Версия формата пакета.</summary>
+    /// <summary>Версия формата пакета (1 = текущая).</summary>
     public int PackageVersion { get; set; } = 1;
+
+    /// <summary>
+    ///     Формат пакета: "folder" (directory) или "zip" (.skillpkg).
+    ///     Для ZIP-пакетов это поле всегда "zip"; для folder-экспорта ставится "folder".
+    /// </summary>
+    public string PackageFormat { get; set; } = "zip";
+
+    /// <summary>
+    ///     Версия спецификации формата пакета (semver). Сигнализирует о breaking changes в формате.
+    ///     Текущая версия: "1.0.0".
+    /// </summary>
+    public string PackageSpecVersion { get; set; } = "1.0.0";
 
     /// <summary>Метаданные навыка (id, name, description, phrase_receivers, version, ...).</summary>
     public SkillPackageSkillMeta Skill { get; set; } = new();
@@ -84,8 +95,14 @@ public sealed class SkillPackageManifest
     /// <summary>Тесты навыка (опционально).</summary>
     public SkillTestSuite? Tests { get; set; }
 
+    /// <summary>Примеры использования навыка (skill.examples.json, опционально).</summary>
+    public SkillExamples? Examples { get; set; }
+
     /// <summary>Источник пакета (author, license, repository URL).</summary>
     public SkillPackageSource? Source { get; set; }
+
+    /// <summary>Декларируемые зависимости от других навыков (task_021).</summary>
+    public List<SkillDependency> Dependencies { get; set; } = new();
 
     /// <summary>Дата создания пакета (ISO 8601).</summary>
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("o");
@@ -94,6 +111,8 @@ public sealed class SkillPackageManifest
 /// <summary>
 ///     Метаданные навыка внутри пакета. Включает те же поля, что и SkillMeta,
 ///     но без runtime-метрик (SuccessRate, TotalUses) — они не переносятся при экспорте.
+///     Расширен в task_020 полями совместимости: owner, Hercules-version range,
+///     schema versions, permissions, model requirements, risk level, budgets.
 /// </summary>
 public sealed class SkillPackageSkillMeta
 {
@@ -105,6 +124,49 @@ public sealed class SkillPackageSkillMeta
 
     public int Version { get; set; } = 1;
     public string CreatedAt { get; set; } = DateTime.UtcNow.ToString("yyyy-MM-dd");
+
+    // Task 020: Skill Manifest & Compatibility
+    public string? Owner { get; set; }
+
+    [JsonPropertyName("min_hercules_version")]
+    public string? MinHerculesVersion { get; set; }
+
+    [JsonPropertyName("max_hercules_version")]
+    public string? MaxHerculesVersion { get; set; }
+
+    [JsonPropertyName("input_schema_version")]
+    public string? InputSchemaVersion { get; set; }
+
+    [JsonPropertyName("output_schema_version")]
+    public string? OutputSchemaVersion { get; set; }
+
+    /// <summary>Запрошенные permissions навыка.</summary>
+    public List<string> Permissions { get; set; } = new();
+
+    [JsonPropertyName("model_requirements")]
+    public string? ModelRequirements { get; set; }
+
+    /// <summary>Уровень риска: 0=Low, 1=Medium, 2=High, 3=Critical.</summary>
+    [JsonPropertyName("risk_level")]
+    public int RiskLevel { get; set; } = 0;
+
+    /// <summary>Декларативные бюджетные лимиты навыка.</summary>
+    public SkillPackageBudget? Budget { get; set; }
+}
+
+/// <summary>
+///     Бюджетные лимиты внутри пакета (сериализуются в skill.package.json).
+/// </summary>
+public sealed class SkillPackageBudget
+{
+    [JsonPropertyName("max_tokens_per_call")]
+    public int MaxTokensPerCall { get; set; } = 0;
+
+    [JsonPropertyName("max_calls_per_minute")]
+    public int MaxCallsPerMinute { get; set; } = 0;
+
+    [JsonPropertyName("max_cost_per_call_usd")]
+    public decimal MaxCostPerCallUsd { get; set; } = 0;
 }
 
 /// <summary>
@@ -117,4 +179,43 @@ public sealed class SkillPackageSource
 
     /// <summary>URL репозитория или маркетплейса, откуда импортирован пакет.</summary>
     public string? Repository { get; set; }
+}
+
+/// <summary>
+///     Декларация зависимости навыка от другого навыка.
+///     Используется для разрешения transitive-dependency при импорте.
+/// </summary>
+public sealed class SkillDependency
+{
+    /// <summary>ID зависимого навыка.</summary>
+    public string Id { get; set; } = "";
+
+    /// <summary>
+    ///     Semver range constraint (e.g. "≥1.0.0", "&lt;2.0.0", "^1.2.3").
+    ///     Пусто = любая версия.
+    /// </summary>
+    public string? VersionConstraint { get; set; }
+
+    /// <summary>Обязательная ли зависимость. Default=true — если false, warn но не блокирует.</summary>
+    public bool IsRequired { get; set; } = true;
+}
+
+/// <summary>
+///     Примеры использования навыка (skill.examples.json).
+/// </summary>
+public sealed class SkillExamples
+{
+    public List<SkillExample> Examples { get; set; } = new();
+}
+
+/// <summary>
+///     Один пример использования навыка.
+/// </summary>
+public sealed class SkillExample
+{
+    /// <summary>Пример входного запроса пользователя.</summary>
+    public string Input { get; set; } = "";
+
+    /// <summary>Ожидаемое поведение навыка.</summary>
+    public string ExpectedBehavior { get; set; } = "";
 }

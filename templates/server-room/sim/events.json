@@ -1,0 +1,12 @@
+[
+  { "timestamp": "2026-08-12T00:00:00Z", "type": "system_startup", "description": "Server room monitoring system started", "severity": "info", "payload": null, "source": "system" },
+  { "timestamp": "2026-08-12T01:00:00Z", "type": "backup_started", "description": "Nightly backup job initiated", "severity": "info", "payload": "{\"job_id\":\"backup-20260812-01\"}", "source": "backup-manager" },
+  { "timestamp": "2026-08-12T02:30:00Z", "type": "backup_completed", "description": "Nightly backup completed successfully", "severity": "info", "payload": null, "source": "backup-manager" },
+  { "timestamp": "2026-08-12T09:00:00Z", "type": "rack_temp_warning", "description": "Rack A1 temperature approaching upper threshold (25.3°C)", "severity": "warning", "payload": "{\"rack\":\"rack-a1\",\"current\":25.3,\"threshold\":27.0}", "source": "rack-sensor" },
+  { "timestamp": "2026-08-12T09:35:00Z", "type": "rack_temp_critical", "description": "Rack A1 temperature exceeded critical threshold (27.6°C)", "severity": "critical", "payload": "{\"rack\":\"rack-a1\",\"current\":27.6,\"threshold\":27.0}", "source": "rack-sensor" },
+  { "timestamp": "2026-08-12T09:36:00Z", "type": "alert_dispatched", "description": "Critical temperature alert dispatched to ops team", "severity": "critical", "payload": "{\"rack\":\"rack-a1\",\"action\":\"throttleVMs\"}", "source": "ops-system" },
+  { "timestamp": "2026-08-12T09:40:00Z", "type": "pdu_overload_warning", "description": "PDU-1 power load at 82.5% — approaching capacity", "severity": "warning", "payload": "{\"pdu\":\"pdu-1\",\"current\":82.5,\"capacity\":100}", "source": "pdu-sensor" },
+  { "timestamp": "2026-08-12T10:00:00Z", "type": "rack_temp_recovered", "description": "Rack A1 temperature returned to normal (25.5°C)", "severity": "info", "payload": null, "source": "rack-sensor" },
+  { "timestamp": "2026-08-12T14:00:00Z", "type": "hardware_alert", "description": "CPU thermal throttle detected on host node-12 (rack-a1)", "severity": "critical", "payload": "{\"host\":\"node-12\",\"rack\":\"rack-a1\",\"type\":\"thermal_throttle\"}", "source": "ipmi-sensor" },
+  { "timestamp": "2026-08-12T14:05:00Z", "type": "capacity_report_generated", "description": "Monthly capacity report generated", "severity": "info", "payload": null, "source": "reporting-system" }
+]

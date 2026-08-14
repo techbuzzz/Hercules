@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using Hercules.Config;
 using Hercules.LLM;
@@ -148,6 +149,183 @@ public class SkillPackagerTests : IDisposable
       var second = _packager.Import(path);
 
       Assert.NotEqual(first.Meta.Id, second.Meta.Id);
+   }
+
+   // ─── Folder export / import ─────────────────────────────────────────────────
+
+   [Fact]
+   public void ExportToFolder_Creates_SkillFolder()
+   {
+      var skill = _skillManager.CreateManual("folder-test", ["фолдер"], "System prompt.", "Описание.");
+      var folderPath = _packager.ExportToFolder(skill.Meta.Id, _tempDir);
+
+      Assert.True(Directory.Exists(folderPath));
+      Assert.EndsWith($"skill.{skill.Meta.Id}", folderPath);
+   }
+
+   [Fact]
+   public void ExportToFolder_Creates_AllSpecFiles()
+   {
+      var skill = _skillManager.CreateManual("spec-files", ["spec"], "Промпт.", "Описание.");
+      var folderPath = _packager.ExportToFolder(skill.Meta.Id, _tempDir);
+
+      Assert.True(File.Exists(Path.Combine(folderPath, "skill.meta.json")));
+      Assert.True(File.Exists(Path.Combine(folderPath, "skill.description.md")));
+      Assert.True(File.Exists(Path.Combine(folderPath, "skill.prompt.md")));
+   }
+
+   [Fact]
+   public void ExportToFolder_Omits_OptionalFiles_When_Null()
+   {
+      var skill = _skillManager.CreateManual("no-optionals", ["noop"], "Промпт.");
+      _packager.ExportToFolder(skill.Meta.Id, _tempDir,
+          examples: null, changelog: null, includeUsage: false);
+
+      var folderPath = Path.Combine(_tempDir, $"skill.{skill.Meta.Id}");
+      Assert.False(File.Exists(Path.Combine(folderPath, "skill.examples.json")));
+      Assert.False(File.Exists(Path.Combine(folderPath, "skill.changelog.md")));
+      Assert.False(File.Exists(Path.Combine(folderPath, "skill.usage.json")));
+   }
+
+   [Fact]
+   public void ExportToFolder_Includes_Examples_WhenProvided()
+   {
+      var skill = _skillManager.CreateManual("examples-test", ["ex"], "Промпт.");
+      var examples = new SkillExamples
+      {
+         Examples = new List<SkillExample>
+         {
+            new() { Input = "Привет", ExpectedBehavior = "Отвечает приветствием" }
+         }
+      };
+      _packager.ExportToFolder(skill.Meta.Id, _tempDir, examples: examples);
+
+      var folderPath = Path.Combine(_tempDir, $"skill.{skill.Meta.Id}");
+      var examplesFile = Path.Combine(folderPath, "skill.examples.json");
+      Assert.True(File.Exists(examplesFile));
+      Assert.Contains("Привет", File.ReadAllText(examplesFile));
+   }
+
+   [Fact]
+   public void ExportToFolder_Includes_Changelog_WhenProvided()
+   {
+      var skill = _skillManager.CreateManual("changelog-test", ["log"], "Промпт.");
+      const string changelog = "# Changelog\n\n## v2 — 2025-06-01\n- Fixed bug";
+      _packager.ExportToFolder(skill.Meta.Id, _tempDir, changelog: changelog);
+
+      var folderPath = Path.Combine(_tempDir, $"skill.{skill.Meta.Id}");
+      var changelogFile = Path.Combine(folderPath, "skill.changelog.md");
+      Assert.True(File.Exists(changelogFile));
+      Assert.Contains("Changelog", File.ReadAllText(changelogFile));
+   }
+
+   [Fact]
+   public void ExportToFolder_Includes_ToolSchema_WhenSkillHasTools()
+   {
+      var skill = _skillManager.CreateManual("tools-test", ["tools"], "Промпт.");
+      skill.Meta.Tools = new List<ToolDeclaration>
+      {
+         new() { Name = "http", Description = "HTTP requests", Required = true }
+      };
+      _repo.Save(skill);
+
+      _packager.ExportToFolder(skill.Meta.Id, _tempDir);
+
+      var folderPath = Path.Combine(_tempDir, $"skill.{skill.Meta.Id}");
+      var toolSchema = Path.Combine(folderPath, "tool.schema.json");
+      Assert.True(File.Exists(toolSchema));
+      Assert.Contains("http", File.ReadAllText(toolSchema));
+   }
+
+   [Fact]
+   public void Import_FromFolder_Restores_Skill()
+   {
+      var skill = _skillManager.CreateManual("folder-import", ["импорт"], "Промпт.", "Описание.");
+      _packager.ExportToFolder(skill.Meta.Id, _tempDir);
+
+      var folderPath = Path.Combine(_tempDir, $"skill.{skill.Meta.Id}");
+
+      // Удаляем из репозитория
+      // (folder import — в другой агент, для теста — в тот же с Rename)
+      var imported = _packager.Import(folderPath);
+
+      Assert.NotNull(imported);
+      Assert.Equal("folder-import", imported.Meta.Name);
+      Assert.Equal("Промпт.", imported.Prompt);
+      Assert.Equal(["импорт"], imported.Meta.PhraseReceivers);
+      Assert.NotEqual(skill.Meta.Id, imported.Meta.Id); // Rename
+   }
+
+   [Fact]
+   public void Validate_Folder_WithMissingMeta_ReturnsError()
+   {
+      var emptyDir = Path.Combine(_tempDir, $"skill.empty-{Guid.NewGuid():N}");
+      Directory.CreateDirectory(emptyDir);
+
+      var errors = _packager.Validate(emptyDir);
+
+      Assert.NotEmpty(errors);
+      Assert.Contains(errors, e => e.Contains("skill.meta.json"));
+   }
+
+   [Fact]
+   public void Validate_Folder_WithMissingPrompt_ReturnsError()
+   {
+      var dir = Path.Combine(_tempDir, $"skill.partial-{Guid.NewGuid():N}");
+      Directory.CreateDirectory(dir);
+      File.WriteAllText(Path.Combine(dir, "skill.meta.json"),
+          "{\"id\":\"test\",\"name\":\"Test\",\"phrase_receivers\":[\"x\"]}");
+
+      var errors = _packager.Validate(dir);
+
+      Assert.NotEmpty(errors);
+      Assert.Contains(errors, e => e.Contains("skill.prompt.md"));
+   }
+
+   [Fact]
+   public void Validate_Folder_Valid_ReturnsNoErrors()
+   {
+      var skill = _skillManager.CreateManual("valid-folder", ["vf"], "Промпт.", "Описание.");
+      _packager.ExportToFolder(skill.Meta.Id, _tempDir);
+
+      var folderPath = Path.Combine(_tempDir, $"skill.{skill.Meta.Id}");
+      var errors = _packager.Validate(folderPath);
+
+      Assert.Empty(errors);
+   }
+
+   [Fact]
+   public void Export_zip_Includes_SkillFolder_Structure()
+   {
+      var skill = _skillManager.CreateManual("zip-structure", ["zip"], "Промпт.", "Описание.");
+      var zipPath = _packager.Export(skill.Meta.Id, _tempDir);
+
+      using var archive = ZipFile.OpenRead(zipPath);
+      var skillFolder = $"skill.{skill.Meta.Id}/";
+
+      Assert.NotNull(archive.GetEntry($"{skillFolder}skill.meta.json"));
+      Assert.NotNull(archive.GetEntry($"{skillFolder}skill.description.md"));
+      Assert.NotNull(archive.GetEntry($"{skillFolder}skill.prompt.md"));
+      Assert.NotNull(archive.GetEntry("skill.package.json"));
+   }
+
+   [Fact]
+   public void Manifest_Includes_PackageFormat_AndSpecVersion()
+   {
+      var skill = _skillManager.CreateManual("manifest-check", ["mf"], "Промпт.");
+      _packager.ExportToFolder(skill.Meta.Id, _tempDir);
+
+      // Проверяем, что package.json в ZIP содержит новые поля
+      var zipPath = _packager.Export(skill.Meta.Id, _tempDir);
+      using var archive = ZipFile.OpenRead(zipPath);
+      var manifestEntry = archive.GetEntry("skill.package.json");
+      Assert.NotNull(manifestEntry);
+
+      using var reader = new StreamReader(manifestEntry.Open());
+      var manifestJson = reader.ReadToEnd();
+
+      Assert.Contains("\"package_format\"", manifestJson);
+      Assert.Contains("\"package_spec_version\"", manifestJson);
    }
 }
 

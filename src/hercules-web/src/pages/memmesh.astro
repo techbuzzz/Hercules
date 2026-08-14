@@ -1,0 +1,22 @@
+---
+import Layout from "../layouts/Layout.astro";
+import MeshRouterPanel from "../components/MeshRouterPanel.astro";
+import EscalationPanel from "../components/EscalationPanel.astro";
+import MeshDashboard from "../components/MeshDashboard.astro";
+---
+
+<Layout title="Hercules · Mesh" active="mesh">
+  <div class="mb-4">
+    <h1 class="text-xl font-semibold text-white">Mesh Dashboard</h1>
+    <p class="text-sm text-gray-400">Live topology, traffic, health, denials, skill heatmap, eval results.</p>
+  </div>
+
+  <!-- Full dashboard (Phase 5 task_053) -->
+  <MeshDashboard />
+
+  <!-- Existing panels -->
+  <div class="mt-6 grid gap-6 lg:grid-cols-2">
+    <MeshRouterPanel />
+    <EscalationPanel />
+  </div>
+</Layout>

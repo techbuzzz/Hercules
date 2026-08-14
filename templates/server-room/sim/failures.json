@@ -1,0 +1,50 @@
+[
+  {
+    "id": "sr-001",
+    "name": "Rack Thermal Throttle",
+    "description": "Rack temperature sensor stuck at 27.0°C — CPU thermal throttle triggered",
+    "scenario": "server-room",
+    "type": "StuckAt",
+    "affectedSensors": ["rack_temp"],
+    "injectAfterSeconds": 3000,
+    "durationSeconds": 3600,
+    "faultValue": 27.0,
+    "faultMessage": "thermal throttle active"
+  },
+  {
+    "id": "sr-002",
+    "name": "PDU Load Spike",
+    "description": "PDU power load spikes to 95% — near capacity overload",
+    "scenario": "server-room",
+    "type": "Spike",
+    "affectedSensors": ["power_load"],
+    "injectAfterSeconds": 6000,
+    "durationSeconds": 1800,
+    "faultValue": 95.0,
+    "faultMessage": "PDU overload imminent"
+  },
+  {
+    "id": "sr-003",
+    "name": "UPS Battery Degradation",
+    "description": "UPS battery percentage stuck at 94% — sensor reading unreliable",
+    "scenario": "server-room",
+    "type": "StuckAt",
+    "affectedSensors": ["ups_battery"],
+    "injectAfterSeconds": 12000,
+    "durationSeconds": 2400,
+    "faultValue": 94.0,
+    "faultMessage": "battery sensor frozen"
+  },
+  {
+    "id": "sr-004",
+    "name": "Rack Temp Blackout",
+    "description": "Rack temperature sensor blackout — all readings zero",
+    "scenario": "server-room",
+    "type": "Blackout",
+    "affectedSensors": ["rack_temp"],
+    "injectAfterSeconds": 18000,
+    "durationSeconds": 1200,
+    "faultValue": 0.0,
+    "faultMessage": "temp sensor offline — ZERO reading"
+  }
+]

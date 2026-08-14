@@ -76,6 +76,88 @@ public sealed class SkillMeta
     ///     Null = оценка ещё не проводилась.
     /// </summary>
     public double? LastEvaluationScore { get; set; }
+
+    /// <summary>
+    ///     Task 023: Декларативные типы ввода навыка.
+    ///     Используется DeterministicRouter для маршрутизации без embedding в edge/offline-деплоях.
+    ///     Примеры: "code", "writing", "qa", "analysis", "translation", "data", "math".
+    ///     Сериализуется как "input_types" в skill.meta.json.
+    /// </summary>
+    [JsonPropertyName("input_types")]
+    public List<string> InputTypes { get; set; } = new();
+
+    /// <summary>
+    ///     Task 023: Теги навыка для детерминированной маршрутизации.
+    ///     Используется DeterministicRouter (без embedding) для offline/edge-деплоев.
+    ///     Примеры: "python", "api", "debug", "web", "cli".
+    ///     Сериализуется как "tags" в skill.meta.json.
+    /// </summary>
+    [JsonPropertyName("tags")]
+    public List<string> Tags { get; set; } = new();
+
+    // ─── Task 20: Skill Manifest & Compatibility ────────────────────────────────────
+
+    /// <summary>
+    ///     Автор или maintainer навыка.
+    ///     Сериализуется как "owner" в skill.meta.json.
+    /// </summary>
+    public string? Owner { get; set; }
+
+    /// <summary>
+    ///     Минимальная совместимая версия Hercules (semver, например "1.0.0").
+    ///     Если Hercules старше этой версии — навык несовместим.
+    ///     Сериализуется как "min_hercules_version".
+    /// </summary>
+    [JsonPropertyName("min_hercules_version")]
+    public string? MinHerculesVersion { get; set; }
+
+    /// <summary>
+    ///     Максимальная совместимая версия Hercules (semver).
+    ///     Null = без ограничения.
+    ///     Сериализуется как "max_hercules_version".
+    /// </summary>
+    [JsonPropertyName("max_hercules_version")]
+    public string? MaxHerculesVersion { get; set; }
+
+    /// <summary>
+    ///     Версия схемы входных данных навыка (semver).
+    ///     Сериализуется как "input_schema_version".
+    /// </summary>
+    [JsonPropertyName("input_schema_version")]
+    public string? InputSchemaVersion { get; set; }
+
+    /// <summary>
+    ///     Версия схемы выходных данных навыка (semver).
+    ///     Сериализуется как "output_schema_version".
+    /// </summary>
+    [JsonPropertyName("output_schema_version")]
+    public string? OutputSchemaVersion { get; set; }
+
+    /// <summary>
+    ///     Запрошенные permissions навыка: Read, Write, Network, Memory, Shell, CodeExecution, etc.
+    ///     Сериализуется как "permissions".
+    /// </summary>
+    public List<string> Permissions { get; set; } = new();
+
+    /// <summary>
+    ///     Минимальные требования к LLM-модели.
+    ///     Сериализуется как "model_requirements".
+    /// </summary>
+    [JsonPropertyName("model_requirements")]
+    public string? ModelRequirements { get; set; }
+
+    /// <summary>
+    ///     Уровень риска навыка: Low=0, Medium=1, High=2, Critical=3.
+    ///     Сериализуется как "risk_level" (int).
+    /// </summary>
+    [JsonPropertyName("risk_level")]
+    public int RiskLevel { get; set; } = 0;
+
+    /// <summary>
+    ///     Декларативные бюджетные лимиты навыка.
+    ///     Сериализуется как "budget" (inline object).
+    /// </summary>
+    public SkillMetaBudget? Budget { get; set; }
 }
 
 /// <summary>
@@ -102,6 +184,12 @@ public sealed class SkillUsage
 
     /// <summary>Уверенность ответа: high/medium/low.</summary>
     public string Confidence { get; set; } = "medium";
+
+    /// <summary>
+    ///     Продолжительность выполнения навыка в миллисекундах.
+    ///     Используется LatencyScorer для приоритизации быстрых навыков (task_022).
+    /// </summary>
+    public int LatencyMs { get; set; } = 0;
 }
 
 /// <summary>Запись взаимодействия для лога SQLite.</summary>
@@ -231,3 +319,22 @@ public sealed record ApprovalRequest(
     string Status,           // Pending | Approved | Denied | Expired
     DateTime? ApprovedAt,
     DateTime? DeniedAt);
+
+/// <summary>
+///     Декларативные бюджетные лимиты навыка (сериализуемые в skill.meta.json).
+///     Дублирует Hercules.Skills.SkillManifestBudget для Storage-модели.
+/// </summary>
+public sealed class SkillMetaBudget
+{
+    /// <summary>Максимум токенов на один вызов навыка.</summary>
+    [JsonPropertyName("max_tokens_per_call")]
+    public int MaxTokensPerCall { get; set; } = 0;
+
+    /// <summary>Максимум вызовов в минуту.</summary>
+    [JsonPropertyName("max_calls_per_minute")]
+    public int MaxCallsPerMinute { get; set; } = 0;
+
+    /// <summary>Максимум стоимости на один вызов (USD).</summary>
+    [JsonPropertyName("max_cost_per_call_usd")]
+    public decimal MaxCostPerCallUsd { get; set; } = 0;
+}

@@ -1,4 +1,7 @@
 using Hercules.Agent;
+using Hercules.Config;
+using Hercules.Skills.Routing;
+using Hercules.Skills.Routing.Deterministic;
 using Hercules.Storage;
 
 namespace Hercules.Skills;
@@ -12,33 +15,48 @@ public readonly record struct SemanticRouteResult(Skill? MatchedSkill, double Sc
 }
 
 /// <summary>
-///     Семантический маршрутизатор навыков: ранжирует навыки по embedding-сходству
-///     запроса с описанием навыка и его фразами-приёмниками.
-///     В отличие от SkillRouter (keyword-matching), понимает синонимы и парафразы.
-///     Гибридный подход: если embedding-сходство низкое — fallback на keyword-matching.
+///     Семантический маршрутизатор навыков.
+///     Wraps SkillScoringEngine for hybrid scoring (task_022).
+///     Fallback chain:
+///       1. Semantic routing (embedding + scoring engine)
+///       2. Deterministic routing (keyword + tags + input types, task_023)
+///       3. Legacy keyword-only SkillRouter
 /// </summary>
 public sealed class EmbeddingSkillRouter
 {
-    private readonly IEmbeddingProvider _embedder;
-    private readonly Dictionary<string, float[]> _skillEmbeddings = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ISkillScoringEngine? _scoringEngine;
+    private readonly SkillRouter _legacyRouter;
     private readonly SkillManager _skills;
-    private List<string>? _cachedSkillIds;
+    private readonly Phase2Config _phase2Config;
+    private readonly IDeterministicRouter? _deterministicRouter;
 
-    public EmbeddingSkillRouter(IEmbeddingProvider embedder, SkillManager skills)
+    public EmbeddingSkillRouter(
+        SkillManager skills,
+        Phase2Config phase2Config,
+        SkillRouter legacyRouter,
+        ISkillScoringEngine? scoringEngine,
+        IDeterministicRouter? deterministicRouter)
     {
-        _embedder = embedder ?? throw new ArgumentNullException(nameof(embedder));
         _skills = skills ?? throw new ArgumentNullException(nameof(skills));
+        _phase2Config = phase2Config ?? throw new ArgumentNullException(nameof(phase2Config));
+        _legacyRouter = legacyRouter ?? throw new ArgumentNullException(nameof(legacyRouter));
+        _scoringEngine = scoringEngine;
+        _deterministicRouter = deterministicRouter;
     }
 
-    /// <summary>Минимальный порог cosine-similarity для семантического матча (0..1).</summary>
-    public double SimilarityThreshold { get; set; } = 0.35;
-
-    /// <summary>Использовать keyword-matching как fallback, если embedding < порога.</summary>
-    public bool UseKeywordFallback { get; set; } = true;
+    /// <summary>
+    ///     Similarity threshold for embedding-based matching (passed through Phase2Config).
+    /// </summary>
+    public double SimilarityThreshold => _phase2Config.SimilarityThreshold;
 
     /// <summary>
-    ///     Маршрутизировать запрос: найти подходящий навык по embedding-сходству.
-    ///     Возвращает лучший навык и метод маршрутизации ("embedding" | "keyword" | "none").
+    ///     Whether keyword fallback is used when embedding score is below threshold.
+    /// </summary>
+    public bool UseKeywordFallback => _phase2Config.KeywordFallback;
+
+    /// <summary>
+    ///     Route a request using the semantic scoring engine.
+    ///     Returns the best matching skill and the routing method.
     /// </summary>
     public async Task<SemanticRouteResult> RouteAsync(string input, CancellationToken ct = default)
     {
@@ -47,137 +65,122 @@ public sealed class EmbeddingSkillRouter
             return new SemanticRouteResult(null, 0, "none");
         }
 
-        // Получаем embedding запроса
-        var queryEmbedding = await _embedder.EmbedAsync(input, ct);
-        if (IsZeroVector(queryEmbedding))
+        // ── Step 1: Semantic routing ────────────────────────────────────────
+        if (_phase2Config.SemanticRoutingEnabled && _scoringEngine is not null)
         {
-            return UseKeywordFallback
-                ? KeywordFallback(input)
-                : new SemanticRouteResult(null, 0, "none");
-        }
+            var best = await _scoringEngine.ScoreBestAsync(input, ct);
 
-        // Загружаем навыки и строим кэш embeddings (если изменился список навыков)
-        List<Skill> allSkills = _skills.All();
-        RefreshCacheIfNeeded(allSkills);
-
-        // Ранжируем по cosine-similarity
-        Skill? best = null;
-        var bestScore = 0.0;
-        foreach (Skill skill in allSkills)
-        {
-            if (!_skillEmbeddings.TryGetValue(skill.Meta.Id, out var skillEmb))
+            if (best is not null && best.IsEligible)
             {
-                continue;
+                // Embedding score very low but keyword matched → prefer keyword
+                if (best.ComponentScores.TryGetValue("embedding", out var embScore) &&
+                    embScore.Value < 0.05 &&
+                    best.ComponentScores.TryGetValue("lexical", out var lexScore) &&
+                    lexScore.Value > 0)
+                {
+                    return new SemanticRouteResult(best.Skill, best.OverallScore, "keyword");
+                }
+
+                return new SemanticRouteResult(best.Skill, best.OverallScore, best.PrimaryMethod);
             }
 
-            var sim = CosineSimilarity(queryEmbedding, skillEmb);
-            if (sim > bestScore)
+            // Semantic routing failed → try deterministic fallback
+            var detResult = TryDeterministicRouting(input);
+            if (detResult.IsSkill)
             {
-                bestScore = sim;
-                best = skill;
+                return detResult;
             }
+
+            // Deterministic also failed → try legacy keyword
+            return UseKeywordFallback ? KeywordFallback(input)
+                                      : new SemanticRouteResult(null, 0, "none");
         }
 
-        if (best is not null && bestScore >= SimilarityThreshold)
+        // ── Step 2: Semantic routing disabled → Deterministic or legacy ─────
+        if (_phase2Config.DeterministicRouting.FallbackMode == DeterministicFallbackMode.Always)
         {
-            return new SemanticRouteResult(best, bestScore, "embedding");
+            var detResult = TryDeterministicRouting(input);
+            if (detResult.IsSkill)
+            {
+                return detResult;
+            }
+            return new SemanticRouteResult(null, 0, "none");
         }
 
-        // Fallback на keyword-matching
+        // OnNoEmbedding or Never with semantic disabled → legacy keyword
         if (UseKeywordFallback)
         {
-            SemanticRouteResult kwResult = KeywordFallback(input);
-            if (kwResult.IsSkill)
+            return KeywordFallback(input);
+        }
+
+        return new SemanticRouteResult(null, 0, "none");
+    }
+
+    /// <summary>
+    ///     Score all skills using the semantic engine and return ranked results.
+    /// </summary>
+    public async Task<IReadOnlyList<SkillScoreResult>> ScoreAllAsync(
+        string input, CancellationToken ct = default)
+    {
+        if (_phase2Config.SemanticRoutingEnabled && _scoringEngine is not null)
+        {
+            return await _scoringEngine.ScoreAllAsync(input, ct);
+        }
+
+        // Legacy / deterministic — return single-item list
+        var detResult = TryDeterministicRouting(input);
+        if (detResult.IsSkill)
+        {
+            return new[]
             {
-                return new SemanticRouteResult(kwResult.MatchedSkill, kwResult.Score, "keyword");
+                new SkillScoreResult
+                {
+                    Skill = detResult.MatchedSkill!,
+                    OverallScore = detResult.Score,
+                    IsEligible = true,
+                    PrimaryMethod = detResult.Method
+                }
+            };
+        }
+
+        var legacy = KeywordFallback(input);
+        if (!legacy.IsSkill) return [];
+        return new[]
+        {
+            new SkillScoreResult
+            {
+                Skill = legacy.MatchedSkill!,
+                OverallScore = legacy.Score,
+                IsEligible = true,
+                PrimaryMethod = "keyword"
             }
-        }
-
-        return new SemanticRouteResult(null, bestScore, "none");
+        };
     }
 
-    /// <summary>Принудительно перестроить кэш embeddings при следующем вызове RouteAsync.</summary>
-    public void InvalidateCache()
+    /// <summary>
+    ///     Try deterministic routing if enabled and available.
+    /// </summary>
+    private SemanticRouteResult TryDeterministicRouting(string input)
     {
-        _cachedSkillIds = null;
-        _skillEmbeddings.Clear();
-    }
-
-    private void RefreshCacheIfNeeded(List<Skill> skills)
-    {
-        var currentIds = skills.Select(s => s.Meta.Id).OrderBy(id => id).ToList();
-        if (_cachedSkillIds is not null && _cachedSkillIds.SequenceEqual(currentIds))
+        var mode = _phase2Config.DeterministicRouting.FallbackMode;
+        if (mode == DeterministicFallbackMode.Never || _deterministicRouter is null)
         {
-            return; // Кэш актуален
+            return new SemanticRouteResult(null, 0, "none");
         }
 
-        _skillEmbeddings.Clear();
-        foreach (Skill skill in skills)
+        var det = _deterministicRouter.Route(input);
+        if (!det.IsSkill)
         {
-            // Embedding навыка = конкатенация имени, описания и фраз-приёмников
-            var skillText = $"{skill.Meta.Name} {skill.Meta.Description} {string.Join(" ", skill.Meta.PhraseReceivers)}";
-            var emb = _embedder.EmbedAsync(skillText).GetAwaiter().GetResult();
-            _skillEmbeddings[skill.Meta.Id] = emb;
+            return new SemanticRouteResult(null, 0, "none");
         }
 
-        _cachedSkillIds = currentIds;
+        var primaryMethod = det.MatchedMethods.FirstOrDefault() ?? "deterministic";
+        return new SemanticRouteResult(det.MatchedSkill, det.Score, primaryMethod);
     }
 
     private SemanticRouteResult KeywordFallback(string input)
     {
-        var normalized = SkillRouter.Normalize(input);
-        Skill? best = null;
-        var bestScore = 0;
-
-        foreach (Skill skill in _skills.All())
-        {
-            var score = skill.Meta.PhraseReceivers.Count(receiver =>
-                !string.IsNullOrWhiteSpace(receiver) &&
-                normalized.Contains(SkillRouter.Normalize(receiver), StringComparison.Ordinal));
-
-            if (score > bestScore)
-            {
-                bestScore = score;
-                best = skill;
-            }
-        }
-
-        return bestScore > 0
-            ? new SemanticRouteResult(best, bestScore, "keyword")
-            : new SemanticRouteResult(null, 0, "none");
-    }
-
-    private static double CosineSimilarity(float[] a, float[] b)
-    {
-        if (a.Length != b.Length || a.Length == 0)
-        {
-            return 0;
-        }
-
-        double dot = 0, normA = 0, normB = 0;
-        for (var i = 0; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
-        }
-
-        var denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 0
-            ? dot / denom
-            : 0;
-    }
-
-    private static bool IsZeroVector(float[] v)
-    {
-        foreach (var x in v)
-        {
-            if (x != 0)
-            {
-                return false;
-            }
-        }
-
-        return true;
+        var legacy = _legacyRouter.Route(input);
+        return new SemanticRouteResult(legacy.MatchedSkill, legacy.Score, "keyword");
     }
 }

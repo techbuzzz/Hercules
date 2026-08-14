@@ -1,0 +1,12 @@
+[
+  { "timestamp": "2026-08-12T00:00:00Z", "type": "route_started", "description": "Cold chain route initiated: distribution-center-1 → warehouse-east", "severity": "info", "payload": null, "source": "fleet-manager" },
+  { "timestamp": "2026-08-12T01:00:00Z", "type": "cargo_loaded", "description": "Frozen cargo loaded: batch #FC-2026-0812-001, 24 pallets", "severity": "info", "payload": "{\"batch\":\"FC-2026-0812-001\",\"pallets\":24}", "source": "warehouse-scanner" },
+  { "timestamp": "2026-08-12T03:30:00Z", "type": "door_opened", "description": "Frozen compartment door opened for 6 minutes", "severity": "warning", "payload": "{\"duration_min\":6,\"location\":\"frozen-zone-1\"}", "source": "door-sensor" },
+  { "timestamp": "2026-08-12T03:36:00Z", "type": "temperature_excursion", "description": "Temperature excursion detected in frozen zone: -19.0°C exceeds -20°C threshold", "severity": "critical", "payload": "{\"location\":\"frozen-zone-1\",\"current\":-19.0,\"threshold\":-20.0,\"duration_min\":6}", "source": "temp-sensor" },
+  { "timestamp": "2026-08-12T04:00:00Z", "type": "cargo_loaded", "description": "Refrigerated cargo loaded: batch #RC-2026-0812-003, 12 pallets", "severity": "info", "payload": "{\"batch\":\"RC-2026-0812-003\",\"pallets\":12}", "source": "warehouse-scanner" },
+  { "timestamp": "2026-08-12T07:00:00Z", "type": "checkpoint", "description": "Vehicle passed checkpoint: highway-40 km-marker 145", "severity": "info", "payload": null, "source": "gps-tracker" },
+  { "timestamp": "2026-08-12T08:00:00Z", "type": "temperature_excursion_critical", "description": "Temperature excursion in refrigerated zone: 7.5°C exceeds 7°C critical threshold", "severity": "critical", "payload": "{\"location\":\"refrigerated-zone-2\",\"current\":7.5,\"threshold\":7.0}", "source": "temp-sensor" },
+  { "timestamp": "2026-08-12T10:00:00Z", "type": "checkpoint", "description": "Vehicle arrived at warehouse-east", "severity": "info", "payload": null, "source": "gps-tracker" },
+  { "timestamp": "2026-08-12T10:30:00Z", "type": "cargo_unloaded", "description": "Cargo batch #FC-2026-0812-001 unloaded — 24 pallets, excursion logged", "severity": "warning", "payload": "{\"batch\":\"FC-2026-0812-001\",\"pallets\":24,\"excursion\":true}", "source": "warehouse-scanner" },
+  { "timestamp": "2026-08-12T11:00:00Z", "type": "compliance_report_generated", "description": "Cold chain compliance report generated for batch #FC-2026-0812-001", "severity": "info", "payload": null, "source": "compliance-system" }
+]

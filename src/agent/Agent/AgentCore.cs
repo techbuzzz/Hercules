@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hercules.Agent.Loop;
+using Hercules.Context;
 using Hercules.Audit;
 using Hercules.Budget;
 using Hercules.Config;
@@ -10,6 +11,9 @@ using Hercules.Contracts;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Observability;
+using Hercules.Mesh.Verification;
+using Hercules.Quotas;
+using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Tools;
 using Hercules.Tools.Approval;
@@ -51,6 +55,9 @@ public sealed record AgentResponse
     public string? ProposeImproveSkillId { get; init; }
 
     public string? ProposeImproveSkillName { get; init; }
+
+    /// <summary>[task_046] Метаданные верификации. Null если верификация не выполнялась.</summary>
+    public VerificationMetadata? Verification { get; init; }
 }
 
 /// <summary>
@@ -77,6 +84,8 @@ public sealed class AgentCore : IConfigReload
     private readonly ILogger<AgentCore> _logger;
     private readonly MemoryManager _memory;
     private readonly SkillRouter _router;
+    private readonly EmbeddingSkillRouter? _embeddingRouter;  // null when semantic routing disabled
+    private Phase2Config? _phase2Config;
     private readonly SqliteSessionStore _sessions;
     private readonly SkillManager _skills;
     private readonly ToolRegistry? _tools;
@@ -87,6 +96,11 @@ public sealed class AgentCore : IConfigReload
     private readonly BudgetGuard? _budgetGuard;
     private readonly IOtelService? _otel;
     private readonly IAuditService? _auditService;
+    private readonly IContextBuilder? _contextBuilder;
+    private readonly IVerificationPipeline? _verificationPipeline;
+    private readonly Hercules.Mesh.Escalation.IEscalationService? _escalationService;
+    private readonly IQuotaService? _quotaService;
+    private readonly QuotaGuard? _quotaGuard;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
@@ -94,6 +108,7 @@ public sealed class AgentCore : IConfigReload
     private string _contextBlock = "";
     private string _lastInput = "";
     private Activity? _currentHandleActivity;
+    private readonly List<ToolTraceEntry> _currentToolTrace = new();
 
     public AgentCore(
         ILLMClient llm,
@@ -110,10 +125,19 @@ public sealed class AgentCore : IConfigReload
         IGuardrailService? guardrails = null,
         BudgetGuard? budgetGuard = null,
         IOtelService? otel = null,
-        IAuditService? auditService = null)
+        IAuditService? auditService = null,
+        EmbeddingSkillRouter? embeddingRouter = null,
+        Phase2Config? phase2Config = null,
+        IContextBuilder? contextBuilder = null,
+        IVerificationPipeline? verificationPipeline = null,
+        Hercules.Mesh.Escalation.IEscalationService? escalationService = null,
+        IQuotaService? quotaService = null,
+        QuotaGuard? quotaGuard = null)
     {
         _llm = llm;
         _router = router;
+        _embeddingRouter = embeddingRouter;
+        _phase2Config = phase2Config;
         _skills = skills;
         _memory = memory;
         _sessions = sessions;
@@ -127,6 +151,11 @@ public sealed class AgentCore : IConfigReload
         _budgetGuard = budgetGuard;
         _otel = otel;
         _auditService = auditService;
+        _contextBuilder = contextBuilder;
+        _verificationPipeline = verificationPipeline;
+        _escalationService = escalationService;
+        _quotaService = quotaService;
+        _quotaGuard = quotaGuard;
     }
 
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
@@ -152,6 +181,7 @@ public sealed class AgentCore : IConfigReload
     public void Reload(AppConfig config)
     {
         _cfg = config.Agent;
+        _phase2Config = config.Phase2;
     }
 
     /// <summary>Инициализация сессии: создать запись и загрузить контекст памяти.</summary>
@@ -200,6 +230,22 @@ public sealed class AgentCore : IConfigReload
         Stopwatch handleSw)
     {
         CommandCount++;
+        _currentToolTrace.Clear();
+
+        // [task_027] Build context using ContextBuilder (if available)
+        string contextBlock;
+        if (_contextBuilder is not null && _memory is not null)
+        {
+            var ctxAssembly = await _contextBuilder.BuildContextAsync(input, SessionId, null, externalCt);
+            contextBlock = ctxAssembly.ContextBlock;
+            _logger.LogDebug("[ContextBuilder] Built context: {ItemCount} items, {Tokens} tokens, truncated={Truncated}",
+                ctxAssembly.ItemCount, ctxAssembly.Budget.UsedTokens, ctxAssembly.Truncated);
+        }
+        else
+        {
+            // Legacy path: use _memory.BuildContextBlock() result
+            contextBlock = _contextBlock;
+        }
 
         // [task_013] Record handle call metric
         OtelMetrics.HandleCounter.Add(1);
@@ -215,6 +261,24 @@ public sealed class AgentCore : IConfigReload
                 _otel?.SetErrorStatus(_currentHandleActivity, "guardrail_blocked");
                 handleSw.Stop();
                 OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
+
+                // [task_049] Escalate budget guardrail violations
+                if (_escalationService is not null)
+                {
+                    _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
+                    {
+                        RequestId = SessionId,
+                        AgentId = "hercules-agent",
+                        SessionId = SessionId,
+                        Type = Hercules.Mesh.Escalation.EscalationType.BudgetExceeded,
+                        Severity = Hercules.Mesh.Escalation.EscalationSeverity.High,
+                        ActionPlan = "Return budget-degradation message to user",
+                        Context = $"Budget guardrail: {degradation}",
+                        ToolOrIntentName = "BudgetGuard",
+                        RequestedBy = "agent"
+                    }, externalCt);
+                }
+
                 return new AgentResponse
                 {
                     Answer = degradation,
@@ -224,6 +288,49 @@ public sealed class AgentCore : IConfigReload
                 };
             }
             _budgetGuard.LogSoftWarnings(preCheck);
+        }
+
+        // [task_056] Quota pre-check: block on hard quota violations
+        if (_quotaService is not null && _quotaGuard is not null)
+        {
+            var quotaResult = _quotaService.CheckQuotas(QuotaScope.Agent, "hercules");
+            var quotaDegradation = _quotaGuard.CheckAndGetDegradationMessage(quotaResult);
+            if (quotaDegradation is not null)
+            {
+                _logger.LogWarning("[QuotaGuard] Quota pre-check failed — returning degradation response");
+                _otel?.SetErrorStatus(_currentHandleActivity, "quota_blocked");
+                handleSw.Stop();
+                OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
+
+                // [task_049] Escalate quota violations
+                if (_escalationService is not null)
+                {
+                    _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
+                    {
+                        RequestId = SessionId,
+                        AgentId = "hercules-agent",
+                        SessionId = SessionId,
+                        Type = Hercules.Mesh.Escalation.EscalationType.BudgetExceeded,
+                        Severity = Hercules.Mesh.Escalation.EscalationSeverity.High,
+                        ActionPlan = "Return quota-degradation message to user",
+                        Context = $"Quota guard: {quotaDegradation}",
+                        ToolOrIntentName = "QuotaGuard",
+                        RequestedBy = "agent"
+                    }, externalCt);
+                }
+
+                return new AgentResponse
+                {
+                    Answer = quotaDegradation,
+                    Confidence = "low",
+                    Mode = "quota_blocked",
+                    Provider = ""
+                };
+            }
+            _quotaGuard.LogSoftWarnings(quotaResult);
+
+            // Begin concurrency tracking
+            _quotaService.BeginConcurrency(QuotaScope.Agent, "hercules");
         }
 
         // Reset request counters at the start of each HandleAsync call
@@ -247,9 +354,22 @@ public sealed class AgentCore : IConfigReload
         // [Loop] Step 1 — Skill routing
         _logger.LogDebug("[Loop] {Step} started (input: {InputLen} chars)", loopCtx.CurrentStep, input.Length);
         var routeSw = Stopwatch.StartNew();
-        RouteResult route = _router.Route(input);
+        RouteResult route;
+
+        if (_embeddingRouter is not null && _phase2Config?.SemanticRoutingEnabled == true)
+        {
+            // [task_022] Semantic scoring engine routing
+            var semResult = await _embeddingRouter.RouteAsync(input, ct);
+            route = new RouteResult(semResult.MatchedSkill, (int)(semResult.Score * 100));
+        }
+        else
+        {
+            // Legacy keyword routing
+            route = _router.Route(input);
+        }
+
         _lastInput = input;
-        var systemPrompt = BuildSystemPrompt(route.MatchedSkill);
+        var systemPrompt = BuildSystemPrompt(route.MatchedSkill, contextBlock);
         routeSw.Stop();
 
         // [task_013] Record skill route activity and metric
@@ -275,7 +395,7 @@ public sealed class AgentCore : IConfigReload
         string toolUsed = "";
         try
         {
-            (llmResp, toolUsed, loopCtx) = await RunWithToolsAsync(messages, loopCtx, ct);
+            (llmResp, toolUsed, loopCtx) = await RunWithToolsAsync(messages, loopCtx, route.MatchedSkill?.Meta.Id, ct);
         }
         catch (OperationCanceledException) when (lcts.IsWallClockTimeout)
         {
@@ -313,12 +433,53 @@ public sealed class AgentCore : IConfigReload
 
         var (answer, confidence) = ExtractConfidence(llmResp.Text);
 
+        // [task_049] Escalate low-confidence responses
+        if (_escalationService is not null && confidence.Equals("low", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
+            {
+                RequestId = SessionId,
+                AgentId = "hercules-agent",
+                SessionId = SessionId,
+                Type = Hercules.Mesh.Escalation.EscalationType.LowConfidence,
+                Severity = Hercules.Mesh.Escalation.EscalationSeverity.Medium,
+                ActionPlan = $"Return low-confidence response to user (answer: {(answer.Length > 80 ? answer[..80] + "..." : answer)})",
+                Context = $"Low-confidence response ({confidence}): {answer}",
+                ToolOrIntentName = route.MatchedSkill?.Meta.Id ?? "(direct)",
+                RequestedBy = "agent"
+            }, externalCt);
+        }
+
         // [task_012] Record LLM usage for budget guardrails
         if (_guardrails is not null)
         {
             var tokensUsed = llmResp.InputTokens + llmResp.OutputTokens;
             var cost = EstimateCost(tokensUsed, llmResp.Provider);
             _guardrails.RecordLlmUsage(SessionId, llmResp.InputTokens, llmResp.OutputTokens, cost, llmResp.Provider);
+        }
+
+        // [task_056] Record quota usage (tokens, messages)
+        if (_quotaService is not null)
+        {
+            var totalTokens = llmResp.InputTokens + llmResp.OutputTokens;
+            _quotaService.RecordUsage(QuotaScope.Agent, "hercules", QuotaLimitType.TokensPerDayPerAgent, totalTokens);
+            _quotaService.RecordUsage(QuotaScope.Agent, "hercules", QuotaLimitType.MessagesPerDayPerAgent, 1);
+        }
+
+        // [task_027] Compress tool trace into episodic memory if threshold reached
+        if (_contextBuilder is not null && _currentToolTrace.Count > 0)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _contextBuilder.CompressTraceAsync(_currentToolTrace, SessionId, CancellationToken.None);
+                }
+                catch
+                {
+                    // Best-effort compression
+                }
+            }, CancellationToken.None);
         }
 
         // [Loop] Step 3 — Transcript update
@@ -339,9 +500,10 @@ public sealed class AgentCore : IConfigReload
             route.MatchedSkill?.Meta.Id, llmResp.Provider, DateTime.UtcNow));
 
         // Запись использования навыка (успех = уверенность не low)
+        // [task_022] LatencyScorer: записываем elapsed time от начала HandleAsync
         if (route.IsSkill)
         {
-            _skills.RecordUsage(route.MatchedSkill!.Meta.Id, confidence != "low", confidence);
+            _skills.RecordUsage(route.MatchedSkill!.Meta.Id, confidence != "low", confidence, (int)handleSw.ElapsedMilliseconds);
         }
 
         // [task_013] Record final handle duration
@@ -351,7 +513,122 @@ public sealed class AgentCore : IConfigReload
         OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
 
         // 5-6. Пороги (skill creation/improvement)
-        return BuildResponse(answer, confidence, llmResp.Provider, route.MatchedSkill, toolUsed, mode);
+        var response = BuildResponse(answer, confidence, llmResp.Provider, route.MatchedSkill, toolUsed, mode);
+
+        // [task_046] Verification pipeline: check response before returning
+        if (_verificationPipeline is not null && _verificationPipeline.Config.Enabled)
+        {
+            var skipConfidence = _verificationPipeline.Config.MinConfidenceToSkipVerification.ToLowerInvariant() switch
+            {
+                "high" => 3, "medium" => 2, "low" => 1, _ => 3
+            };
+            var respConfidence = confidence.ToLowerInvariant() switch
+            {
+                "high" => 3, "medium" => 2, "low" => 1, _ => 2
+            };
+            if (respConfidence < skipConfidence)
+            {
+                var verifyCtx = new VerificationContext
+                {
+                    VerificationId = "",
+                    RequestId = SessionId,
+                    AgentId = "hercules-agent",
+                    SessionId = SessionId,
+                    ResponseText = answer,
+                    Mode = mode,
+                    ToolUsed = string.IsNullOrEmpty(toolUsed) ? null : toolUsed,
+                    Confidence = confidence,
+                    Provider = llmResp.Provider
+                };
+
+                using var verifyTimeout = new CancellationTokenSource(_verificationPipeline.Config.MaxVerificationTimeMs);
+                var verifyResult = await _verificationPipeline.VerifyAsync(verifyCtx, verifyTimeout.Token);
+
+                if (verifyResult.Blocked)
+                {
+                    _logger.LogWarning(
+                        "[VerificationPipeline] Response BLOCKED (severity={Severity}, reason={Reason})",
+                        verifyResult.MaxSeverity, verifyResult.BlockingReason);
+                    _otel?.SetTag(_currentHandleActivity, "hercules.verification_blocked", "true");
+                    _otel?.SetTag(_currentHandleActivity, "hercules.verification_severity", verifyResult.MaxSeverity.ToString());
+
+                    // [task_049] Escalate verification policy denials
+                    if (_escalationService is not null)
+                    {
+                        var sev = verifyResult.MaxSeverity switch
+                        {
+                            Hercules.Mesh.Verification.VerificationSeverity.Critical => Hercules.Mesh.Escalation.EscalationSeverity.Critical,
+                            Hercules.Mesh.Verification.VerificationSeverity.High => Hercules.Mesh.Escalation.EscalationSeverity.High,
+                            Hercules.Mesh.Verification.VerificationSeverity.Medium => Hercules.Mesh.Escalation.EscalationSeverity.Medium,
+                            _ => Hercules.Mesh.Escalation.EscalationSeverity.Low
+                        };
+                        _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
+                        {
+                            RequestId = SessionId,
+                            AgentId = "hercules-agent",
+                            SessionId = SessionId,
+                            Type = Hercules.Mesh.Escalation.EscalationType.PolicyDenial,
+                            Severity = sev,
+                            ActionPlan = "Block verification-blocked response and notify operator",
+                            Context = $"Verification blocked: severity={verifyResult.MaxSeverity}, reason={verifyResult.BlockingReason}",
+                            ToolOrIntentName = response.ToolUsed,
+                            RequestedBy = "verification-pipeline"
+                        }, externalCt);
+                    }
+
+                    // Return a safe degradation response instead of the original
+                    return new AgentResponse
+                    {
+                        Answer = "Ответ заблокирован системой верификации из-за нарушения политики безопасности. Обратитесь к администратору.",
+                        Mode = "verification_blocked",
+                        Confidence = "low",
+                        Provider = "",
+                        UsedSkill = response.UsedSkill,
+                        ToolUsed = response.ToolUsed,
+                        ProposeSkillForInput = response.ProposeSkillForInput,
+                        ProposeImproveSkillId = response.ProposeImproveSkillId,
+                        ProposeImproveSkillName = response.ProposeImproveSkillName,
+                        Verification = new VerificationMetadata(
+                            verifyResult.VerificationId,
+                            false,
+                            verifyResult.MaxSeverity.ToString(),
+                            verifyResult.BlockingReason,
+                            verifyResult.ElapsedMs)
+                    };
+                }
+
+                _otel?.SetTag(_currentHandleActivity, "hercules.verification_passed", "true");
+                _logger.LogDebug("[VerificationPipeline] Response passed verification ({ElapsedMs}ms)",
+                    verifyResult.ElapsedMs);
+
+                response = new AgentResponse
+                {
+                    Answer = response.Answer,
+                    Mode = response.Mode,
+                    Confidence = response.Confidence,
+                    Provider = response.Provider,
+                    UsedSkill = response.UsedSkill,
+                    ToolUsed = response.ToolUsed,
+                    ProposeSkillForInput = response.ProposeSkillForInput,
+                    ProposeImproveSkillId = response.ProposeImproveSkillId,
+                    ProposeImproveSkillName = response.ProposeImproveSkillName,
+                    Verification = new VerificationMetadata(
+                        verifyResult.VerificationId,
+                        true,
+                        verifyResult.MaxSeverity.ToString(),
+                        null,
+                        verifyResult.ElapsedMs)
+                };
+            }
+        }
+
+        // [task_056] End concurrency tracking for quota
+        if (_quotaService is not null)
+        {
+            _quotaService.EndConcurrency(QuotaScope.Agent, "hercules");
+        }
+
+        return response;
     }
 
     /// <summary>
@@ -361,7 +638,7 @@ public sealed class AgentCore : IConfigReload
     ///     Контекст обновляется после каждого tool execution для observability.
     /// </summary>
     private async Task<(LlmResponse Response, string ToolUsed, LoopContext Context)> RunWithToolsAsync(
-        List<ChatTurn> messages, LoopContext ctx, CancellationToken ct)
+        List<ChatTurn> messages, LoopContext ctx, string? skillId, CancellationToken ct)
     {
         var toolUsed = "";
         LlmResponse last = default!;
@@ -402,7 +679,8 @@ public sealed class AgentCore : IConfigReload
                 {
                     ToolName = toolName,
                     ArgumentsJson = argsJson,
-                    SessionId = SessionId
+                    SessionId = SessionId,
+                    SkillId = skillId
                 });
 
                 if (policyResult.IsDenied)
@@ -505,6 +783,16 @@ public sealed class AgentCore : IConfigReload
             }
 
             toolSw.Stop();
+
+            // [task_027] Record tool trace entry for compression
+            _currentToolTrace.Add(new ToolTraceEntry(
+                toolName,
+                argsJson,
+                toolResult.Output,
+                toolSw.ElapsedMilliseconds,
+                DateTime.UtcNow,
+                toolResult.Success));
+
             OtelMetrics.ToolCallCounter.Add(1,
                 new KeyValuePair<string, object?>("tool", toolName),
                 new KeyValuePair<string, object?>("status", toolResult.Success ? "ok" : "fail"));
@@ -644,8 +932,20 @@ public sealed class AgentCore : IConfigReload
         _logger.LogDebug("[Eval] Evaluating skill '{Name}' with input: {Input}", skill.Meta.Name, input);
         CommandCount++;
 
+        // [task_027] Build context for eval
+        string ctxBlock;
+        if (_contextBuilder is not null && _memory is not null)
+        {
+            var assembly = await _contextBuilder.BuildContextAsync(input, SessionId, skill, ct);
+            ctxBlock = assembly.ContextBlock;
+        }
+        else
+        {
+            ctxBlock = _contextBlock;
+        }
+
         // Строим system prompt напрямую с навыком (минуя роутер)
-        var systemPrompt = BuildSystemPrompt(skill);
+        var systemPrompt = BuildSystemPrompt(skill, ctxBlock);
         var messages = BuildMessages(systemPrompt, input);
 
         LlmResponse llmResp;
@@ -655,6 +955,7 @@ public sealed class AgentCore : IConfigReload
             (llmResp, toolUsed, _) = await RunWithToolsAsync(
                 messages,
                 LoopContext.Initial(_cfg.MaxToolIterations, _cfg.MaxWallClockTimeoutSeconds > 0 ? TimeSpan.FromSeconds(_cfg.MaxWallClockTimeoutSeconds) : null, _cfg.MaxRecursionDepth),
+                skill.Meta.Id,
                 ct);
         }
         catch (Exception ex)
@@ -717,12 +1018,12 @@ public sealed class AgentCore : IConfigReload
 
     // ---- Вспомогательные методы ----
 
-    private string BuildSystemPrompt(Skill? skill)
+    private string BuildSystemPrompt(Skill? skill, string contextBlock)
     {
         var sb = new StringBuilder();
         sb.AppendLine(_cfg.SystemPrompt);
         sb.AppendLine();
-        sb.AppendLine(_contextBlock);
+        sb.AppendLine(contextBlock);
         if (skill is not null)
         {
             sb.AppendLine();

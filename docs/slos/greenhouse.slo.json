@@ -1,0 +1,121 @@
+{
+  "vertical": "greenhouse",
+  "description": "Greenhouse monitoring and control: Raspberry Pi 4B, environmental sensors, irrigation control. 24/7 agricultural automation.",
+  "version": "1.0",
+  "availabilityTarget": 0.990,
+  "responseTimeTargetMs": 2000.0,
+  "dataLossTargetPerDay": 5,
+  "recoveryTimeTargetMinutes": 15,
+  "costTargetUsd": 5.00,
+  "alertThresholds": {
+    "availabilityWarningPct": 98.0,
+    "availabilityCriticalPct": 95.0,
+    "responseTimeWarningMs": 3000.0,
+    "responseTimeCriticalMs": 5000.0,
+    "dataLossWarningPerDay": 3,
+    "dataLossCriticalPerDay": 10,
+    "recoveryTimeWarningMinutes": 10,
+    "recoveryTimeCriticalMinutes": 20,
+    "costWarningPct": 80.0,
+    "costCriticalPct": 95.0
+  },
+  "runbooks": {
+    "availability": {
+      "title": "Greenhouse agent unavailable",
+      "symptoms": [
+        "Agent heartbeat missing for >5 minutes",
+        "Sensor readings stale (>10 min gap)",
+        "Delegation requests returning timeout"
+      ],
+      "diagnosisSteps": [
+        "Check Raspberry Pi power and network",
+        "Check hercules-agent process status",
+        "Review degradation mode: is agent in Offline/Degraded?",
+        "Check cellular/LTE connectivity",
+        "Review mesh observability traces for last successful delegation"
+      ],
+      "mitigationSteps": [
+        "Restart agent: systemctl restart hercules-agent",
+        "Check data/outbox queue for pending writes",
+        "Force flush outbox to cloud on reconnection",
+        "Verify sensor daemon is running (python3 sensor-daemon.py)"
+      ],
+      "escalationTrigger": "If agent is down >30 minutes or irrigation cannot be triggered, escalate to field technician."
+    },
+    "responseTime": {
+      "title": "Greenhouse response time degraded",
+      "symptoms": [
+        "Delegation P95 latency >2s",
+        "Sensor read requests timeout",
+        "Irregular irrigation cycles"
+      ],
+      "diagnosisSteps": [
+        "Check cellular signal strength (RSSI > -100 dBm)",
+        "Review mesh latency histogram: hercules.mesh.delegation_latency_ms",
+        "Check if degraded mode is active",
+        "Review budget: is LLM fallback to cheaper model happening?"
+      ],
+      "mitigationSteps": [
+        "Switch to degraded mode with deterministic routing",
+        "Reduce embedding calls (use keyword fallback)",
+        "Flush outbox queue"
+      ],
+      "escalationTrigger": "If P95 latency >5s for >15 minutes, escalate to operations."
+    },
+    "dataLoss": {
+      "title": "Greenhouse sensor data loss",
+      "symptoms": [
+        "Outbox pending count increasing",
+        "Data gaps in sensor logs",
+        "Irregular monitoring intervals"
+      ],
+      "diagnosisSteps": [
+        "Check outbox pending count via /api/backups endpoint",
+        "Review offline sync status",
+        "Check cellular data usage and quota"
+      ],
+      "mitigationSteps": [
+        "Trigger manual outbox flush",
+        "Increase sync interval (reduce network usage)",
+        "Switch to LTE if WiFi is degraded"
+      ],
+      "escalationTrigger": "If >100 events lost in 24h, escalate to operations."
+    },
+    "recoveryTime": {
+      "title": "Greenhouse recovery time exceeded",
+      "symptoms": [
+        "Agent recovering from outage in >15 min",
+        "Multiple degradation transitions"
+      ],
+      "diagnosisSteps": [
+        "Review degradation event log",
+        "Check recovery trigger: was it network or power?",
+        "Verify outbox drain completed successfully"
+      ],
+      "mitigationSteps": [
+        "Confirm all sensor readings restored",
+        "Verify irrigation control is responsive",
+        "Run manual eval to confirm agent health"
+      ],
+      "escalationTrigger": "If recovery takes >30 minutes, escalate to field technician."
+    },
+    "cost": {
+      "title": "Greenhouse daily cost budget exceeded",
+      "symptoms": [
+        "Daily cost >$5.00",
+        "Budget alerts firing"
+      ],
+      "diagnosisSteps": [
+        "Review LLM call breakdown (provider/model)",
+        "Check skill evaluation frequency",
+        "Review self-improvement proposal generation rate"
+      ],
+      "mitigationSteps": [
+        "Switch to cheaper LLM model (e.g., gpt-4o-mini)",
+        "Disable self-improvement proposals",
+        "Reduce eval frequency to weekly"
+      ],
+      "escalationTrigger": "If cost consistently >$10/day, escalate to operations for architecture review."
+    }
+  }
+}

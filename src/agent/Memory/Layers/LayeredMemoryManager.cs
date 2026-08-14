@@ -14,6 +14,11 @@ public sealed class LayeredMemoryManager
     private readonly IEpisodicStore _episodicStore;
     private readonly LayeredMemoryConfig _config;
 
+    /// <summary>
+    ///     Direct access to episodic store (for ContextBuilder compression).
+    /// </summary>
+    public IEpisodicStore EpisodicStore => _episodicStore;
+
     public LayeredMemoryManager(
         IWorkingMemory workingMemory,
         IDurableFactsStore factsStore,

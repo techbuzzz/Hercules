@@ -1,0 +1,38 @@
+[
+  {
+    "id": "cc-001",
+    "name": "Frozen Compartment Door Fault",
+    "description": "Frozen compartment door sensor stuck open — temperature cannot recover to -25°C",
+    "scenario": "cold-chain",
+    "type": "StuckAt",
+    "affectedSensors": ["temperature"],
+    "injectAfterSeconds": 3600,
+    "durationSeconds": 2400,
+    "faultValue": -18.0,
+    "faultMessage": "door fault: temperature plateau at -18°C"
+  },
+  {
+    "id": "cc-002",
+    "name": "Refrigerated Zone Data Loss",
+    "description": "Refrigerated zone temperature sensor fails — data gap",
+    "scenario": "cold-chain",
+    "type": "DataLoss",
+    "affectedSensors": ["temperature"],
+    "injectAfterSeconds": 9000,
+    "durationSeconds": 1800,
+    "faultValue": null,
+    "faultMessage": "refrigerated sensor data loss"
+  },
+  {
+    "id": "cc-003",
+    "name": "Humidity Spike",
+    "description": "Humidity spikes above 75% — risk of condensation in frozen zone",
+    "scenario": "cold-chain",
+    "type": "Spike",
+    "affectedSensors": ["humidity"],
+    "injectAfterSeconds": 5400,
+    "durationSeconds": 1200,
+    "faultValue": 85.0,
+    "faultMessage": "humidity spike: condensation risk"
+  }
+]

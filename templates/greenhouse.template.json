@@ -1,0 +1,9 @@
+{
+  "name": "Greenhouse Assistant",
+  "description": "Agent for greenhouse monitoring and control: climate sensors, irrigation scheduling, pest alerts, yield forecasting.",
+  "version": 1,
+  "scenario": "greenhouse",
+  "skills": [],
+  "memory_files": ["user_profile.md"],
+  "tool_files": []
+}

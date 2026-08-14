@@ -52,22 +52,29 @@ public sealed class ToolRegistry
     {
         foreach (ITool t in tools)
         {
-            if (string.IsNullOrWhiteSpace(t.Name))
-            {
-                throw new InvalidOperationException("Tool name cannot be empty");
-            }
-
-            if (_tools.ContainsKey(t.Name))
-            {
-                throw new InvalidOperationException(
-                    $"Duplicate tool name: '{t.Name}' (existing: {_tools[t.Name].GetType().Name}, new: {t.GetType().Name})");
-            }
-
-            _tools[t.Name] = t;
-
-            // Register tool with policy engine
-            _policy?.Register(t);
+            RegisterTool(t);
         }
+    }
+
+    /// <summary>
+    ///     Register a single tool dynamically (e.g., from MCP).
+    ///     Throws <see cref="InvalidOperationException"/> on duplicate name.
+    /// </summary>
+    public void RegisterTool(ITool tool)
+    {
+        if (string.IsNullOrWhiteSpace(tool.Name))
+        {
+            throw new InvalidOperationException("Tool name cannot be empty");
+        }
+
+        if (_tools.ContainsKey(tool.Name))
+        {
+            throw new InvalidOperationException(
+                $"Duplicate tool name: '{tool.Name}' (existing: {_tools[tool.Name].GetType().Name}, new: {tool.GetType().Name})");
+        }
+
+        _tools[tool.Name] = tool;
+        _policy?.Register(tool);
     }
 
     /// <summary>Получить tool по имени (case-insensitive). Null если не найден.</summary>

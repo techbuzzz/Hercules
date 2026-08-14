@@ -1,0 +1,109 @@
+{
+  "vertical": "server-room",
+  "description": "Server room monitoring: 1U rack-mount, industrial grade, environmental controls. Maximum availability required.",
+  "version": "1.0",
+  "availabilityTarget": 0.9999,
+  "responseTimeTargetMs": 500.0,
+  "dataLossTargetPerDay": 0,
+  "recoveryTimeTargetMinutes": 5,
+  "costTargetUsd": 15.00,
+  "alertThresholds": {
+    "availabilityWarningPct": 99.9,
+    "availabilityCriticalPct": 99.5,
+    "responseTimeWarningMs": 800.0,
+    "responseTimeCriticalMs": 2000.0,
+    "dataLossWarningPerDay": 0,
+    "dataLossCriticalPerDay": 1,
+    "recoveryTimeWarningMinutes": 3,
+    "recoveryTimeCriticalMinutes": 10,
+    "costWarningPct": 90.0,
+    "costCriticalPct": 98.0
+  },
+  "runbooks": {
+    "availability": {
+      "title": "Server room agent unavailable — CRITICAL",
+      "symptoms": [
+        "Agent heartbeat missing",
+        "Environmental alerts not triggering",
+        "Delegation requests timing out"
+      ],
+      "diagnosisSteps": [
+        "Check server power (UPS status)",
+        "Check hercules-agent service status",
+        "Review degradation mode",
+        "Check mesh connectivity to other agents"
+      ],
+      "mitigationSteps": [
+        "Restart service: systemctl restart hercules-agent",
+        "Check if in offline mode",
+        "Verify environmental monitoring daemon"
+      ],
+      "escalationTrigger": "If down >10 min, escalate to infrastructure team immediately."
+    },
+    "responseTime": {
+      "title": "Server room response time degraded",
+      "symptoms": [
+        "Delegation P95 >500ms",
+        "Environmental alerts delayed"
+      ],
+      "diagnosisSteps": [
+        "Check mesh observability: hercules.mesh.delegation_latency_ms",
+        "Review network latency to peer agents",
+        "Check CPU load on server"
+      ],
+      "mitigationSteps": [
+        "Reduce fan-out concurrency",
+        "Switch to degraded deterministic routing",
+        "Review budget for LLM model quality"
+      ],
+      "escalationTrigger": "If P95 >2s, escalate to infrastructure team."
+    },
+    "dataLoss": {
+      "title": "Server room data loss — CRITICAL",
+      "symptoms": [
+        "Outbox pending >0",
+        "Environmental log gaps"
+      ],
+      "diagnosisSteps": [
+        "Check outbox immediately",
+        "Verify storage subsystem health",
+        "Check network connectivity to cloud"
+      ],
+      "mitigationSteps": [
+        "Flush outbox immediately",
+        "Verify all environmental sensors reporting"
+      ],
+      "escalationTrigger": "ANY data loss in server room is an SLA breach — escalate to infrastructure lead."
+    },
+    "recoveryTime": {
+      "title": "Server room recovery time exceeded",
+      "symptoms": [
+        "Recovery >5 min from outage"
+      ],
+      "diagnosisSteps": [
+        "Review degradation event log",
+        "Check what triggered the outage"
+      ],
+      "mitigationSteps": [
+        "Confirm all services restored",
+        "Run mesh eval to confirm agent health"
+      ],
+      "escalationTrigger": "If recovery >10 min, escalate to infrastructure team."
+    },
+    "cost": {
+      "title": "Server room daily cost budget exceeded",
+      "symptoms": [
+        "Daily cost >$15.00"
+      ],
+      "diagnosisSteps": [
+        "Review LLM call breakdown",
+        "Check skill evaluation and self-improvement rate"
+      ],
+      "mitigationSteps": [
+        "Switch to cheaper LLM model",
+        "Disable non-critical skills"
+      ],
+      "escalationTrigger": "If cost >$20/day consistently, escalate to operations."
+    }
+  }
+}
