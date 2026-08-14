@@ -112,7 +112,7 @@
 | 60 | 38 | [Offline resilience](tasks/task_060.md) | `offline-resilience` | done |
 | 61 | 42 | [Local-first degradation](tasks/task_061.md) | `local-degradation` | pending |
 | 62 | 39 | [Fleet templates](tasks/task_062.md) | `fleet-templates` | pending |
-| 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | pending |
+| 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | done |
 | 64 | 44 | [Операционные SLO](tasks/task_064.md) | `operational-slos` | pending |
 
 ## Workflow
