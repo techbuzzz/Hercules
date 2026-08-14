@@ -15,6 +15,7 @@ using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Mesh.Verification;
 using Hercules.Observability;
+using Hercules.Quotas;
 using Hercules.Redaction;
 using Hercules.Security;
 using Hercules.Simulation;
@@ -239,6 +240,16 @@ builder.ConfigureServices((context, services) =>
         new BudgetGuard(
             sp.GetRequiredService<BudgetConfig>(),
             sp.GetRequiredService<ILogger<BudgetGuard>>()));
+
+    // Rate limits and quotas (task_056)
+    services.AddSingleton(appConfig.Quotas);
+    services.AddSingleton<IQuotaService>(sp =>
+        new QuotaService(
+            sp.GetRequiredService<QuotasConfig>(),
+            sp.GetRequiredService<ILogger<QuotaService>>()));
+    services.AddSingleton<QuotaGuard>(sp =>
+        new QuotaGuard(
+            sp.GetRequiredService<ILogger<QuotaGuard>>()));
 
     // Phase 2: Skill packager
     services.AddSingleton(appConfig.Marketplace);

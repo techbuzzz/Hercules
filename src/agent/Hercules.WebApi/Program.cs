@@ -15,6 +15,7 @@ using Hercules.Mesh;
 using Hercules.Mesh.A2A;
 using Hercules.Mesh.Auth;
 using Hercules.Observability;
+using Hercules.Quotas;
 using Hercules.Redaction;
 using Hercules.Simulation;
 using Hercules.Skills;
@@ -242,6 +243,16 @@ builder.Services.AddSingleton<BudgetGuard>(sp =>
     new BudgetGuard(
         sp.GetRequiredService<BudgetConfig>(),
         sp.GetRequiredService<ILogger<BudgetGuard>>()));
+
+// Rate limits and quotas (task_056)
+builder.Services.AddSingleton(appConfig.Quotas);
+builder.Services.AddSingleton<IQuotaService>(sp =>
+    new QuotaService(
+        sp.GetRequiredService<QuotasConfig>(),
+        sp.GetRequiredService<ILogger<QuotaService>>()));
+builder.Services.AddSingleton<QuotaGuard>(sp =>
+    new QuotaGuard(
+        sp.GetRequiredService<ILogger<QuotaGuard>>()));
 
 // Layered memory (task_011)
 builder.Services.AddScoped<IWorkingMemory, WorkingMemoryService>();
@@ -583,6 +594,7 @@ catch (Exception ex)
 }
 
 app.MapBudget();
+app.MapQuotas();
 app.MapAudit();
 app.MapLlm();
 app.MapApprovals();

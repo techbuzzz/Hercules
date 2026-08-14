@@ -12,6 +12,7 @@ using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Observability;
 using Hercules.Mesh.Verification;
+using Hercules.Quotas;
 using Hercules.Skills;
 using Hercules.Storage;
 using Hercules.Tools;
@@ -98,6 +99,8 @@ public sealed class AgentCore : IConfigReload
     private readonly IContextBuilder? _contextBuilder;
     private readonly IVerificationPipeline? _verificationPipeline;
     private readonly Hercules.Mesh.Escalation.IEscalationService? _escalationService;
+    private readonly IQuotaService? _quotaService;
+    private readonly QuotaGuard? _quotaGuard;
 
     private readonly List<ChatTurn> _transcript = new();
     private readonly object _transcriptLock = new();
@@ -127,7 +130,9 @@ public sealed class AgentCore : IConfigReload
         Phase2Config? phase2Config = null,
         IContextBuilder? contextBuilder = null,
         IVerificationPipeline? verificationPipeline = null,
-        Hercules.Mesh.Escalation.IEscalationService? escalationService = null)
+        Hercules.Mesh.Escalation.IEscalationService? escalationService = null,
+        IQuotaService? quotaService = null,
+        QuotaGuard? quotaGuard = null)
     {
         _llm = llm;
         _router = router;
@@ -149,6 +154,8 @@ public sealed class AgentCore : IConfigReload
         _contextBuilder = contextBuilder;
         _verificationPipeline = verificationPipeline;
         _escalationService = escalationService;
+        _quotaService = quotaService;
+        _quotaGuard = quotaGuard;
     }
 
     public string SessionId { get; } = Guid.NewGuid().ToString("N")[..12];
@@ -283,6 +290,49 @@ public sealed class AgentCore : IConfigReload
             _budgetGuard.LogSoftWarnings(preCheck);
         }
 
+        // [task_056] Quota pre-check: block on hard quota violations
+        if (_quotaService is not null && _quotaGuard is not null)
+        {
+            var quotaResult = _quotaService.CheckQuotas(QuotaScope.Agent, "hercules");
+            var quotaDegradation = _quotaGuard.CheckAndGetDegradationMessage(quotaResult);
+            if (quotaDegradation is not null)
+            {
+                _logger.LogWarning("[QuotaGuard] Quota pre-check failed — returning degradation response");
+                _otel?.SetErrorStatus(_currentHandleActivity, "quota_blocked");
+                handleSw.Stop();
+                OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
+
+                // [task_049] Escalate quota violations
+                if (_escalationService is not null)
+                {
+                    _ = _escalationService.EscalateAsync(new Hercules.Mesh.Escalation.EscalationContext
+                    {
+                        RequestId = SessionId,
+                        AgentId = "hercules-agent",
+                        SessionId = SessionId,
+                        Type = Hercules.Mesh.Escalation.EscalationType.BudgetExceeded,
+                        Severity = Hercules.Mesh.Escalation.EscalationSeverity.High,
+                        ActionPlan = "Return quota-degradation message to user",
+                        Context = $"Quota guard: {quotaDegradation}",
+                        ToolOrIntentName = "QuotaGuard",
+                        RequestedBy = "agent"
+                    }, externalCt);
+                }
+
+                return new AgentResponse
+                {
+                    Answer = quotaDegradation,
+                    Confidence = "low",
+                    Mode = "quota_blocked",
+                    Provider = ""
+                };
+            }
+            _quotaGuard.LogSoftWarnings(quotaResult);
+
+            // Begin concurrency tracking
+            _quotaService.BeginConcurrency(QuotaScope.Agent, "hercules");
+        }
+
         // Reset request counters at the start of each HandleAsync call
         _guardrails?.ResetRequestCounters(SessionId);
 
@@ -406,6 +456,14 @@ public sealed class AgentCore : IConfigReload
             var tokensUsed = llmResp.InputTokens + llmResp.OutputTokens;
             var cost = EstimateCost(tokensUsed, llmResp.Provider);
             _guardrails.RecordLlmUsage(SessionId, llmResp.InputTokens, llmResp.OutputTokens, cost, llmResp.Provider);
+        }
+
+        // [task_056] Record quota usage (tokens, messages)
+        if (_quotaService is not null)
+        {
+            var totalTokens = llmResp.InputTokens + llmResp.OutputTokens;
+            _quotaService.RecordUsage(QuotaScope.Agent, "hercules", QuotaLimitType.TokensPerDayPerAgent, totalTokens);
+            _quotaService.RecordUsage(QuotaScope.Agent, "hercules", QuotaLimitType.MessagesPerDayPerAgent, 1);
         }
 
         // [task_027] Compress tool trace into episodic memory if threshold reached
@@ -562,6 +620,12 @@ public sealed class AgentCore : IConfigReload
                         verifyResult.ElapsedMs)
                 };
             }
+        }
+
+        // [task_056] End concurrency tracking for quota
+        if (_quotaService is not null)
+        {
+            _quotaService.EndConcurrency(QuotaScope.Agent, "hercules");
         }
 
         return response;

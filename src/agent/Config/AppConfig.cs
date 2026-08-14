@@ -138,6 +138,66 @@ public sealed class AppConfig
 
     /// <summary>Security operations config (task_055): fleet identity, certificates, package signing, vulnerability reporting, audit export.</summary>
     public SecurityOpsConfig SecurityOps { get; set; } = new();
+
+    /// <summary>Rate limits and quotas config (task_056): per-agent, per-skill, per-user, per-tenant limits on calls, tokens, cost, storage, message volume.</summary>
+    public QuotasConfig Quotas { get; set; } = new();
+}
+
+/// <summary>
+///     Конфигурация rate limits и quotas (task_056).
+///     Per-agent, per-skill, per-user, per-tenant limits.
+/// </summary>
+public sealed class QuotasConfig
+{
+    /// <summary>Включить quota enforcement. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Enforcement mode: "soft_warn" или "hard_cap". Default: soft_warn.</summary>
+    public string EnforcementMode { get; set; } = "soft_warn";
+
+    // Per-agent limits
+    /// <summary>Максимум concurrent requests на агента. Default: 10.</summary>
+    public int MaxConcurrentRequestsPerAgent { get; set; } = 10;
+
+    /// <summary>Максимум calls в минуту на агента. Default: 60.</summary>
+    public int MaxCallsPerMinutePerAgent { get; set; } = 60;
+
+    /// <summary>Максимум tokens в день на агента. Default: 1000000.</summary>
+    public long MaxTokensPerDayPerAgent { get; set; } = 1_000_000;
+
+    /// <summary>Максимум storage в MB на агента. Default: 500.</summary>
+    public long MaxStorageMbPerAgent { get; set; } = 500;
+
+    /// <summary>Максимум message volume в день на агента. Default: 10000.</summary>
+    public int MaxMessagesPerDayPerAgent { get; set; } = 10_000;
+
+    // Per-skill limits
+    /// <summary>Максимум calls в минуту на навык. Default: 30.</summary>
+    public int MaxCallsPerMinutePerSkill { get; set; } = 30;
+
+    /// <summary>Максимум concurrent executions на навык. Default: 5.</summary>
+    public int MaxConcurrentPerSkill { get; set; } = 5;
+
+    // Per-user limits
+    /// <summary>Максимум requests в минуту на user. Default: 20.</summary>
+    public int MaxRequestsPerMinutePerUser { get; set; } = 20;
+
+    /// <summary>Максимум daily requests на user. Default: 500.</summary>
+    public int MaxRequestsPerDayPerUser { get; set; } = 500;
+
+    // Per-tenant limits
+    /// <summary>Максимум total agents в tenant. Default: 50.</summary>
+    public int MaxAgentsPerTenant { get; set; } = 50;
+
+    /// <summary>Максимум total calls в минуту на tenant. Default: 1000.</summary>
+    public int MaxCallsPerMinutePerTenant { get; set; } = 1000;
+
+    /// <summary>Максимум total cost в день на tenant (USD). Default: 100.</summary>
+    public decimal MaxCostPerDayPerTenantUsd { get; set; } = 100m;
+
+    // Sliding window for rate limiting (in seconds)
+    /// <summary>Размер sliding window для rate limiting в секундах. Default: 60.</summary>
+    public int RateLimitWindowSeconds { get; set; } = 60;
 }
 
 /// <summary>
