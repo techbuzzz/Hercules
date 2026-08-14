@@ -171,6 +171,10 @@ public sealed class AppConfig
     // task_067: Redis/Valkey coordination backend
     /// <summary>Redis/Valkey backend config (task_067): connection string, key prefixes, TTL, visibility timeout.</summary>
     public Hercules.Mesh.Backends.Redis.RedisMeshConfig Redis { get; set; } = new();
+
+    // task_068: NATS/JetStream backend
+    /// <summary>NATS/JetStream backend config (task_068): servers, auth, stream/KV prefixes, JetStream options.</summary>
+    public Hercules.Mesh.Backends.Nats.NatsMeshConfig Nats { get; set; } = new();
 }
 
 /// <summary>

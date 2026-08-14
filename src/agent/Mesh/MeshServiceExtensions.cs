@@ -8,6 +8,7 @@ using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Backend;
 using Hercules.Mesh.Backends.Redis;
+using Hercules.Mesh.Backends.Nats;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Escalation;
 using Hercules.Mesh.Eval;
@@ -20,6 +21,7 @@ using Hercules.Mesh.Router;
 using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
 using StackExchange.Redis;
+using NATS.Client.Core;
 using Hercules.Mesh.Resilience;
 using Hercules.Observability;
 using Hercules.Skills;
@@ -457,18 +459,41 @@ public static class MeshServiceCollectionExtensions
 
     /// <summary>
     ///     Registers mesh backends (IMeshBus, ITaskQueue, IMeshStateStore) based on active profile.
-    ///     Redis (task_067): uses Redis for all three roles when Redis:Enabled or profile = Redis.
-    ///     Falls back to in-process when Redis is unavailable.
+    ///     Redis (task_067): uses Redis when Redis:Enabled or profile = Redis.
+    ///     NATS (task_068): uses NATS/JetStream when Nats:Enabled or profile = Nats.
+    ///     Falls back to in-process when neither is available.
     /// </summary>
     private static void RegisterMeshBackends(IServiceCollection services, AppConfig appConfig, IServiceProvider sp)
     {
         var redisCfg = appConfig.Redis;
+        var natsCfg = appConfig.Nats;
         var profileLoader = new MeshProfileLoader(appConfig.MeshProfiles, sp.GetRequiredService<ILogger<MeshProfileLoader>>());
         var activeProfile = profileLoader.GetActiveProfile();
         var isRedisProfile = activeProfile?.Profile == MeshBackendProfile.Redis;
+        var isNatsProfile = activeProfile?.Profile == MeshBackendProfile.Nats;
         var isRedisEnabled = redisCfg.Enabled || isRedisProfile;
+        var isNatsEnabled = natsCfg.Enabled || isNatsProfile;
 
-        if (isRedisEnabled)
+        if (isNatsEnabled)
+        {
+            // Register NATS connection as singleton
+            services.AddSingleton<NatsConnection>(sp =>
+            {
+                var servers = natsCfg.Servers.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var primaryServer = servers.Length > 0 ? servers[0] : "nats://localhost:4222";
+                var opts = new NatsOpts
+                {
+                    Url = primaryServer,
+                };
+                return new NatsConnection(opts);
+            });
+
+            services.AddSingleton(natsCfg);
+            services.AddSingleton<IMeshBus, NatsMeshBus>();
+            services.AddSingleton<ITaskQueue, NatsTaskQueue>();
+            services.AddSingleton<IMeshStateStore, NatsMeshStateStore>();
+        }
+        else if (isRedisEnabled)
         {
             // Register Redis connection multiplexer (singleton per connection string)
             var redisConfig = ConfigurationOptions.Parse(redisCfg.ConnectionString);

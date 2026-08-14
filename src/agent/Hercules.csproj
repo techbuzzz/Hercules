@@ -53,6 +53,11 @@
     <!-- Redis/Valkey backend (task_067) — RESP-compatible pub/sub, state store, task queue -->
     <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
 
+    <!-- NATS/JetStream backend (task_068) — subject-based routing, durable streams, KV store -->
+    <PackageReference Include="NATS.Client.Core" Version="2.8.2" />
+    <PackageReference Include="NATS.Client.JetStream" Version="2.8.2" />
+    <PackageReference Include="NATS.Client.KeyValueStore" Version="2.8.2" />
+
     <!-- OpenTelemetry (task_013) — tracing, metrics, structured logs -->
     <PackageReference Include="OpenTelemetry" Version="1.10.0" />
     <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.10.0" />
