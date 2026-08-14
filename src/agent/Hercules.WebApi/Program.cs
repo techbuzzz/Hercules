@@ -28,6 +28,7 @@ using Hercules.Skills.Routing;
 using Hercules.Skills.Routing.ScoringComponents;
 using Hercules.Skills.Routing.Deterministic;
 using Hercules.Storage;
+using Hercules.Mesh.Transport;
 using Hercules.Tasks;
 using Hercules.Telegram;
 using Hercules.Tools;
@@ -566,6 +567,7 @@ app.MapStats();
 app.MapConfig();
 app.MapRollout();
 app.MapMesh();
+app.MapMeshProfiles();
 app.MapMeshObservability();
 app.MapLifecycle();
 

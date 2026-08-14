@@ -85,6 +85,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton(appConfig.Mcp);
     services.AddSingleton(appConfig.A2A);
     services.AddSingleton(appConfig.Mesh);
+    services.AddSingleton(appConfig.MeshProfiles);
     services.AddSingleton(appConfig.ToolPolicy);
     services.AddSingleton(appConfig.Phase2);
     services.AddSingleton(appConfig.SkillQuality);

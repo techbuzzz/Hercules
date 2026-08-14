@@ -136,6 +136,10 @@ public sealed class AppConfig
     /// <summary>Centralized mesh observability config (task_054): trace context propagation, mesh-specific span enrichment, OTLP sink.</summary>
     public MeshCentralizedObservabilityConfig CentralizedObservability { get; set; } = new();
 
+    // task_070: Backend profiles and degradation — mesh deployment profiles, backend health monitoring, degradation policies
+    /// <summary>Mesh backend profiles config (task_070): active profile, profiles directory, health check settings, degradation alerts.</summary>
+    public MeshProfilesConfig MeshProfiles { get; set; } = new();
+
     /// <summary>Security operations config (task_055): fleet identity, certificates, package signing, vulnerability reporting, audit export.</summary>
     public SecurityOpsConfig SecurityOps { get; set; } = new();
 
@@ -1428,6 +1432,43 @@ public sealed class SlosConfig
 
     /// <summary>Включить SLO status endpoint. Default: true.</summary>
     public bool EnableStatusEndpoint { get; set; } = true;
+}
+
+/// <summary>
+///     Конфигурация backend profiles и degradation (task_070).
+///     Активный профиль, директория профилей, настройки health check, policy degradation.
+/// </summary>
+public sealed class MeshProfilesConfig
+{
+    /// <summary>Включить backend health monitoring. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Имя активного профиля (например "local", "redis-ha", "nats-cluster"). Default: "local".</summary>
+    public string? ActiveProfile { get; set; } = "local";
+
+    /// <summary>Директория с .meshprofile.json файлами профилей. Default: "data/mesh-profiles".</summary>
+    public string ProfilesDir { get; set; } = "data/mesh-profiles";
+
+    /// <summary>Интервал health check всех backends в секундах. Default: 30.</summary>
+    public int HealthCheckIntervalSec { get; set; } = 30;
+
+    /// <summary>Timeout одного health check в секундах. Default: 5.</summary>
+    public int HealthCheckTimeoutSec { get; set; } = 5;
+
+    /// <summary>Число последовательных неудачных check'ов для перехода в Unavailable. Default: 3.</summary>
+    public int MaxConsecutiveFailures { get; set; } = 3;
+
+    /// <summary>Включить alerting через webhook при изменении состояния backend. Default: false.</summary>
+    public bool EnableDegradationAlerts { get; set; } = false;
+
+    /// <summary>URL webhook для degradation alerts.</summary>
+    public string? AlertWebhook { get; set; }
+
+    /// <summary>
+    ///     Inline профили (dict key → profile). Загружаются при старте из конфигурации.
+    ///     Используйте для overrides в appsettings.json.
+    /// </summary>
+    public Dictionary<string, Mesh.Profiles.MeshProfileDefinition>? Profiles { get; set; }
 }
 
 /// <summary>

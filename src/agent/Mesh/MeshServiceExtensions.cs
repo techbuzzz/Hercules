@@ -6,12 +6,14 @@ using Hercules.Mesh.Abstractions;
 using Hercules.Mesh.Aggregation;
 using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
+using Hercules.Mesh.Backend;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Escalation;
 using Hercules.Mesh.Eval;
 using Hercules.Mesh.InProcess;
 using Hercules.Mesh.Observability;
 using Hercules.Mesh.Policy;
+using Hercules.Mesh.Profiles;
 using Hercules.Mesh.Verification;
 using Hercules.Mesh.Router;
 using Hercules.Mesh.TaskLifecycle;
@@ -443,6 +445,12 @@ public static class MeshServiceCollectionExtensions
         services.AddSingleton<IMeshBus, InProcessMeshBus>();
         services.AddSingleton<ITaskQueue, InProcessTaskQueue>();
         services.AddSingleton<IMeshStateStore, InProcessMeshStateStore>();
+
+        // Phase 4: Backend profiles and degradation (task_070) — profile loader and health monitor
+        var meshProfilesCfg = appConfig.MeshProfiles;
+        services.AddSingleton(meshProfilesCfg);
+        services.AddSingleton<MeshProfileLoader>();
+        services.AddSingleton<IMeshBackendHealthMonitor, MeshBackendHealthMonitor>();
 
         return services;
     }
