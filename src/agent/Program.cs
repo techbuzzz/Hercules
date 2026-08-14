@@ -250,15 +250,34 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<BudgetConfig>(),
             sp.GetRequiredService<ILogger<BudgetGuard>>()));
 
-    // Rate limits and quotas (task_056)
+    // Rate limits and quotas (task_056, task_072)
     services.AddSingleton(appConfig.Quotas);
-    services.AddSingleton<IQuotaService>(sp =>
+    services.AddSingleton<QuotaService>(sp =>
         new QuotaService(
             sp.GetRequiredService<QuotasConfig>(),
             sp.GetRequiredService<ILogger<QuotaService>>()));
+    // IQuotaService: distributed wrapper when Quotas.DistributedEnabled, in-memory otherwise.
+    // DistributedQuotaService is a decorator over QuotaService that mirrors rate-limit
+    // counters to IMeshStateStore and falls back to in-memory when the store is unreachable.
+    services.AddSingleton<IQuotaService>(sp =>
+    {
+        var cfg = sp.GetRequiredService<QuotasConfig>();
+        var inner = sp.GetRequiredService<QuotaService>();
+        if (cfg.DistributedEnabled && sp.GetService<Hercules.Mesh.Abstractions.IMeshStateStore>() is { } store)
+        {
+            return new DistributedQuotaService(
+                inner,
+                store,
+                cfg,
+                sp.GetRequiredService<ILogger<DistributedQuotaService>>());
+        }
+        return inner;
+    });
     services.AddSingleton<QuotaGuard>(sp =>
         new QuotaGuard(
             sp.GetRequiredService<ILogger<QuotaGuard>>()));
+    // Periodic sweep of rate-limit buckets so they don't accumulate between queries (task_072)
+    services.AddHostedService<QuotaCleanupBackgroundService>();
 
     // Phase 2: Skill packager
     services.AddSingleton(appConfig.Marketplace);

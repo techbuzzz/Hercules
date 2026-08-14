@@ -19,7 +19,10 @@ public sealed class QuotaService : IQuotaService
     private readonly ConcurrentDictionary<string, QuotaCounters> _counters = new();
 
     // Sliding window buckets для rate limiting: key = "scope:scopeId:type"
-    private readonly ConcurrentDictionary<string, ConcurrentBag<DateTime>> _rateBuckets = new();
+    // ConcurrentQueue chosen over ConcurrentBag: O(1) Enqueue/TryDequeue, FIFO order so
+    // head is always the oldest entry and pruning is trivial. ConcurrentBag.Count is O(n)
+    // and order is undefined, which is why the original implementation was broken.
+    private readonly ConcurrentDictionary<string, ConcurrentQueue<DateTime>> _rateBuckets = new();
 
     public QuotaService(QuotasConfig cfg, ILogger<QuotaService> logger)
     {
@@ -185,24 +188,44 @@ public sealed class QuotaService : IQuotaService
         if (!_rateBuckets.TryGetValue(key, out var bucket))
             return 0;
 
-        var windowStart = DateTime.UtcNow.AddSeconds(-_cfg.RateLimitWindowSeconds);
-        CleanOldEntries(bucket, windowStart);
+        PruneOldEntries(bucket, DateTime.UtcNow.AddSeconds(-_cfg.RateLimitWindowSeconds));
         return bucket.Count;
     }
 
-    private void CleanOldEntries(ConcurrentBag<DateTime> bucket, DateTime windowStart)
+    /// <summary>
+    ///     In-place prune: pops entries from the head (oldest first) while they fall outside
+    ///     the sliding window. O(k) where k is the number of expired entries, and the queue
+    ///     itself remains the same ConcurrentQueue instance (no swap, no leaked references).
+    /// </summary>
+    private static void PruneOldEntries(ConcurrentQueue<DateTime> bucket, DateTime cutoff)
     {
-        // Remove entries older than window (best effort, non-blocking)
-        var cutoff = DateTime.UtcNow.AddSeconds(-_cfg.RateLimitWindowSeconds);
-        var toKeep = bucket.Where(t => t > cutoff).ToList();
-        if (toKeep.Count < bucket.Count)
+        while (bucket.TryPeek(out var head) && head < cutoff)
         {
-            // Replace with filtered list (atomic swap)
-            _rateBuckets.AddOrUpdate(
-                bucket.GetHashCode().ToString(), // dummy key for re-lookup
-                _ => new ConcurrentBag<DateTime>(toKeep),
-                (_, _) => new ConcurrentBag<DateTime>(toKeep));
+            // TryDequeue may fail under contention, but the head is still < cutoff,
+            // so another caller (or the background sweeper) will catch it next pass.
+            bucket.TryDequeue(out _);
         }
+    }
+
+    /// <summary>
+    ///     Sweep all rate-limit buckets and prune expired entries. Invoked periodically by
+    ///     <see cref="QuotaCleanupBackgroundService"/> so the buckets do not grow without bound
+    ///     between <see cref="GetRateLimitCount"/> calls.
+    /// </summary>
+    public int SweepAllBuckets()
+    {
+        var cutoff = DateTime.UtcNow.AddSeconds(-_cfg.RateLimitWindowSeconds);
+        var swept = 0;
+        foreach (var key in _rateBuckets.Keys)
+        {
+            if (_rateBuckets.TryGetValue(key, out var bucket))
+            {
+                var before = bucket.Count;
+                PruneOldEntries(bucket, cutoff);
+                swept += before - bucket.Count;
+            }
+        }
+        return swept;
     }
 
     public void RecordUsage(QuotaScope scope, string scopeId, QuotaLimitType type, long amount)
@@ -232,7 +255,7 @@ public sealed class QuotaService : IQuotaService
 
         // Add to rate limit bucket
         var bucketKey = $"{scope}:{scopeId}:{type}";
-        _rateBuckets.GetOrAdd(bucketKey, _ => new ConcurrentBag<DateTime>()).Add(DateTime.UtcNow);
+        _rateBuckets.GetOrAdd(bucketKey, _ => new ConcurrentQueue<DateTime>()).Enqueue(DateTime.UtcNow);
     }
 
     public void BeginConcurrency(QuotaScope scope, string scopeId)
@@ -260,23 +283,23 @@ public sealed class QuotaService : IQuotaService
         switch (scope)
         {
             case QuotaScope.Agent:
-                statuses.Add(MakeStatus(QuotaLimitType.ConcurrentRequestsPerAgent, scopeId, c.ActiveConcurrentRequests, _cfg.MaxConcurrentRequestsPerAgent));
-                statuses.Add(MakeStatus(QuotaLimitType.CallsPerMinutePerAgent, scopeId, GetRateLimitCount(scope, scopeId, QuotaLimitType.CallsPerMinutePerAgent), _cfg.MaxCallsPerMinutePerAgent));
-                statuses.Add(MakeStatus(QuotaLimitType.TokensPerDayPerAgent, scopeId, c.TokensUsedToday, _cfg.MaxTokensPerDayPerAgent));
-                statuses.Add(MakeStatus(QuotaLimitType.StorageMbPerAgent, scopeId, c.StorageUsedMb, _cfg.MaxStorageMbPerAgent));
-                statuses.Add(MakeStatus(QuotaLimitType.MessagesPerDayPerAgent, scopeId, c.MessagesUsedToday, _cfg.MaxMessagesPerDayPerAgent));
+                statuses.Add(MakeStatus(QuotaLimitType.ConcurrentRequestsPerAgent, scope, scopeId, c.ActiveConcurrentRequests, _cfg.MaxConcurrentRequestsPerAgent));
+                statuses.Add(MakeStatus(QuotaLimitType.CallsPerMinutePerAgent, scope, scopeId, GetRateLimitCount(scope, scopeId, QuotaLimitType.CallsPerMinutePerAgent), _cfg.MaxCallsPerMinutePerAgent));
+                statuses.Add(MakeStatus(QuotaLimitType.TokensPerDayPerAgent, scope, scopeId, c.TokensUsedToday, _cfg.MaxTokensPerDayPerAgent));
+                statuses.Add(MakeStatus(QuotaLimitType.StorageMbPerAgent, scope, scopeId, c.StorageUsedMb, _cfg.MaxStorageMbPerAgent));
+                statuses.Add(MakeStatus(QuotaLimitType.MessagesPerDayPerAgent, scope, scopeId, c.MessagesUsedToday, _cfg.MaxMessagesPerDayPerAgent));
                 break;
             case QuotaScope.Skill:
-                statuses.Add(MakeStatus(QuotaLimitType.CallsPerMinutePerSkill, scopeId, GetRateLimitCount(scope, scopeId, QuotaLimitType.CallsPerMinutePerSkill), _cfg.MaxCallsPerMinutePerSkill));
-                statuses.Add(MakeStatus(QuotaLimitType.ConcurrentPerSkill, scopeId, c.ActiveSkillExecutions, _cfg.MaxConcurrentPerSkill));
+                statuses.Add(MakeStatus(QuotaLimitType.CallsPerMinutePerSkill, scope, scopeId, GetRateLimitCount(scope, scopeId, QuotaLimitType.CallsPerMinutePerSkill), _cfg.MaxCallsPerMinutePerSkill));
+                statuses.Add(MakeStatus(QuotaLimitType.ConcurrentPerSkill, scope, scopeId, c.ActiveSkillExecutions, _cfg.MaxConcurrentPerSkill));
                 break;
             case QuotaScope.User:
-                statuses.Add(MakeStatus(QuotaLimitType.RequestsPerMinutePerUser, scopeId, GetRateLimitCount(scope, scopeId, QuotaLimitType.RequestsPerMinutePerUser), _cfg.MaxRequestsPerMinutePerUser));
-                statuses.Add(MakeStatus(QuotaLimitType.RequestsPerDayPerUser, scopeId, c.RequestsUsedToday, _cfg.MaxRequestsPerDayPerUser));
+                statuses.Add(MakeStatus(QuotaLimitType.RequestsPerMinutePerUser, scope, scopeId, GetRateLimitCount(scope, scopeId, QuotaLimitType.RequestsPerMinutePerUser), _cfg.MaxRequestsPerMinutePerUser));
+                statuses.Add(MakeStatus(QuotaLimitType.RequestsPerDayPerUser, scope, scopeId, c.RequestsUsedToday, _cfg.MaxRequestsPerDayPerUser));
                 break;
             case QuotaScope.Tenant:
-                statuses.Add(MakeStatus(QuotaLimitType.CallsPerMinutePerTenant, scopeId, GetRateLimitCount(scope, scopeId, QuotaLimitType.CallsPerMinutePerTenant), _cfg.MaxCallsPerMinutePerTenant));
-                statuses.Add(MakeStatus(QuotaLimitType.CostPerDayPerTenant, scopeId, c.CostUsedTodayCents, (long)(_cfg.MaxCostPerDayPerTenantUsd * 100)));
+                statuses.Add(MakeStatus(QuotaLimitType.CallsPerMinutePerTenant, scope, scopeId, GetRateLimitCount(scope, scopeId, QuotaLimitType.CallsPerMinutePerTenant), _cfg.MaxCallsPerMinutePerTenant));
+                statuses.Add(MakeStatus(QuotaLimitType.CostPerDayPerTenant, scope, scopeId, c.CostUsedTodayCents, (long)(_cfg.MaxCostPerDayPerTenantUsd * 100)));
                 break;
         }
 
@@ -336,14 +359,14 @@ public sealed class QuotaService : IQuotaService
         }
     }
 
-    private QuotaStatus MakeStatus(QuotaLimitType type, string scopeId, long current, long limit)
+    private QuotaStatus MakeStatus(QuotaLimitType type, QuotaScope scope, string scopeId, long current, long limit)
     {
         if (limit <= 0)
-            return new QuotaStatus(type, QuotaScope.Agent, scopeId, 0, current, 0, false, IsHardCap(type));
+            return new QuotaStatus(type, scope, scopeId, 0, current, 0, false, IsHardCap(type));
 
         var remaining = limit - current;
         return new QuotaStatus(
-            type, QuotaScope.Agent, scopeId,
+            type, scope, scopeId,
             limit, current,
             remaining > 0 ? remaining : 0,
             current > limit,

@@ -230,7 +230,7 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
     }
 
     /// <inheritdoc />
-    public async Task<long> IncrementAsync(string key, long delta = 1, CancellationToken ct = default)
+    public async Task<long> IncrementAsync(string key, long delta = 1, TimeSpan? ttl = null, CancellationToken ct = default)
     {
         ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrEmpty(key);
@@ -238,22 +238,26 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
         await EnsureSchemaAsync(ct).ConfigureAwait(false);
 
         // Use a UPSERT to atomically increment a counter stored as JSONB {"value": N}
+        // expires_at is refreshed on every increment when ttl is provided (sliding-window).
         const string sql = @"
-            INSERT INTO state (key, data, version, created_at, updated_at)
-            VALUES (@key, jsonb_build_object('value', @delta), @version, NOW(), NOW())
+            INSERT INTO state (key, data, version, created_at, updated_at, expires_at)
+            VALUES (@key, jsonb_build_object('value', @delta), @version, NOW(), NOW(), @expiresAt)
             ON CONFLICT (key) DO UPDATE SET
                 data = jsonb_set(state.data, '{value}', (COALESCE((state.data->>'value')::bigint, 0) + @delta)::text::jsonb),
                 version = @version,
-                updated_at = NOW()
+                updated_at = NOW(),
+                expires_at = COALESCE(@expiresAt, state.expires_at)
             RETURNING (data->>'value')::bigint";
 
         var version = Guid.NewGuid().ToString("N");
+        var expiresAt = ttl.HasValue ? (DateTime?)DateTime.UtcNow.Add(ttl.Value) : null;
 
         await using var conn = await OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("key", key);
         cmd.Parameters.AddWithValue("delta", delta);
         cmd.Parameters.AddWithValue("version", version);
+        cmd.Parameters.AddWithValue("expiresAt", (object?)expiresAt ?? DBNull.Value);
         var result = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
         var value = result is long l ? l : Convert.ToInt64(result);
 

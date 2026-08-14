@@ -225,7 +225,7 @@ public sealed class RedisMeshStateStore : IMeshStateStore
     }
 
     /// <inheritdoc />
-    public async Task<long> IncrementAsync(string key, long delta = 1, CancellationToken ct = default)
+    public async Task<long> IncrementAsync(string key, long delta = 1, TimeSpan? ttl = null, CancellationToken ct = default)
     {
         ThrowIfDisposed();
 
@@ -234,6 +234,13 @@ public sealed class RedisMeshStateStore : IMeshStateStore
             var db = _redis.GetDatabase();
             var prefixedKey = _config.KeyPrefix + key;
             var result = await db.StringIncrementAsync(prefixedKey, delta).WaitAsync(ct).ConfigureAwait(false);
+
+            // Refresh TTL on each increment (sliding-window semantics): the counter
+            // expires `ttl` after the last call instead of after the first.
+            if (ttl.HasValue)
+            {
+                await db.KeyExpireAsync(prefixedKey, ttl.Value).WaitAsync(ct).ConfigureAwait(false);
+            }
 
             // Notify watchers on change
             var stored = await GetAsync(key, ct).ConfigureAwait(false);

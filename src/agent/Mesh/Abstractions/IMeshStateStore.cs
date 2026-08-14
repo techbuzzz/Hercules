@@ -64,11 +64,14 @@ public interface IMeshStateStore : IDisposable
 
     /// <summary>
     ///     INCR / DECR числового значения. Создаёт ключ с 0 если отсутствует.
+    ///     Опциональный <paramref name="ttl"/> применяется при создании ключа (или принудительно
+    ///     обновляется на каждом increment, см. реализацию).
     /// </summary>
     /// <param name="key">Ключ.</param>
     /// <param name="delta">Дельта (+1 / -1).</param>
+    /// <param name="ttl">TTL — null означает permanent. Поддерживается всеми backends.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<long> IncrementAsync(string key, long delta = 1, CancellationToken ct = default);
+    Task<long> IncrementAsync(string key, long delta = 1, TimeSpan? ttl = null, CancellationToken ct = default);
 
     /// <summary>
     ///     Подписаться на изменения ключа. Callback вызывается при каждом изменении.

@@ -275,6 +275,26 @@ public sealed class QuotasConfig
     // Sliding window for rate limiting (in seconds)
     /// <summary>Размер sliding window для rate limiting в секундах. Default: 60.</summary>
     public int RateLimitWindowSeconds { get; set; } = 60;
+
+    // task_072: distributed quotas
+    /// <summary>
+    ///     Включить распределённый учёт квот через <c>IMeshStateStore</c> (Redis/Valkey,
+    ///     PostgreSQL, NATS JetStream). При включении <see cref="DistributedQuotaService"/>
+    ///     оборачивает in-memory <see cref="QuotaService"/> и хранит rate-limit counters
+    ///     в mesh store с TTL = <see cref="RateLimitWindowSeconds"/>. Daily counters
+    ///     остаются локальными. Default: false (чисто in-memory).
+    /// </summary>
+    public bool DistributedEnabled { get; set; } = false;
+
+    /// <summary>Префикс ключей для distributed counters. Default: "quota:".</summary>
+    public string DistributedKeyPrefix { get; set; } = "quota:";
+
+    /// <summary>
+    ///     Интервал периодической очистки локальных rate-limit buckets в секундах.
+    ///     Используется <see cref="Hercules.Quotas.QuotaCleanupBackgroundService"/>.
+    ///     Default: 60s.
+    /// </summary>
+    public int CleanupIntervalSeconds { get; set; } = 60;
 }
 
 /// <summary>
