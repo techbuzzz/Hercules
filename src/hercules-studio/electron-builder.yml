@@ -1,0 +1,46 @@
+appId: com.hercules.studio
+productName: Hercules Studio
+copyright: Copyright © 2026 Victor V (techbuzzz)
+artifactName: ${productName}-${version}.${ext}
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - out/**/*
+  - resources/**/*
+  - package.json
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,readme}"
+  - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!.editorconfig"
+  - "!**/.*"
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: resources/icon.ico
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Hercules Studio
+  uninstallDisplayName: Hercules Studio
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+
+publish:
+  provider: github
+  owner: techbuzzz
+  repo: Hercules

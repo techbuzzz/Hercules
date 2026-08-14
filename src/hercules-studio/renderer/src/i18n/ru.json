@@ -1,0 +1,94 @@
+{
+  "app": {
+    "name": "Hercules Studio",
+    "version": "0.1.0"
+  },
+  "activity": {
+    "agents": "Агенты",
+    "chat": "Чат",
+    "skills": "Навыки",
+    "mesh": "Mesh",
+    "tools": "Инструменты",
+    "config": "Настройки",
+    "workflow": "Workflow",
+    "consensus": "Консилиум"
+  },
+  "status": {
+    "noAgent": "Агент не подключён",
+    "online": "Онлайн",
+    "offline": "Офлайн",
+    "degraded": "Деградация",
+    "connecting": "Подключение...",
+    "checkedIn": "Подключено (check-in)",
+    "notCheckedIn": "Не подключено",
+    "systemMode": "Системный режим"
+  },
+  "empty": {
+    "welcome": "Добро пожаловать в Hercules Studio",
+    "welcomeDesc": "IDE для управления, настройки и оркестрации ИИ-агентов Hercules",
+    "scanAgents": "Сканировать агентов",
+    "addConnection": "Добавить подключение вручную",
+    "quickstart": "Быстрый старт",
+    "step1": "1. Запустите агента Hercules на вашей машине",
+    "step2": "2. Нажмите «Сканировать агентов» для обнаружения",
+    "step3": "3. Подключитесь и начните управление"
+  },
+  "license": {
+    "title": "Лицензионное соглашение",
+    "agplText": "Hercules Studio лицензирован под AGPL-3.0 для некоммерческого и личного использования. Корпоративное использование (интеграция с CRM/ECM, enterprise-развёртывание) требует коммерческой лицензии.",
+    "nonprofit": "Я использую Hercules Studio в некоммерческих / личных целях (AGPL-3.0)",
+    "acceptNonprofit": "Принять (Non-profit)",
+    "commercialKey": "У меня есть коммерческий лицензионный ключ",
+    "enterKey": "Введите коммерческий лицензионный ключ",
+    "decline": "Отклонить",
+    "declineMsg": "Вы должны принять лицензионное соглашение для использования Hercules Studio."
+  },
+  "connection": {
+    "add": "Добавить подключение",
+    "name": "Имя",
+    "namePlaceholder": "Мой агент",
+    "baseUrl": "Базовый URL",
+    "baseUrlPlaceholder": "http://localhost:8421",
+    "apiKey": "API ключ (contribute)",
+    "apiKeyPlaceholder": "hc_contrib_...",
+    "systemKey": "Системный ключ (опционально)",
+    "systemKeyPlaceholder": "hc_sys_...",
+    "test": "Проверить подключение",
+    "testing": "Проверка...",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "testSuccess": "Подключено! Агент: {agentId}",
+    "testFailed": "Ошибка: {error}",
+    "scanResults": "Обнаруженные агенты",
+    "scanning": "Сканирование...",
+    "addDiscovered": "Добавить"
+  },
+  "chat": {
+    "placeholder": "Введите сообщение... (Ctrl+Enter для отправки)",
+    "send": "Отправить",
+    "empty": "Начните диалог с {name}"
+  },
+  "common": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Изменить",
+    "refresh": "Обновить",
+    "close": "Закрыть",
+    "search": "Поиск",
+    "loading": "Загрузка...",
+    "error": "Ошибка: {message}",
+    "confirm": "Подтвердить",
+    "yes": "Да",
+    "no": "Нет"
+  },
+  "settings": {
+    "title": "Настройки",
+    "theme": "Тема",
+    "dark": "Тёмная",
+    "light": "Светлая",
+    "language": "Язык",
+    "english": "English",
+    "russian": "Русский"
+  }
+}

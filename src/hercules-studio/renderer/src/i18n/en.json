@@ -1,0 +1,94 @@
+{
+  "app": {
+    "name": "Hercules Studio",
+    "version": "0.1.0"
+  },
+  "activity": {
+    "agents": "Agents",
+    "chat": "Chat",
+    "skills": "Skills",
+    "mesh": "Mesh",
+    "tools": "Tools",
+    "config": "Config",
+    "workflow": "Workflow",
+    "consensus": "Consensus"
+  },
+  "status": {
+    "noAgent": "No agent connected",
+    "online": "Online",
+    "offline": "Offline",
+    "degraded": "Degraded",
+    "connecting": "Connecting...",
+    "checkedIn": "Checked in",
+    "notCheckedIn": "Not checked in",
+    "systemMode": "System mode"
+  },
+  "empty": {
+    "welcome": "Welcome to Hercules Studio",
+    "welcomeDesc": "IDE for managing, configuring, and orchestrating Hercules AI agents",
+    "scanAgents": "Scan for agents",
+    "addConnection": "Add connection manually",
+    "quickstart": "Quickstart",
+    "step1": "1. Start a Hercules agent on your machine",
+    "step2": "2. Click \"Scan for agents\" to discover it",
+    "step3": "3. Connect and start managing"
+  },
+  "license": {
+    "title": "License Agreement",
+    "agplText": "Hercules Studio is licensed under AGPL-3.0 for non-commercial and personal use. Corporate use (CRM/ECM integration, enterprise deployment) requires a commercial license.",
+    "nonprofit": "I use Hercules Studio for non-commercial / personal purposes (AGPL-3.0)",
+    "acceptNonprofit": "Accept (Non-profit)",
+    "commercialKey": "I have a commercial license key",
+    "enterKey": "Enter commercial license key",
+    "decline": "Decline",
+    "declineMsg": "You must accept the license agreement to use Hercules Studio."
+  },
+  "connection": {
+    "add": "Add Connection",
+    "name": "Name",
+    "namePlaceholder": "My Agent",
+    "baseUrl": "Base URL",
+    "baseUrlPlaceholder": "http://localhost:8421",
+    "apiKey": "API Key (contribute)",
+    "apiKeyPlaceholder": "hc_contrib_...",
+    "systemKey": "System Key (optional)",
+    "systemKeyPlaceholder": "hc_sys_...",
+    "test": "Test connection",
+    "testing": "Testing...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "testSuccess": "Connected! Agent: {agentId}",
+    "testFailed": "Failed: {error}",
+    "scanResults": "Discovered agents",
+    "scanning": "Scanning...",
+    "addDiscovered": "Add"
+  },
+  "chat": {
+    "placeholder": "Type a message... (Ctrl+Enter to send)",
+    "send": "Send",
+    "empty": "Start a conversation with {name}"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "refresh": "Refresh",
+    "close": "Close",
+    "search": "Search",
+    "loading": "Loading...",
+    "error": "Error: {message}",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "Theme",
+    "dark": "Dark",
+    "light": "Light",
+    "language": "Language",
+    "english": "English",
+    "russian": "Русский"
+  }
+}
