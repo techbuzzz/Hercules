@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Hercules.Mesh.Audit;
+using Hercules.Mesh.Observability;
 using Hercules.Mesh.Schema;
 using Hercules.Mesh.Transport;
 using Microsoft.Extensions.Logging;
@@ -20,18 +21,20 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
     private readonly string _localAgentId;
     private readonly ILogger<TaskLifecycleProtocol> _logger;
     private readonly MeshAuditService? _auditService;
+    private readonly IMeshObservabilityService? _observability;
 
-    public TaskLifecycleProtocol(ITransport? transport, string localAgentId, ILogger<TaskLifecycleProtocol> logger, MeshAuditService? auditService = null)
+    public TaskLifecycleProtocol(ITransport? transport, string localAgentId, ILogger<TaskLifecycleProtocol> logger, MeshAuditService? auditService = null, IMeshObservabilityService? observability = null)
     {
         _transport = transport;
         _localAgentId = localAgentId;
         _logger = logger;
         _auditService = auditService;
+        _observability = observability;
     }
 
     /// <summary>Constructor without IntentTransport (for testing / no-callback mode).</summary>
     public TaskLifecycleProtocol(string localAgentId, ILogger<TaskLifecycleProtocol> logger)
-        : this(null, localAgentId, logger, null)
+        : this(null, localAgentId, logger, null, null)
     {
     }
 

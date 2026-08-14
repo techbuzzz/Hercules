@@ -15,6 +15,19 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     Backward-compatible read of legacy `triggers:` key in `skill.{id}.meta.json`.
 - Updated UI branding and web application headers.
 
+### Added (Phase 4 — Mesh Observability)
+
+- **Mesh observability wiring** (`task_065`): `IMeshObservabilityService` is now wired into:
+  - `CapabilityMeshRouter` — routing decision spans and `routing_decision` metrics per RouteAsync call
+  - `ResilientTransport` — retry attempt spans (`ResilientTransport.Retry.{N}`), circuit-breaker rejection events, and `retry_attempt` metrics
+  - `IntentRouter` — delegation spans (`IntentRouter.Delegate`) with trace context enrichment and `delegation` / `delegation_latency_ms` metrics
+  - `TaskLifecycleProtocol` — optional observability service injection (no-op when not set)
+  - `FanOutOrchestrator` — fan-out span (`FanOut.Orchestrate`) with `fanout.no_peers` events
+- `IMeshObservabilityService.RecordMeshMetric("retry_attempt", ...)` support added
+- `GET /api/mesh/observability/status` endpoint returns mesh observability config and enabled state
+- `GET /api/mesh/observability/config` endpoint returns basic observability status
+- New test file `Phase4Tests/MeshObservabilityTests.cs` — 9 tests covering router observability, service configuration, and trace context
+
 ### Added (v2 — Code Execution + Multi-Role Routing + Tools)
 - **Stage 1: Multi-role LLM routing**. `AppConfig.Roles` dictionary (`main`, `code_writer`,
   `reflector`). `ILLMClient.CompleteAsync(role, messages, ct)` overload with default
@@ -54,6 +67,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - `scripts/test-stage4.cs` — 16/16 TryParseAction + sandbox audit + tool injection.
 
 ### Added
+- **Security Operations (task_055)**: Fleet-wide identity rotation, credential revocation,
+  certificate renewal, package signing verification, vulnerability reporting, and security audit export.
+  - `IFleetIdentityService` / `FleetIdentityService`: Fleet-wide identity management with rotation
+  - `ICertificateService` / `CertificateService`: X.509 certificate lifecycle management
+  - `IPackageSigningService` / `PackageSigningService`: HMAC-SHA256 package signature verification
+  - `IVulnerabilityReporter` / `VulnerabilityReporterService`: Vulnerability tracking and reporting
+  - `ISecurityAuditExporter` / `SecurityAuditExporterService`: Security audit trail and compliance exports
+  - `SecurityOpsConfig`: Unified configuration for all security operations
 - Brand assets in `assets/branding/` (logo, monogram, favicon, PNG/ICO exports).
 - Full set of repository documentation: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
   `SECURITY.md`, `CHANGELOG.md`, `.editorconfig`, Issue/PR templates, CI workflow.

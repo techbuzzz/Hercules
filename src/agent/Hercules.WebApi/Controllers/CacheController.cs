@@ -15,7 +15,9 @@ public static class CacheController
         app.MapGet("/api/cache/stats", (ICacheService? cache, CacheConfig? config) =>
         {
             if (cache is null)
+            {
                 return Results.NotFound(new { error = "Cache not available (caching disabled)" });
+            }
 
             var stats = cache.GetStats();
             var totalHits = stats.Values.Sum(s => s.HitCount);
@@ -56,7 +58,9 @@ public static class CacheController
         app.MapPost("/api/cache/invalidate", (CacheInvalidateRequest request, ICacheService? cache) =>
         {
             if (cache is null)
+            {
                 return Results.NotFound(new { error = "Cache not available (caching disabled)" });
+            }
 
             if (request.All)
             {
@@ -64,29 +68,30 @@ public static class CacheController
                 return Results.Ok(new { invalidated = "all", count = "all classes" });
             }
 
-            if (!string.IsNullOrWhiteSpace(request.Class) &&
-                Enum.TryParse<CacheClass>(request.Class, ignoreCase: true, out var cls))
+            if (string.IsNullOrWhiteSpace(request.Class) ||
+                !Enum.TryParse<CacheClass>(request.Class, ignoreCase: true, out var cls))
             {
-                if (!string.IsNullOrWhiteSpace(request.Key))
+                return Results.BadRequest(new
                 {
-                    cache.Invalidate(cls, request.Key);
-                    return Results.Ok(new { invalidated = "key", cls = cls.ToString(), key = request.Key });
-                }
-
-                if (!string.IsNullOrWhiteSpace(request.Pattern))
-                {
-                    cache.InvalidatePattern(cls, request.Pattern);
-                    return Results.Ok(new { invalidated = "pattern", cls = cls.ToString(), pattern = request.Pattern });
-                }
-
-                cache.InvalidateClass(cls);
-                return Results.Ok(new { invalidated = "class", cls = cls.ToString() });
+                    error = "Invalid request. Provide 'all=true' or 'class' with optional 'key' or 'pattern'."
+                });
             }
 
-            return Results.BadRequest(new
+            if (!string.IsNullOrWhiteSpace(request.Key))
             {
-                error = "Invalid request. Provide 'all=true' or 'class' with optional 'key' or 'pattern'."
-            });
+                cache.Invalidate(cls, request.Key);
+                return Results.Ok(new { invalidated = "key", cls = cls.ToString(), key = request.Key });
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Pattern))
+            {
+                cache.InvalidatePattern(cls, request.Pattern);
+                return Results.Ok(new { invalidated = "pattern", cls = cls.ToString(), pattern = request.Pattern });
+            }
+
+            cache.InvalidateClass(cls);
+            return Results.Ok(new { invalidated = "class", cls = cls.ToString() });
+
         }).WithName("CacheInvalidate");
     }
 }

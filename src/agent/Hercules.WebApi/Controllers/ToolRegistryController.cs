@@ -35,10 +35,9 @@ public static class ToolRegistryController
         app.MapGet("/api/tools/{name}/health", (string name, IToolRegistryService registry) =>
         {
             var entry = registry.GetEntry(name);
-            if (entry is null)
-                return Results.NotFound(new { error = $"Tool '{name}' not found" });
-
-            return Results.Ok(ToHealthDto(entry));
+            return entry is null
+                ? Results.NotFound(new { error = $"Tool '{name}' not found" })
+                : Results.Ok(ToHealthDto(entry));
         }).WithName("GetToolHealth").WithTags("Tools");
 
         // GET /api/tools/categories — tools по категориям
@@ -71,7 +70,9 @@ public static class ToolRegistryController
         {
             var entry = registry.GetEntry(name);
             if (entry is null)
+            {
                 return Results.NotFound(new { error = $"Tool '{name}' not found" });
+            }
 
             registry.SetEnabled(name, true);
             return Results.Ok(new { tool = name, enabled = true, message = $"Tool '{name}' enabled" });
@@ -82,7 +83,9 @@ public static class ToolRegistryController
         {
             var entry = registry.GetEntry(name);
             if (entry is null)
+            {
                 return Results.NotFound(new { error = $"Tool '{name}' not found" });
+            }
 
             registry.SetEnabled(name, false);
             return Results.Ok(new { tool = name, enabled = false, message = $"Tool '{name}' disabled" });

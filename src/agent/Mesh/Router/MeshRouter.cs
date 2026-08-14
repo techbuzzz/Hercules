@@ -1,3 +1,4 @@
+using Hercules.Mesh.Observability;
 using Hercules.Mesh.Policy;
 using Microsoft.Extensions.Logging;
 
@@ -21,6 +22,7 @@ public sealed class CapabilityMeshRouter : IMeshRouter
     private readonly RouterHealthTracker _healthTracker;
     private readonly MeshRouterOptions _options;
     private readonly ILogger<CapabilityMeshRouter> _logger;
+    private readonly IMeshObservabilityService? _observability;
 
     public CapabilityMeshRouter(
         CapabilityRegistry registry,
@@ -28,7 +30,8 @@ public sealed class CapabilityMeshRouter : IMeshRouter
         ITrustAdmissionPolicy trustPolicy,
         RouterHealthTracker healthTracker,
         MeshRouterOptions options,
-        ILogger<CapabilityMeshRouter> logger)
+        ILogger<CapabilityMeshRouter> logger,
+        IMeshObservabilityService? observability = null)
     {
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _circuitBreaker = circuitBreaker ?? throw new ArgumentNullException(nameof(circuitBreaker));
@@ -36,6 +39,7 @@ public sealed class CapabilityMeshRouter : IMeshRouter
         _healthTracker = healthTracker ?? throw new ArgumentNullException(nameof(healthTracker));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _observability = observability;
     }
 
     /// <inheritdoc />
@@ -50,12 +54,33 @@ public sealed class CapabilityMeshRouter : IMeshRouter
         decimal maxCostUsd,
         CancellationToken ct = default)
     {
+        // Emit routing metric even when disabled (counter = 0 candidates)
+        _observability?.RecordMeshMetric("routing_decision", 0, intent: capability, outcome: _options.Enabled ? "evaluated" : "disabled");
+
         if (!_options.Enabled)
         {
             _logger.LogDebug("[MeshRouter] Router disabled — returning empty candidates");
             return Task.FromResult<IReadOnlyList<PeerCandidate>>(Array.Empty<PeerCandidate>());
         }
 
+        // Start mesh router span
+        var span = _observability?.StartMeshSpan("MeshRouter.Route", intent: capability);
+        try
+        {
+            return RouteCoreAsync(capability, maxCostUsd, span, ct);
+        }
+        finally
+        {
+            _observability?.RecordMeshEvent(span, "router.completed", intent: capability, routingDecision: "capability_match");
+        }
+    }
+
+    private Task<IReadOnlyList<PeerCandidate>> RouteCoreAsync(
+        string capability,
+        decimal maxCostUsd,
+        System.Diagnostics.Activity? span,
+        CancellationToken ct = default)
+    {
         // 1. Find agents with matching capability
         List<RegistryAgentEntry> agents = _registry.FindByCapability(capability);
 
@@ -161,6 +186,19 @@ public sealed class CapabilityMeshRouter : IMeshRouter
         _logger.LogDebug("[MeshRouter] Routed '{Capability}' → {Count} candidates (top={TopScore:F4})",
             capability, results.Count,
             results.Count > 0 ? results[0].CompositeScore : 0);
+
+        // Emit routing metric
+        _observability?.RecordMeshMetric("routing_decision", results.Count, intent: capability,
+            outcome: results.Count > 0 ? "candidates_found" : "no_candidates");
+
+        // Enrich span with results
+        if (results.Count > 0)
+        {
+            _observability?.EnrichSpanWithMeshTags(span, intent: capability,
+                senderAgentId: null, receiverAgentId: null, transportKind: null,
+                delegationDepth: null, hopCount: null,
+                routingDecision: $"top_candidate:{results[0].AgentId}");
+        }
 
         return Task.FromResult<IReadOnlyList<PeerCandidate>>(results);
     }

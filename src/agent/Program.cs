@@ -1,20 +1,31 @@
 using System.Text;
 using Hercules.Agent;
 using Hercules.Audit;
+using Hercules.Backup;
 using Hercules.Budget;
 using Hercules.CLI;
 using Hercules.CodeExecution;
+using Hercules.Degradation;
+using Hercules.Edge;
+using Hercules.Fleet;
 using Hercules.Cache;
 using Hercules.Config;
 using Hercules.Context;
 using Hercules.Context.Summarizer;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.Lifecycle;
+using Hercules.Mesh.Transport;
 using Hercules.Mcp;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
+using Hercules.Mesh.Verification;
+using Hercules.Offline;
 using Hercules.Observability;
+using Hercules.Quotas;
 using Hercules.Redaction;
+using Hercules.Security;
+using Hercules.Slo;
 using Hercules.Simulation;
 using Hercules.Reflection;
 using Hercules.Skills;
@@ -74,6 +85,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton(appConfig.Mcp);
     services.AddSingleton(appConfig.A2A);
     services.AddSingleton(appConfig.Mesh);
+    services.AddSingleton(appConfig.MeshProfiles);
     services.AddSingleton(appConfig.ToolPolicy);
     services.AddSingleton(appConfig.Phase2);
     services.AddSingleton(appConfig.SkillQuality);
@@ -178,7 +190,15 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<Bus>();
 
     // Phase 3: Inter-agent mesh
-    services.AddMeshServices(appConfig.Mesh, appConfig.Storage.DataRoot);
+    services.AddMeshServices(appConfig, appConfig.Storage.DataRoot);
+
+    // Phase 4: Verification pipeline (task_046)
+    // Register no-op pipeline as fallback; AddMeshServices overrides with real pipeline when enabled.
+    services.AddSingleton<IVerificationPipeline>(sp =>
+        new VerificationPipeline(
+            Array.Empty<IVerifier>(),
+            new VerificationConfig { Enabled = false },
+            sp.GetRequiredService<ILogger<VerificationPipeline>>()));
 
     // Хранилища
     services.AddSingleton<FileSkillRepository>();
@@ -229,6 +249,16 @@ builder.ConfigureServices((context, services) =>
         new BudgetGuard(
             sp.GetRequiredService<BudgetConfig>(),
             sp.GetRequiredService<ILogger<BudgetGuard>>()));
+
+    // Rate limits and quotas (task_056)
+    services.AddSingleton(appConfig.Quotas);
+    services.AddSingleton<IQuotaService>(sp =>
+        new QuotaService(
+            sp.GetRequiredService<QuotasConfig>(),
+            sp.GetRequiredService<ILogger<QuotaService>>()));
+    services.AddSingleton<QuotaGuard>(sp =>
+        new QuotaGuard(
+            sp.GetRequiredService<ILogger<QuotaGuard>>()));
 
     // Phase 2: Skill packager
     services.AddSingleton(appConfig.Marketplace);
@@ -318,6 +348,9 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<IMarketplaceSigningService>()));
     services.AddSingleton<AgentTemplateManager>();
 
+    // Fleet templates (task_062)
+    services.AddSingleton<IFleetTemplateManager, FleetTemplateManager>();
+
     // Template simulation (task_031)
     services.AddSingleton<ISensorSimulator>(sp =>
         new FileSensorSimulator(sp.GetRequiredService<ILogger<FileSensorSimulator>>())
@@ -390,6 +423,85 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<SecretsConfig>(),
             sp.GetRequiredService<IRedactionService>()));
 
+    // Security operations (task_055): fleet identity, certificates, package signing, vulnerability reporting, audit export
+    services.AddSingleton(appConfig.SecurityOps);
+    services.AddSingleton<IFleetIdentityService>(sp =>
+        new FleetIdentityService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<FleetIdentityService>>()));
+    services.AddSingleton<ICertificateService>(sp =>
+        new CertificateService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<CertificateService>>()));
+    services.AddSingleton<IPackageSigningService>(sp =>
+        new PackageSigningService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<PackageSigningService>>()));
+    services.AddSingleton<IVulnerabilityReporter>(sp =>
+        new VulnerabilityReporterService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<VulnerabilityReporterService>>()));
+    services.AddSingleton<ISecurityAuditExporter>(sp =>
+        new SecurityAuditExporterService(
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<SecurityAuditExporterService>>()));
+
+    // task_059: Edge provisioning — identity enrollment, cert activation, secure defaults on Raspberry Pi
+    services.AddSingleton(appConfig.Edge);
+    services.AddSingleton<IEdgeProvisioningService>(sp =>
+        new EdgeProvisioningService(
+            sp.GetRequiredService<EdgeConfig>(),
+            sp.GetRequiredService<SecurityOpsConfig>(),
+            sp.GetRequiredService<StorageConfig>(),
+            sp.GetRequiredService<IFleetIdentityService>(),
+            sp.GetRequiredService<ICertificateService>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<ILogger<EdgeProvisioningService>>()));
+
+    // task_060: Offline resilience — bounded outbox queue for sensor logs, task results, alerts
+    services.AddSingleton(appConfig.OfflineSync);
+    services.AddSingleton<IOutboxStore>(sp =>
+        new SqliteOutboxStore(
+            sp.GetRequiredService<SqliteSessionStore>(),
+            sp.GetRequiredService<OfflineSyncConfig>(),
+            sp.GetRequiredService<ILogger<SqliteOutboxStore>>()));
+    services.AddSingleton<NetworkMonitor>();
+    services.AddSingleton<INetworkMonitor>(sp => sp.GetRequiredService<NetworkMonitor>());
+    services.AddSingleton<OfflineSyncService>(); // BackgroundService
+
+    // task_061: Local-first degradation — deterministic fallback, operator notifications, observability
+    services.AddSingleton(appConfig.Degradation);
+    services.AddSingleton<DegradationObservability>();
+    services.AddSingleton<OperatorNotificationService>();
+    services.AddSingleton<DegradationManager>(); // BackgroundService
+
+    // task_063: Backup & Recovery — encrypted backup archives, scheduled backups, restore
+    services.AddSingleton(appConfig.Backup);
+    services.AddSingleton<EncryptionService>();
+    services.AddSingleton<IBackupService>(sp =>
+        new BackupService(
+            sp.GetRequiredService<BackupConfig>(),
+            sp.GetRequiredService<EncryptionService>(),
+            sp.GetRequiredService<ILogger<BackupService>>(),
+            sp.GetRequiredService<StorageConfig>().DataRoot));
+    services.AddHostedService<BackupScheduler>();
+
+    // task_064: Operational SLOs — availability, response-time, data-loss, recovery-time, cost targets
+    services.AddSingleton(appConfig.Slos);
+    services.AddSingleton<ISloService>(sp =>
+        new SloService(
+            sp.GetRequiredService<SlosConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<Hercules.Mesh.Observability.IMeshObservabilityService>(),
+            sp.GetService<Hercules.Offline.IOutboxStore>(),
+            sp.GetService<IBudgetService>(),
+            sp.GetRequiredService<ILogger<SloService>>()));
+
     // Агент
     services.AddSingleton<SkillManager>();
     services.AddSingleton<SkillRouter>();
@@ -413,6 +525,15 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<ReflectionEngine>();
     services.AddSingleton<AgentCore>();
 
+    // task_057: Lifecycle management
+    services.AddSingleton<ILifecycleService>(sp =>
+        new LifecycleService(
+            sp.GetRequiredService<AgentCore>(),
+            sp.GetRequiredService<SkillManager>(),
+            sp.GetRequiredService<CapabilityRegistry>(),
+            sp.GetRequiredService<ITransport>(),
+            sp.GetRequiredService<ILogger<LifecycleService>>()));
+
     // Интерфейсы
     services.AddSingleton<ConsoleUI>();
     services.AddSingleton<TelegramBotInterface>();
@@ -421,6 +542,29 @@ builder.ConfigureServices((context, services) =>
 using var host = builder.Build();
 
 var appConfig = host.Services.GetRequiredService<AppConfig>();
+
+// task_059: Edge provisioning — enroll on startup if not already enrolled
+try
+{
+    var edgeService = host.Services.GetRequiredService<IEdgeProvisioningService>();
+    if (!edgeService.IsEnrolled)
+    {
+        var result = await edgeService.EnsureEnrolledAsync();
+        if (result.Success)
+        {
+            Console.WriteLine($"[Edge] Device enrolled: {result.DeviceId}");
+        }
+        else
+        {
+            Console.WriteLine($"[Edge] Enrollment deferred: {result.ErrorMessage}");
+        }
+    }
+}
+catch (Exception ex)
+{
+    // Enrollment failure is non-fatal — agent starts in standalone mode
+    Console.WriteLine($"[Edge] Enrollment error (non-fatal): {ex.Message}");
+}
 
 // Tool registry discovery (task_024)
 try

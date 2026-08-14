@@ -1,0 +1,109 @@
+{
+  "vertical": "cold-chain",
+  "description": "Cold-chain logistics: LTE/NB-IoT tracker, ESP32/ARM, temperature monitoring for perishable goods. Critical compliance required.",
+  "version": "1.0",
+  "availabilityTarget": 0.999,
+  "responseTimeTargetMs": 5000.0,
+  "dataLossTargetPerDay": 0,
+  "recoveryTimeTargetMinutes": 5,
+  "costTargetUsd": 3.00,
+  "alertThresholds": {
+    "availabilityWarningPct": 99.5,
+    "availabilityCriticalPct": 99.0,
+    "responseTimeWarningMs": 7000.0,
+    "responseTimeCriticalMs": 10000.0,
+    "dataLossWarningPerDay": 0,
+    "dataLossCriticalPerDay": 1,
+    "recoveryTimeWarningMinutes": 3,
+    "recoveryTimeCriticalMinutes": 10,
+    "costWarningPct": 85.0,
+    "costCriticalPct": 98.0
+  },
+  "runbooks": {
+    "availability": {
+      "title": "Cold-chain tracker unavailable — CRITICAL",
+      "symptoms": [
+        "Temperature alert not received",
+        "GPS updates missing for >5 minutes",
+        "Agent heartbeat missing"
+      ],
+      "diagnosisSteps": [
+        "Check device power (battery level)",
+        "Check LTE/NB-IoT signal",
+        "Review mesh observability for last delegation",
+        "Check if device entered degraded mode"
+      ],
+      "mitigationSteps": [
+        "Switch to offline mode with last-known GPS",
+        "Alert operator immediately (potential spoilage)",
+        "Trigger manual status poll"
+      ],
+      "escalationTrigger": "ALWAYS escalate cold-chain unavailability immediately — cargo spoilage risk."
+    },
+    "responseTime": {
+      "title": "Cold-chain response time degraded",
+      "symptoms": [
+        "Temperature alert delay >5s",
+        "Delegation latency high"
+      ],
+      "diagnosisSteps": [
+        "Check cellular network latency",
+        "Review mesh observability histogram"
+      ],
+      "mitigationSteps": [
+        "Switch to degraded deterministic mode",
+        "Reduce telemetry interval"
+      ],
+      "escalationTrigger": "If response time >10s and temperature is in warning zone, escalate immediately."
+    },
+    "dataLoss": {
+      "title": "Cold-chain data loss — CRITICAL",
+      "symptoms": [
+        "Outbox pending >0 (any pending event is a breach)",
+        "Temperature log gaps"
+      ],
+      "diagnosisSteps": [
+        "Check outbox immediately",
+        "Review cellular data plan status",
+        "Check device storage (possible buffer overflow)"
+      ],
+      "mitigationSteps": [
+        "Trigger immediate outbox flush",
+        "Switch to higher-frequency sync if network available"
+      ],
+      "escalationTrigger": "ANY data loss in cold-chain is a compliance event — escalate to compliance officer."
+    },
+    "recoveryTime": {
+      "title": "Cold-chain recovery time exceeded",
+      "symptoms": [
+        "Device recovery >5 minutes",
+        "Multiple reconnection events"
+      ],
+      "diagnosisSteps": [
+        "Check power source stability",
+        "Review cellular signal history"
+      ],
+      "mitigationSteps": [
+        "Switch to backup power",
+        "Verify all sensors reporting"
+      ],
+      "escalationTrigger": "If recovery >10 min, escalate to logistics coordinator."
+    },
+    "cost": {
+      "title": "Cold-chain daily cost budget exceeded",
+      "symptoms": [
+        "Daily cost >$3.00",
+        "Excessive LLM calls"
+      ],
+      "diagnosisSteps": [
+        "Review LLM call log",
+        "Check skill evaluation frequency"
+      ],
+      "mitigationSteps": [
+        "Switch to cheapest available model",
+        "Reduce eval to weekly"
+      ],
+      "escalationTrigger": "If cost consistently exceeds budget, escalate to operations."
+    }
+  }
+}

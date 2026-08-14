@@ -301,6 +301,38 @@ export const api = {
     const res = await fetch(`${API_BASE}/api/mesh/circuits`, { headers: headers(false) });
     return handle<Record<string, string>>(res);
   },
+
+  // ---- Mesh Dashboard (Phase 5 task_053) ----
+
+  async getMeshDashboard(): Promise<MeshDashboardDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/dashboard`, { headers: headers(false) });
+    return handle<MeshDashboardDto>(res);
+  },
+
+  async getMeshTopology(): Promise<MeshTopologyDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/topology`, { headers: headers(false) });
+    return handle<MeshTopologyDto>(res);
+  },
+
+  async getMeshHealth(): Promise<MeshHealthDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/health`, { headers: headers(false) });
+    return handle<MeshHealthDto>(res);
+  },
+
+  async getMeshDenials(limit = 50): Promise<MeshPolicyDenialsDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/denials?limit=${limit}`, { headers: headers(false) });
+    return handle<MeshPolicyDenialsDto>(res);
+  },
+
+  async getMeshSkillHeatmap(): Promise<MeshSkillHeatmapDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/skills/heatmap`, { headers: headers(false) });
+    return handle<MeshSkillHeatmapDto>(res);
+  },
+
+  async getMeshEvalSummary(): Promise<MeshEvalSummaryDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/eval/summary`, { headers: headers(false) });
+    return handle<MeshEvalSummaryDto>(res);
+  },
 };
 
 // ---- Mesh DTOs ----
@@ -329,4 +361,110 @@ export interface MeshPeerCandidate {
 export interface MeshRouterHealthDto {
   count: number;
   health: Record<string, { healthScore: number; avgLatencyMs: number }>;
+}
+
+// ---- Mesh Dashboard (Phase 5 task_053) ----
+
+export interface MeshDashboardDto {
+  topology: MeshTopologyDto;
+  traffic: MeshTrafficDto;
+  health: MeshHealthDto;
+  policyDenials: MeshPolicyDenialsDto;
+  skillHeatmap: MeshSkillHeatmapDto;
+  evalSummary: MeshEvalSummaryDto;
+  generatedAt: string;
+}
+
+export interface MeshTopologyDto {
+  agentCount: number;
+  agents: MeshAgentDto[];
+  generatedAt: string;
+}
+
+export interface MeshAgentDto {
+  agentId: string;
+  displayName: string;
+  endpoint: string;
+  healthScore: number;
+  latencyMs: number;
+  qualityScore: number;
+  trustLevel: string;
+  lastSeen: string | null;
+  capabilities: string[];
+}
+
+export interface MeshTrafficDto {
+  totalRequests: number;
+  fanOutRequests: number;
+  meshDelegations: number;
+  avgLatencyMs: number;
+  meshRouterHits: number;
+  circuitBreakerRejections: number;
+  from: string;
+  to: string;
+}
+
+export interface MeshHealthDto {
+  agents: MeshHealthEntryDto[];
+  healthyCount: number;
+  degradedCount: number;
+  unhealthyCount: number;
+}
+
+export interface MeshHealthEntryDto {
+  agentId: string;
+  displayName: string;
+  healthScore: number;
+  healthStatus: string;
+  circuitState: string;
+  consecutiveFailures: number;
+  lastSeen: string | null;
+  avgLatencyMs: number;
+}
+
+export interface MeshPolicyDenialsDto {
+  count: number;
+  denials: MeshDenialEntryDto[];
+}
+
+export interface MeshDenialEntryDto {
+  id: number;
+  actor: string;
+  action: string;
+  details: string | null;
+  policyDecision: string | null;
+  createdAt: string;
+}
+
+export interface MeshSkillHeatmapDto {
+  totalSkills: number;
+  skills: MeshSkillHeatmapEntryDto[];
+}
+
+export interface MeshSkillHeatmapEntryDto {
+  skillId: string;
+  skillName: string;
+  totalUses: number;
+  successRate: number;
+  version: number;
+  createdAt: string;
+}
+
+export interface MeshEvalSummaryDto {
+  totalRuns: number;
+  passedRuns: number;
+  failedRuns: number;
+  recentRuns: MeshEvalRunDto[];
+}
+
+export interface MeshEvalRunDto {
+  runId: string;
+  scenarioType: string;
+  passed: boolean;
+  score: number;
+  successRate: number;
+  assertionsPassed: number;
+  assertionsFailed: number;
+  startTimeUtc: string;
+  durationMs: number;
 }

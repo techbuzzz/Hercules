@@ -1,0 +1,7 @@
+{
+  "name": "Server Room Operations Fleet",
+  "description": "Fleet template for server room operations: rack monitoring, PDU control, environmental sensors, incident management. Validated for data-center edge deployment.",
+  "version": 1,
+  "vertical": "server-room",
+  "agent_template_file": "server-room.agenttemplate"
+}

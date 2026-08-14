@@ -1,0 +1,12 @@
+{
+  "cpu": "ARM Cortex-A72 4-core @ 1.5 GHz (Raspberry Pi 4B recommended)",
+  "ram_gb": 4,
+  "storage_gb": 32,
+  "storage_type": "microSD A2 or USB SSD",
+  "network": "Ethernet 1 Gbps + Wi-Fi 802.11ac",
+  "power_watts": 15,
+  "operating_temp": "-25°C to +50°C",
+  "form_factor": "DIN-rail or wall-mount enclosure",
+  "supported_sensors": ["temperature", "humidity", "soil-moisture", "light-lux", "co2-ppm", "pir-motion"],
+  "notes": "Raspberry Pi 4B (4GB) with PoE HAT recommended for greenhouse deployment. Temperature sensor probe must be IP67-rated."
+}

@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Hercules.Budget;
+using Hercules.Mesh;
 using Hercules.Mesh.Aggregation;
+using Hercules.Mesh.Observability;
 using Hercules.Mesh.Schema;
 using Hercules.Mesh.Transport;
 using Microsoft.Extensions.Logging;
@@ -19,20 +22,26 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
     private readonly ITransport _transport;
     private readonly ResponseAggregator _aggregator;
     private readonly FanOutOptions _options;
+    private readonly CircuitBreaker _circuitBreaker;
     private readonly ILogger<FanOutOrchestrator> _logger;
+    private readonly IMeshObservabilityService? _observability;
 
     public FanOutOrchestrator(
         IMeshRouter meshRouter,
         ITransport transport,
         ResponseAggregator aggregator,
         FanOutOptions options,
-        ILogger<FanOutOrchestrator> logger)
+        CircuitBreaker circuitBreaker,
+        ILogger<FanOutOrchestrator> logger,
+        IMeshObservabilityService? observability = null)
     {
         _meshRouter = meshRouter ?? throw new ArgumentNullException(nameof(meshRouter));
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _aggregator = aggregator ?? throw new ArgumentNullException(nameof(aggregator));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _circuitBreaker = circuitBreaker ?? throw new ArgumentNullException(nameof(circuitBreaker));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _observability = observability;
     }
 
     /// <inheritdoc />
@@ -45,9 +54,13 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
     {
         var sw = Stopwatch.StartNew();
 
+        // Start fan-out span
+        var span = _observability?.StartMeshSpan("FanOut.Orchestrate", intent: envelope.Intent);
+
         if (!_options.Enabled)
         {
             _logger.LogDebug("[FanOutOrchestrator] Fan-out disabled — returning no-peers result");
+            span?.Stop();
             return AggregationResult.NoPeers(sw.Elapsed);
         }
 
@@ -63,6 +76,8 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
             _logger.LogDebug(
                 "[FanOutOrchestrator] No peers available for intent '{Intent}' within budget {Budget:C}",
                 envelope.Intent, budget);
+            _observability?.RecordMeshEvent(span, "fanout.no_peers", intent: envelope.Intent);
+            span?.Stop();
             return AggregationResult.NoPeers(sw.Elapsed);
         }
 
@@ -75,7 +90,24 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
             return AggregationResult.NoPeers(sw.Elapsed);
         }
 
-        // 3. Determine fan-out vs single-peer
+        // 3. Filter by circuit breaker state — skip peers with open circuits
+        var skippedByCircuit = peers.Count;
+        peers = peers.Where(p => _circuitBreaker.CanSend(p.AgentId)).ToList();
+        skippedByCircuit -= peers.Count;
+        if (skippedByCircuit > 0)
+        {
+            _logger.LogDebug(
+                "[FanOutOrchestrator] Skipped {Count} peers with open circuit breaker",
+                skippedByCircuit);
+        }
+
+        if (peers.Count == 0)
+        {
+            _logger.LogDebug("[FanOutOrchestrator] All peers have open circuit breakers");
+            return AggregationResult.NoPeers(sw.Elapsed);
+        }
+
+        // 4. Determine fan-out vs single-peer
         if (peers.Count < _options.MinPeersForFanOut)
         {
             _logger.LogDebug(

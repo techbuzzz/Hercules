@@ -175,6 +175,27 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
                            CREATE INDEX IF NOT EXISTS ix_task_taskid ON task_states(task_id);
                            CREATE INDEX IF NOT EXISTS ix_approval_session ON approval_requests(session_id);
                            CREATE INDEX IF NOT EXISTS ix_approval_status ON approval_requests(status);
+                           -- task_049: human-in-the-loop escalation
+                           CREATE TABLE IF NOT EXISTS escalations (
+                               id              TEXT PRIMARY KEY,
+                               request_id      TEXT NOT NULL,
+                               session_id      TEXT NOT NULL,
+                               agent_id        TEXT NOT NULL,
+                               type            TEXT NOT NULL,
+                               severity        TEXT NOT NULL,
+                               status          TEXT NOT NULL DEFAULT 'Pending',
+                               action_plan     TEXT NOT NULL,
+                               context         TEXT NOT NULL,
+                               payload_json    TEXT,
+                               tool_or_intent  TEXT,
+                               requested_by    TEXT NOT NULL,
+                               created_at      TEXT NOT NULL,
+                               resolved_at     TEXT,
+                               resolved_by     TEXT
+                           );
+                           CREATE INDEX IF NOT EXISTS ix_esc_session   ON escalations(session_id);
+                           CREATE INDEX IF NOT EXISTS ix_esc_status   ON escalations(status);
+                           CREATE INDEX IF NOT EXISTS ix_esc_severity ON escalations(severity);
                            """;
         using SqliteCommand cmd = _conn.CreateCommand();
         cmd.CommandText = ddl;
@@ -1421,6 +1442,67 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays).ToString("o");
         using SqliteCommand cmd = _conn.CreateCommand();
         cmd.CommandText = "DELETE FROM task_checkpoints WHERE created_at < $cutoff";
+        cmd.Parameters.AddWithValue("$cutoff", cutoff);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // ---- Escalation persistence (task_049) ----
+
+    /// <summary>
+    ///     task_049: Persist a new escalation record.
+    /// </summary>
+    public async Task SaveEscalationAsync(Hercules.Mesh.Escalation.EscalationResult e, CancellationToken ct = default)
+    {
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = """
+                          INSERT INTO escalations (id, request_id, session_id, agent_id, type, severity, status,
+                              action_plan, context, payload_json, tool_or_intent, requested_by, created_at,
+                              resolved_at, resolved_by)
+                          VALUES ($id, $rid, $sid, $aid, $t, $sev, $st, $ap, $ctx, $pj, $toi, $rb, $ca, $ra, $rb2)
+                          """;
+        cmd.Parameters.AddWithValue("$id", e.EscalationId);
+        cmd.Parameters.AddWithValue("$rid", e.RequestId);
+        cmd.Parameters.AddWithValue("$sid", e.SessionId);
+        cmd.Parameters.AddWithValue("$aid", e.SessionId); // agent_id placeholder
+        cmd.Parameters.AddWithValue("$t", e.Type.ToString());
+        cmd.Parameters.AddWithValue("$sev", e.Severity.ToString());
+        cmd.Parameters.AddWithValue("$st", e.Status.ToString());
+        cmd.Parameters.AddWithValue("$ap", e.ActionPlan);
+        cmd.Parameters.AddWithValue("$ctx", e.Context);
+        cmd.Parameters.AddWithValue("$pj", (object?)e.PayloadJson ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$toi", (object?)e.ToolOrIntentName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$rb", e.RequestedBy);
+        cmd.Parameters.AddWithValue("$ca", e.CreatedAt.ToString("o"));
+        cmd.Parameters.AddWithValue("$ra", e.ResolvedAt?.ToString("o") ?? (object?)DBNull.Value);
+        cmd.Parameters.AddWithValue("$rb2", (object?)e.ResolvedBy ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    ///     task_049: Update escalation status.
+    /// </summary>
+    public async Task UpdateEscalationStatusAsync(string escalationId, string status, string? resolvedBy = null, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow.ToString("o");
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = resolvedBy is not null
+            ? "UPDATE escalations SET status = $st, resolved_at = $ra, resolved_by = $rb WHERE id = $id"
+            : "UPDATE escalations SET status = $st WHERE id = $id";
+        cmd.Parameters.AddWithValue("$st", status);
+        cmd.Parameters.AddWithValue("$ra", now);
+        cmd.Parameters.AddWithValue("$rb", resolvedBy);
+        cmd.Parameters.AddWithValue("$id", escalationId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    ///     task_049: Expire old pending escalations.
+    /// </summary>
+    public async Task ExpireOldEscalationsAsync(int ttlMinutes, CancellationToken ct = default)
+    {
+        var cutoff = DateTime.UtcNow.AddMinutes(-ttlMinutes).ToString("o");
+        using SqliteCommand cmd = _conn.CreateCommand();
+        cmd.CommandText = "UPDATE escalations SET status = 'Expired' WHERE status = 'Pending' AND created_at < $cutoff";
         cmd.Parameters.AddWithValue("$cutoff", cutoff);
         await cmd.ExecuteNonQueryAsync(ct);
     }

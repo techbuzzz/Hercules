@@ -13,6 +13,7 @@
 - [Phase 3 — Inter-agent protocol (Q1 2027)](#phase-3--inter-agent-protocol-q1-2027)
 - [Phase 4 — Mesh orchestration (Q2 2027)](#phase-4--mesh-orchestration-q2-2027)
 - [Phase 5 — IoT/edge fleet and mesh operations (Q3 2027)](#phase-5--iotedge-fleet-and-mesh-operations-q3-2027)
+- [Phase 6 — Performance and high availability hardening (Q4 2027)](#phase-6--performance-and-high-availability-hardening-q4-2027)
 - [Workflow](#workflow)
 - [Roadmap cron](#roadmap-cron)
 
@@ -84,36 +85,58 @@
 | 43 | 17 | [Mesh router](tasks/task_043.md) | `mesh-router` | done |
 | 44 | 17 | [Сложность и стоимость](tasks/task_044.md) | `complexity-router` | done |
 | 45 | 18 | [Fan-out / fan-in](tasks/task_045.md) | `fan-out-in` | done |
-| 46 | 22 | [Verification pipeline](tasks/task_046.md) | `verification-pipeline` | pending |
-| 47 | 19 | [Retry, timeout, circuit breaker](tasks/task_047.md) | `retry-timeout-breaker` | pending |
-| 48 | 23 | [Границы делегации](tasks/task_048.md) | `delegation-boundaries` | pending |
-| 49 | 24 | [Human-in-the-loop эскалация](tasks/task_049.md) | `human-escalation` | pending |
-| 50 | 20 | [Distributed reflection](tasks/task_050.md) | `distributed-reflection` | pending |
-| 51 | 21 | [Shared memory sync](tasks/task_051.md) | `shared-memory-sync` | pending |
-| 52 | 31 | [Mesh evaluation suite](tasks/task_052.md) | `mesh-eval-suite` | pending |
-| 65 | 25 | [Mesh observability](tasks/task_065.md) | `mesh-observability` | pending |
-| 66 | 26 | [Абстракция mesh-бэкендов](tasks/task_066.md) | `mesh-backends-abstraction` | pending |
-| 67 | 27 | [Redis/Valkey coordination backend](tasks/task_067.md) | `redis-coordination-backend` | pending |
-| 68 | 28 | [NATS / JetStream transport option](tasks/task_068.md) | `nats-jetstream-transport` | pending |
-| 69 | 29 | [PostgreSQL shared state backend](tasks/task_069.md) | `postgres-shared-state` | pending |
-| 70 | 30 | [Backend-профили и деградация](tasks/task_070.md) | `backend-profiles-degradation` | pending |
+| 46 | 22 | [Verification pipeline](tasks/task_046.md) | `verification-pipeline` | done |
+| 47 | 19 | [Retry, timeout, circuit breaker](tasks/task_047.md) | `retry-timeout-breaker` | done |
+| 48 | 23 | [Границы делегации](tasks/task_048.md) | `delegation-boundaries` | done |
+| 49 | 24 | [Human-in-the-loop эскалация](tasks/task_049.md) | `human-escalation` | done |
+| 50 | 20 | [Distributed reflection](tasks/task_050.md) | `distributed-reflection` | done |
+| 51 | 21 | [Shared memory sync](tasks/task_051.md) | `shared-memory-sync` | done |
+| 52 | 31 | [Mesh evaluation suite](tasks/task_052.md) | `mesh-eval-suite` | done |
+| 65 | 25 | [Mesh observability](tasks/task_065.md) | `mesh-observability` | done |
+| 66 | 26 | [Абстракция mesh-бэкендов](tasks/task_066.md) | `mesh-backends-abstraction` | done |
+| 67 | 27 | [Redis/Valkey coordination backend](tasks/task_067.md) | `redis-coordination-backend` | done |
+| 68 | 28 | [NATS / JetStream transport option](tasks/task_068.md) | `nats-jetstream-transport` | done |
+| 69 | 29 | [PostgreSQL shared state backend](tasks/task_069.md) | `postgres-shared-state` | done |
+| 70 | 30 | [Backend-профили и деградация](tasks/task_070.md) | `backend-profiles-degradation` | done |
 
 ## Phase 5 — IoT/edge fleet and mesh operations (Q3 2027)
 
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
-| 53 | 32 | [Mesh dashboard](tasks/task_053.md) | `mesh-dashboard` | pending |
-| 54 | 33 | [Централизованные логи и трейсы](tasks/task_054.md) | `centralized-observability` | pending |
-| 55 | 40 | [Security operations](tasks/task_055.md) | `security-ops` | pending |
-| 56 | 35 | [Rate limits и квоты](tasks/task_056.md) | `rate-limits-quotas` | pending |
-| 57 | 36 | [Управление жизненным циклом](tasks/task_057.md) | `lifecycle-management` | pending |
-| 58 | 41 | [Configuration и policy rollout](tasks/task_058.md) | `config-policy-rollout` | pending |
-| 59 | 37 | [Edge provisioning](tasks/task_059.md) | `edge-provisioning` | pending |
-| 60 | 38 | [Offline resilience](tasks/task_060.md) | `offline-resilience` | pending |
+| 53 | 32 | [Mesh dashboard](tasks/task_053.md) | `mesh-dashboard` | done |
+| 54 | 33 | [Централизованные логи и трейсы](tasks/task_054.md) | `centralized-observability` | done |
+| 55 | 40 | [Security operations](tasks/task_055.md) | `security-ops` | done |
+| 56 | 35 | [Rate limits и квоты](tasks/task_056.md) | `rate-limits-quotas` | done |
+| 57 | 36 | [Управление жизненным циклом](tasks/task_057.md) | `lifecycle-management` | done |
+| 58 | 41 | [Configuration и policy rollout](tasks/task_058.md) | `config-policy-rollout` | done |
+| 59 | 37 | [Edge provisioning](tasks/task_059.md) | `edge-provisioning` | done |
+| 60 | 38 | [Offline resilience](tasks/task_060.md) | `offline-resilience` | done |
 | 61 | 42 | [Local-first degradation](tasks/task_061.md) | `local-degradation` | pending |
 | 62 | 39 | [Fleet templates](tasks/task_062.md) | `fleet-templates` | pending |
-| 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | pending |
+| 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | done |
 | 64 | 44 | [Операционные SLO](tasks/task_064.md) | `operational-slos` | pending |
+
+## Phase 6 — Performance and high availability hardening (Q4 2027)
+
+| # | Initiative | Task | Slug | Status |
+|---|------------|------|------|--------|
+| 71 | 45 | [SQLite thread-safety and sync-over-async removal](tasks/task_071.md) | `sqlite-thread-safety` | pending |
+| 72 | 45 | [QuotaService cleanup fix and distributed quotas](tasks/task_072.md) | `quota-cleanup-fix` | pending |
+| 73 | 45 | [Outbox synced-state and bounded-queue prune fix](tasks/task_073.md) | `outbox-synced-fix` | pending |
+| 74 | 45 | [NATS JetStream ack/fail implementation](tasks/task_074.md) | `nats-jetstream-ack` | pending |
+| 75 | 46 | [DI lifetime fixes: captive dependency and AgentCore singleton](tasks/task_075.md) | `di-lifetime-fixes` | pending |
+| 76 | 46 | [ResilientLLMClient per-call provider/model](tasks/task_076.md) | `resilient-llm-per-call-provider` | pending |
+| 77 | 46 | [Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController](tasks/task_077.md) | `sync-over-async-sweep` | pending |
+| 78 | 46 | [IHttpClientFactory adoption and standard resilience handlers](tasks/task_078.md) | `httpclient-factory-adoption` | pending |
+| 79 | 46 | [Real health checks infrastructure](tasks/task_079.md) | `health-checks-infrastructure` | pending |
+| 80 | 46 | [Graceful shutdown and drain](tasks/task_080.md) | `graceful-shutdown-drain` | pending |
+| 81 | 46 | [Kestrel tuning, framework rate limiter, compression, output cache](tasks/task_081.md) | `kestrel-rate-limiter-compression` | pending |
+| 82 | 46 | [RouterHealthTracker, Redis CAS, Postgres reconnect, BuildServiceProvider](tasks/task_082.md) | `router-redis-postgres-di-fixes` | pending |
+| 83 | 47 | [CacheService stampede, eviction, and sliding expiration](tasks/task_083.md) | `cache-stampede-eviction` | pending |
+| 84 | 47 | [ProposalStore caching, async I/O, and hot-path allocations](tasks/task_084.md) | `proposal-store-hotpath-alloc` | pending |
+| 85 | 47 | [OpenTelemetry polish: console gating, process instrumentation, histogram buckets, async logging](tasks/task_085.md) | `otel-logging-polish` | pending |
+| 86 | 47 | [Backpressure, bounded channels, and DLQ/requeue fixes](tasks/task_086.md) | `backpressure-bounded-channels-dlq` | pending |
+| 87 | 47 | [Misc hardening: DelegationBoundary TTL, ResilientTransport trim, CORS, backup passphrase, SLO real metrics](tasks/task_087.md) | `misc-hardening` | pending |
 
 ## Workflow
 

@@ -1,6 +1,7 @@
 using Hercules.Config;
 using Hercules.Mesh;
 using Hercules.Mesh.Auth;
+using Hercules.Mesh.Dashboard;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Policy;
 using Hercules.Mesh.Router;
@@ -46,7 +47,10 @@ public static class MeshController
         {
             var entry = registry.GetEntry(id);
             if (entry is null)
+            {
                 return Results.NotFound(new { error = $"Агент '{id}' не найден." });
+            }
+
             return Results.Ok(new
             {
                 agentId = entry.AgentId,
@@ -65,7 +69,9 @@ public static class MeshController
         {
             var entry = registry.GetEntry(id);
             if (entry is null)
+            {
                 return Results.NotFound(new { error = $"Агент '{id}' не найден." });
+            }
 
             registry.Touch(id);
             return Results.Ok(new { status = "touched", agentId = id });
@@ -74,7 +80,7 @@ public static class MeshController
         // POST /api/mesh/agents/cleanup — cleanup просроченных агентов
         app.MapPost("/api/mesh/agents/cleanup", (ICapabilityRegistryService registry) =>
         {
-            int removed = registry.CleanupExpired();
+            var removed = registry.CleanupExpired();
             return Results.Ok(new { status = "cleaned", removedCount = removed });
         }).WithName("CleanupExpiredAgents");
 
@@ -107,30 +113,18 @@ public static class MeshController
         }).WithName("RemoveMeshAgent");
 
         // GET /api/mesh/capabilities — список capabilities
-        app.MapGet("/api/mesh/capabilities", (string? agentId, CapabilityRegistry registry) =>
-        {
-            if (!string.IsNullOrWhiteSpace(agentId))
-            {
-                return Results.Ok(registry.ListCapabilities(agentId));
-            }
-
-            return Results.Ok(registry.ListAgents());
-        }).WithName("ListMeshCapabilities");
+        app.MapGet("/api/mesh/capabilities", (string? agentId, CapabilityRegistry registry) => !string.IsNullOrWhiteSpace(agentId)
+            ? Results.Ok((object?)registry.ListCapabilities(agentId))
+            : Results.Ok((object?)registry.ListAgents())).WithName("ListMeshCapabilities");
 
         // GET /api/mesh/capabilities/{name} — найти агентов по имени capability
         app.MapGet("/api/mesh/capabilities/{name}", (string name, CapabilityRegistry registry) =>
             Results.Ok(registry.FindByCapability(name))).WithName("FindMeshByCapability");
 
         // GET /api/mesh/capabilities/search?phrase=... — semantic lookup
-        app.MapGet("/api/mesh/capabilities/search", (string phrase, CapabilityRegistry registry) =>
-        {
-            if (string.IsNullOrWhiteSpace(phrase))
-            {
-                return Results.BadRequest(new { error = "Параметр 'phrase' обязателен." });
-            }
-
-            return Results.Ok(registry.FindByPhrase(phrase));
-        }).WithName("SearchMeshByPhrase");
+        app.MapGet("/api/mesh/capabilities/search", (string phrase, CapabilityRegistry registry) => string.IsNullOrWhiteSpace(phrase)
+            ? Results.BadRequest(new { error = "Параметр 'phrase' обязателен." })
+            : Results.Ok((object?)registry.FindByPhrase(phrase))).WithName("SearchMeshByPhrase");
 
         // POST /api/mesh/intent — отправить intent на маршрутизацию (IntentRouter, single-peer)
         // Trust admission policy is evaluated before routing.
@@ -240,7 +234,7 @@ public static class MeshController
                 return Results.BadRequest(new { error = "category и content обязательны." });
             }
 
-            var fact = await sync.PublishFactAsync(req.Category, req.Content, req.AllowedAgents, ct);
+            var fact = await sync.PublishFactAsync(req.Category, req.Content, req.AllowedAgents, ct: ct);
             return Results.Created($"/api/mesh/shared-memory/{fact.Id}", fact);
         }).WithName("PublishSharedMemory");
 
@@ -312,7 +306,9 @@ public static class MeshController
             try
             {
                 if (!Enum.TryParse<DelegatedTaskState>(req.State, true, out var newState))
+                {
                     return Results.BadRequest(new { error = $"Unknown state: {req.State}" });
+                }
 
                 var task = await protocol.UpdateStateAsync(id, newState, ct);
                 return Results.Ok(ToTaskDto(task));
@@ -490,7 +486,7 @@ public static class MeshController
             return Results.Ok(new
             {
                 count = agents.Count,
-                cacheFresh = discovery is Hercules.Mesh.Discovery.DiscoveryService ds ? ds.IsCacheFresh : false,
+                cacheFresh = discovery is DiscoveryService { IsCacheFresh: true },
                 agents = agents.Select(a => new
                 {
                     agentId = a.AgentId,
@@ -534,21 +530,18 @@ public static class MeshController
         // GET /api/mesh/policy/status — current policy configuration and mode
         app.MapGet("/api/mesh/policy/status", (
             ITrustAdmissionPolicy policy,
-            TrustAdmissionConfig config) =>
+            TrustAdmissionConfig config) => Results.Ok(new
         {
-            return Results.Ok(new
-            {
-                enabled = config.Enabled,
-                mode = config.PolicyMode,
-                effectiveMode = policy.Mode.ToString(),
-                allowedTrustLevels = config.AllowedTrustLevels,
-                allowedIntents = config.AllowedIntents,
-                allowedClassifications = config.AllowedClassifications,
-                allowSchemaMismatch = config.AllowSchemaMismatch,
-                allowBudgetExceeded = config.AllowBudgetExceeded,
-                allowedRiskLevels = config.AllowedRiskLevels
-            });
-        }).WithName("GetTrustPolicyStatus");
+            enabled = config.Enabled,
+            mode = config.PolicyMode,
+            effectiveMode = policy.Mode.ToString(),
+            allowedTrustLevels = config.AllowedTrustLevels,
+            allowedIntents = config.AllowedIntents,
+            allowedClassifications = config.AllowedClassifications,
+            allowSchemaMismatch = config.AllowSchemaMismatch,
+            allowBudgetExceeded = config.AllowBudgetExceeded,
+            allowedRiskLevels = config.AllowedRiskLevels
+        })).WithName("GetTrustPolicyStatus");
 
         // POST /api/mesh/policy/dry-run — evaluate a request against the policy without enforcing
         app.MapPost("/api/mesh/policy/dry-run", (
@@ -674,6 +667,57 @@ public static class MeshController
 
             return Results.Ok(new { count = health.Count, health });
         }).WithName("MeshRouterHealth");
+
+        // === Phase 5: Mesh Dashboard (task_053) ===
+
+        // GET /api/mesh/dashboard — complete dashboard snapshot
+        app.MapGet("/api/mesh/dashboard", async (MeshDashboardService dashboard, CancellationToken ct) =>
+        {
+            try
+            {
+                var data = await dashboard.GetDashboardAsync(ct);
+                return Results.Ok(data);
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(ex.Message, statusCode: 500, title: "Dashboard error");
+            }
+        }).WithName("MeshDashboard");
+
+        // GET /api/mesh/topology — agent list with health/trust/latency
+        app.MapGet("/api/mesh/topology", async (MeshDashboardService dashboard, CancellationToken ct) =>
+        {
+            var data = await dashboard.GetTopologyAsync(ct);
+            return Results.Ok(data);
+        }).WithName("MeshTopology");
+
+        // GET /api/mesh/health — per-agent health + circuit breaker states
+        app.MapGet("/api/mesh/health", async (MeshDashboardService dashboard, CancellationToken ct) =>
+        {
+            var data = await dashboard.GetHealthAsync(ct);
+            return Results.Ok(data);
+        }).WithName("MeshHealth");
+
+        // GET /api/mesh/denials — recent policy denials from audit log
+        app.MapGet("/api/mesh/denials", async (MeshDashboardService dashboard, int limit = 50, CancellationToken ct = default) =>
+        {
+            var data = await dashboard.GetPolicyDenialsAsync(ct);
+            return Results.Ok(data);
+        }).WithName("MeshPolicyDenials");
+
+        // GET /api/mesh/skills/heatmap — skill usage heatmap
+        app.MapGet("/api/mesh/skills/heatmap", (MeshDashboardService dashboard) =>
+        {
+            var data = dashboard.GetSkillHeatmap();
+            return Results.Ok(data);
+        }).WithName("MeshSkillHeatmap");
+
+        // GET /api/mesh/eval/summary — recent eval runs
+        app.MapGet("/api/mesh/eval/summary", async (MeshDashboardService dashboard, CancellationToken ct) =>
+        {
+            var data = await dashboard.GetEvalSummaryAsync(ct);
+            return Results.Ok(data);
+        }).WithName("MeshEvalSummary");
     }
 
     private static TrustLevel ParseTrustLevel(string? level) =>

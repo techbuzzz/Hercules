@@ -1,14 +1,31 @@
 using Hercules.Agent;
+using Hercules.Budget;
 using Hercules.Config;
 using Hercules.Mesh.A2A;
+using Hercules.Mesh.Abstractions;
 using Hercules.Mesh.Aggregation;
 using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
+using Hercules.Mesh.Backend;
+using Hercules.Mesh.Backends.Redis;
+using Hercules.Mesh.Backends.Nats;
+using Hercules.Mesh.Backends.Postgres;
 using Hercules.Mesh.Discovery;
+using Hercules.Mesh.Escalation;
+using Hercules.Mesh.Eval;
+using Hercules.Mesh.InProcess;
+using Hercules.Mesh.Observability;
 using Hercules.Mesh.Policy;
+using Hercules.Mesh.Profiles;
+using Hercules.Mesh.Verification;
 using Hercules.Mesh.Router;
 using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
+using StackExchange.Redis;
+using NATS.Client.Core;
+using Npgsql;
+using Hercules.Mesh.Resilience;
+using Hercules.Observability;
 using Hercules.Skills;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
@@ -77,8 +94,9 @@ public static class MeshServiceCollectionExtensions
     ///     IntentRouter, ManifestCapabilitiesProvider, CircuitBreaker, RetryPolicy, MeshRouter,
     ///     DistributedReflection, SharedMemorySync, CapabilityHealthService.
     /// </summary>
-    public static IServiceCollection AddMeshServices(this IServiceCollection services, MeshConfig meshCfg, string dataRoot)
+    public static IServiceCollection AddMeshServices(this IServiceCollection services, AppConfig appConfig, string dataRoot)
     {
+        var meshCfg = appConfig.Mesh;
         var registryDbPath = Path.IsPathRooted(meshCfg.RegistryDb)
             ? meshCfg.RegistryDb
             : Path.Combine(dataRoot, meshCfg.RegistryDb);
@@ -216,7 +234,9 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<ITransport>(),
                 sp.GetRequiredService<AgentManifestService>(),
                 sp.GetService<MeshAuditService>(),
-                sp.GetService<ITrustAdmissionPolicy>()));
+                sp.GetService<ITrustAdmissionPolicy>(),
+                sp.GetService<IEscalationService>(),
+                sp.GetService<IMeshObservabilityService>()));
 
         // Phase 3: TaskLifecycleProtocol — inter-agent task lifecycle (task_036)
         services.AddSingleton<ITaskLifecycleProtocol>(sp =>
@@ -225,17 +245,53 @@ public static class MeshServiceCollectionExtensions
             var logger = sp.GetRequiredService<ILogger<TaskLifecycleProtocol>>();
             var agentId = meshCfg.AgentId;
             var auditService = sp.GetService<MeshAuditService>();
-            return new TaskLifecycleProtocol(transport, agentId, logger, auditService);
+            var observability = sp.GetService<IMeshObservabilityService>();
+            return new TaskLifecycleProtocol(transport, agentId, logger, auditService, observability);
         });
 
-        // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов
-        services.AddSingleton<CircuitBreaker>();
-        services.AddSingleton<RetryPolicy>();
+        // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов (task_047)
+        // Configure from ResilienceConfig
+        var resCfg = appConfig.Resilience;
+        services.AddSingleton(resCfg);
+
+        var cb = new CircuitBreaker
+        {
+            FailureThreshold = resCfg.CircuitBreakerFailureThreshold,
+            Cooldown = TimeSpan.FromSeconds(resCfg.CircuitBreakerCooldownSeconds)
+        };
+        services.AddSingleton(cb);
+
+        var rp = new RetryPolicy
+        {
+            MaxAttempts = resCfg.MaxAttempts,
+            BaseDelay = TimeSpan.FromMilliseconds(resCfg.BaseDelayMs),
+            BackoffMultiplier = resCfg.BackoffMultiplier,
+            MaxDelay = TimeSpan.FromMilliseconds(resCfg.MaxDelayMs),
+            JitterFactor = resCfg.JitterFactor
+        };
+        services.AddSingleton(rp);
+
+        // Wrap ITransport with ResilientTransport (bulkhead + retry + CB)
+        services.AddSingleton<ITransport>(sp =>
+        {
+            var inner = sp.GetRequiredService<ITransportFactory>().Primary;
+            var logger = sp.GetRequiredService<ILogger<ResilientTransport>>();
+            return new ResilientTransport(
+                inner,
+                sp.GetRequiredService<CircuitBreaker>(),
+                sp.GetRequiredService<RetryPolicy>(),
+                sp.GetRequiredService<ResilienceConfig>(),
+                logger,
+                sp.GetService<IMeshObservabilityService>());
+        });
 
         // Phase 4: Mesh Router (task_043) — capability-based peer routing with health + scoring
         services.AddSingleton(meshCfg.MeshRouter);
         services.AddSingleton<RouterHealthTracker>();
         services.AddSingleton<IMeshRouter, CapabilityMeshRouter>();
+
+        // Phase 4: ResilientTransport observability (task_065) — retry/circuit spans
+        // IMeshObservabilityService already registered below; ResilientTransport gets it via DI
 
         // Phase 4: Complexity Router (task_044) — complexity-based execution path selection
         services.AddSingleton(meshCfg.ComplexityRouter);
@@ -243,25 +299,39 @@ public static class MeshServiceCollectionExtensions
         services.AddSingleton<IComplexityRouter, ComplexityRouter>();
 
         // Phase 4: FanOut Orchestrator (task_045) — fan-out / fan-in с schema validation, voting, deterministic, LLM-judge
-        services.AddSingleton(meshCfg.FanOut);
+        services.AddSingleton(appConfig.FanOut);
         services.AddSingleton(sp => new ResponseAggregator(
             sp.GetRequiredService<FanOutOptions>(),
             sp.GetService<ILLMClient>(),
             sp.GetRequiredService<ILogger<ResponseAggregator>>()));
-        services.AddSingleton<IFanOutOrchestrator, FanOutOrchestrator>();
+        services.AddSingleton<IFanOutOrchestrator>(sp =>
+            new FanOutOrchestrator(
+                sp.GetRequiredService<IMeshRouter>(),
+                sp.GetRequiredService<ITransport>(),
+                sp.GetRequiredService<ResponseAggregator>(),
+                sp.GetRequiredService<FanOutOptions>(),
+                sp.GetRequiredService<CircuitBreaker>(),
+                sp.GetRequiredService<ILogger<FanOutOrchestrator>>(),
+                sp.GetService<IMeshObservabilityService>()));
 
         // Phase 4: MeshRouter — fan-out/fan-in оркестрация с LLM-judge
         services.AddSingleton<MeshRouter>();
 
-        // Phase 4: DistributedReflection — отчёты по mesh + рекомендации
+        // Phase 4: DistributedReflection — отчёты по mesh + рекомендации (task_050)
+        services.AddSingleton(appConfig.ReflectionProposals);
+        services.AddSingleton(sp => new ReflectionProposalStore(
+            dataRoot,
+            sp.GetRequiredService<ILogger<ReflectionProposalStore>>()));
         services.AddSingleton<DistributedReflection>();
 
-        // Phase 4: SharedMemorySync — синхронизация избранных фактов памяти
+        // Phase 4: SharedMemorySync — синхронизация избранных фактов памяти (task_051)
+        services.AddSingleton(appConfig.SharedMemorySync);
         services.AddSingleton(sp => new SharedMemorySync(
             dataRoot,
             sp.GetRequiredService<CapabilityRegistry>(),
             sp.GetRequiredService<ITransport>(),
             sp.GetRequiredService<AgentManifestService>(),
+            sp.GetRequiredService<SharedMemorySyncConfig>(),
             sp.GetRequiredService<ILogger<SharedMemorySync>>()));
 
         // Phase 3: A2A Agent Card — публикация и импорт Agent Cards
@@ -327,6 +397,156 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<MeshAuditConfig>(),
                 sp.GetRequiredService<ILogger<MeshAuditService>>()));
 
+        // Phase 4: Verification pipeline (task_046) — safety, policy, schema, numeric validators
+        var verConfig = appConfig.Verification;
+        services.AddSingleton(verConfig);
+
+        if (verConfig.Enabled)
+        {
+            services.AddSingleton<IVerificationPipeline>(sp =>
+            {
+                var verifiers = new List<IVerifier>();
+                if (verConfig.EnableSafetyVerifier)
+                    verifiers.Add(sp.GetRequiredService<SafetyVerifier>());
+                if (verConfig.EnablePolicyVerifier)
+                    verifiers.Add(sp.GetRequiredService<PolicyVerifier>());
+                if (verConfig.EnableSchemaVerifier)
+                    verifiers.Add(sp.GetRequiredService<SchemaVerifier>());
+                if (verConfig.EnableNumericValidator)
+                    verifiers.Add(sp.GetRequiredService<NumericValidator>());
+
+                return new VerificationPipeline(
+                    verifiers,
+                    verConfig,
+                    sp.GetRequiredService<ILogger<VerificationPipeline>>());
+            });
+        }
+
+        // Phase 4: Delegation boundaries (task_048) — hop count, fan-out width, cumulative tool calls, cost, time limits
+        services.AddSingleton(appConfig.DelegationBoundaries);
+        services.AddSingleton<IDelegationBoundaryService, DelegationBoundaryService>();
+
+        // Phase 4: Human-in-the-loop escalation (task_049)
+        services.AddSingleton(appConfig.Escalation);
+        services.AddSingleton<IEscalationService, EscalationService>();
+
+        // Phase 4: Mesh evaluation suite (task_052)
+        services.AddSingleton(appConfig.MeshEval);
+        services.AddSingleton<IMeshEvalRunner, MeshEvalRunner>();
+
+        // Phase 5: Mesh dashboard (task_053) — aggregator service
+        services.AddSingleton<Hercules.Mesh.Dashboard.MeshDashboardService>();
+
+        // Phase 5: Centralized mesh observability (task_054) — trace context propagation, mesh span enrichment, OTLP metrics
+        services.AddSingleton(appConfig.CentralizedObservability);
+        services.AddSingleton<IMeshObservabilityService>(sp =>
+            new MeshObservabilityService(
+                sp.GetRequiredService<MeshCentralizedObservabilityConfig>(),
+                sp.GetRequiredService<IOtelService>(),
+                sp.GetRequiredService<ILogger<MeshObservabilityService>>()));
+
+        // Phase 4: Mesh backend abstractions (task_066) — IMeshBus, ITaskQueue, IMeshStateStore
+        // Default: in-process implementation (Channel-based pub/sub, ConcurrentQueue, ConcurrentDictionary)
+        // Tasks 067–070 will replace these with Redis/NATS/PostgreSQL backends via profile
+        RegisterMeshBackends(services, appConfig, services.BuildServiceProvider());
+
+        // Phase 4: Backend profiles and degradation (task_070) — profile loader and health monitor
+        var meshProfilesCfg = appConfig.MeshProfiles;
+        services.AddSingleton(meshProfilesCfg);
+        services.AddSingleton<MeshProfileLoader>();
+        services.AddSingleton<IMeshBackendHealthMonitor, MeshBackendHealthMonitor>();
+
         return services;
+    }
+
+    /// <summary>
+    ///     Registers mesh backends (IMeshBus, ITaskQueue, IMeshStateStore) based on active profile.
+    ///     Redis (task_067): uses Redis when Redis:Enabled or profile = Redis.
+    ///     NATS (task_068): uses NATS/JetStream when Nats:Enabled or profile = Nats.
+    ///     Postgres (task_069): uses Npgsql when Postgres:Enabled or profile = Postgres.
+    ///     Falls back to in-process when none is available.
+    /// </summary>
+    private static void RegisterMeshBackends(IServiceCollection services, AppConfig appConfig, IServiceProvider sp)
+    {
+        var redisCfg = appConfig.Redis;
+        var natsCfg = appConfig.Nats;
+        var postgresCfg = appConfig.Postgres;
+        var profileLoader = new MeshProfileLoader(appConfig.MeshProfiles, sp.GetRequiredService<ILogger<MeshProfileLoader>>());
+        var activeProfile = profileLoader.GetActiveProfile();
+        var isRedisProfile = activeProfile?.Profile == MeshBackendProfile.Redis;
+        var isNatsProfile = activeProfile?.Profile == MeshBackendProfile.Nats;
+        var isPostgresProfile = activeProfile?.Profile == MeshBackendProfile.Postgres;
+        var isRedisEnabled = redisCfg.Enabled || isRedisProfile;
+        var isNatsEnabled = natsCfg.Enabled || isNatsProfile;
+        var isPostgresEnabled = postgresCfg.Enabled || isPostgresProfile;
+
+        if (isNatsEnabled)
+        {
+            // Register NATS connection as singleton
+            services.AddSingleton<NatsConnection>(sp =>
+            {
+                var servers = natsCfg.Servers.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var primaryServer = servers.Length > 0 ? servers[0] : "nats://localhost:4222";
+                var opts = new NatsOpts
+                {
+                    Url = primaryServer,
+                };
+                return new NatsConnection(opts);
+            });
+
+            services.AddSingleton(natsCfg);
+            services.AddSingleton<IMeshBus, NatsMeshBus>();
+            services.AddSingleton<ITaskQueue, NatsTaskQueue>();
+            services.AddSingleton<IMeshStateStore, NatsMeshStateStore>();
+        }
+        else if (isRedisEnabled)
+        {
+            // Register Redis connection multiplexer (singleton per connection string)
+            var redisConfig = ConfigurationOptions.Parse(redisCfg.ConnectionString);
+            redisConfig.AbortOnConnectFail = false;
+            redisConfig.ConnectTimeout = 5000;
+            redisConfig.SyncTimeout = 5000;
+
+            services.AddSingleton<IConnectionMultiplexer>(_ =>
+            {
+                try
+                {
+                    return ConnectionMultiplexer.Connect(redisConfig);
+                }
+                catch
+                {
+                    // Return a lazy-connecting multiplexer that will gracefully degrade
+                    return ConnectionMultiplexer.Connect(redisConfig);
+                }
+            });
+
+            services.AddSingleton(redisCfg);
+            services.AddSingleton<IMeshBus, RedisMeshBus>();
+            services.AddSingleton<ITaskQueue, RedisTaskQueue>();
+            services.AddSingleton<IMeshStateStore, RedisMeshStateStore>();
+        }
+        else if (isPostgresEnabled)
+        {
+            // Register Npgsql data source as singleton (task_069).
+            // The data source is lazy: connection is opened only on first use.
+            services.AddSingleton<NpgsqlDataSource>(_ =>
+            {
+                var builder = new NpgsqlDataSourceBuilder(postgresCfg.ConnectionString);
+                builder.UseLoggerFactory(sp.GetRequiredService<ILoggerFactory>());
+                return builder.Build();
+            });
+
+            services.AddSingleton(postgresCfg);
+            services.AddSingleton<IMeshBus, PostgresMeshBus>();
+            services.AddSingleton<ITaskQueue, PostgresTaskQueue>();
+            services.AddSingleton<IMeshStateStore, PostgresMeshStateStore>();
+        }
+        else
+        {
+            // Default: in-process implementations
+            services.AddSingleton<IMeshBus, InProcessMeshBus>();
+            services.AddSingleton<ITaskQueue, InProcessTaskQueue>();
+            services.AddSingleton<IMeshStateStore, InProcessMeshStateStore>();
+        }
     }
 }

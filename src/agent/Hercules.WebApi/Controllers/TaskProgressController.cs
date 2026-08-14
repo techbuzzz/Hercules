@@ -29,7 +29,9 @@ public static class TaskProgressController
         {
             DurableTaskStatus? filter = null;
             if (!string.IsNullOrEmpty(status) && Enum.TryParse<Tasks.DurableTaskStatus>(status, true, out var parsed))
+            {
                 filter = parsed;
+            }
 
             var tasks = await repo.ListAsync(filter, limit, ct);
             return Results.Ok(new

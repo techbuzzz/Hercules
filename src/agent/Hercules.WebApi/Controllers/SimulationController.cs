@@ -1,85 +1,75 @@
 using Hercules.Simulation;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
-///     WebAPI контроллер симуляции шаблонов (task_031).
-///     Позволяет запускать симуляцию sensor/event fixtures с failure injection
+///     WebAPI endpoints симуляции шаблонов (task_031).
+///     Позволяют запускать симуляцию sensor/event fixtures с failure injection
 ///     без реального железа или внешних side-effects.
 /// </summary>
-[ApiController]
-[Route("api/simulation")]
-public sealed class SimulationController : ControllerBase
+public static class SimulationController
 {
-    private readonly TemplateSimulationService _simulation;
-
-    public SimulationController(TemplateSimulationService simulation)
+    public static void MapSimulation(this IEndpointRouteBuilder app)
     {
-        _simulation = simulation ?? throw new ArgumentNullException(nameof(simulation));
-    }
-
-    /// <summary>Список шаблонов с симуляционными fixtures.</summary>
-    [HttpGet("templates")]
-    public ActionResult<List<SimulatableTemplateDto>> ListTemplates()
-    {
-        var templates = _simulation.GetSimulatableTemplates();
-        return Ok(templates.Select(t => new SimulatableTemplateDto(t)).ToList());
-    }
-
-    /// <summary>Проверить наличие fixtures для шаблона.</summary>
-    [HttpGet("templates/{templateName}/available")]
-    public ActionResult<TemplateAvailabilityDto> CheckAvailability(string templateName)
-    {
-        var has = _simulation.HasFixtures(templateName);
-        var coverage = has ? _simulation.GetFailureCoverage(templateName) : null;
-        return Ok(new TemplateAvailabilityDto(templateName, has, coverage));
-    }
-
-    /// <summary>Начать симуляционную сессию.</summary>
-    [HttpPost("sessions")]
-    public ActionResult<SimulationSessionDto> StartSession([FromBody] StartSessionRequest body)
-    {
-        if (!_simulation.HasFixtures(body.TemplateName))
+        // GET /api/simulation/templates — список шаблонов с симуляционными fixtures.
+        app.MapGet("/api/simulation/templates", (TemplateSimulationService simulation) =>
         {
-            return NotFound($"No simulation fixtures found for template '{body.TemplateName}'.");
-        }
+            var templates = simulation.GetSimulatableTemplates();
+            return Results.Ok(templates.Select(t => new SimulatableTemplateDto(t)).ToList());
+        }).WithName("ListSimulationTemplates");
 
-        var session = _simulation.StartSession(body.TemplateName);
-        return Ok(ToSessionDto(session));
-    }
-
-    /// <summary>Запустить replay: получить readings, events и applied failures.</summary>
-    [HttpPost("sessions/{templateName}/replay")]
-    public ActionResult<SimulationResultDto> Replay(string templateName, [FromBody] ReplayRequest body)
-    {
-        try
+        // GET /api/simulation/templates/{templateName}/available — наличие fixtures для шаблона.
+        app.MapGet("/api/simulation/templates/{templateName}/available", (string templateName, TemplateSimulationService simulation) =>
         {
-            var result = _simulation.RunReplay(templateName, body.WithFailures);
-            return Ok(ToResultDto(result));
-        }
-        catch (InvalidOperationException ex)
+            var has = simulation.HasFixtures(templateName);
+            var coverage = has ? simulation.GetFailureCoverage(templateName) : null;
+            return Results.Ok(new TemplateAvailabilityDto(templateName, has, coverage));
+        }).WithName("SimulationAvailability");
+
+        // POST /api/simulation/sessions — начать симуляционную сессию.
+        app.MapPost("/api/simulation/sessions", (StartSessionRequest body, TemplateSimulationService simulation) =>
         {
-            return BadRequest(ex.Message);
-        }
-    }
+            if (!simulation.HasFixtures(body.TemplateName))
+            {
+                return Results.NotFound($"No simulation fixtures found for template '{body.TemplateName}'.");
+            }
 
-    /// <summary>Остановить симуляционную сессию.</summary>
-    [HttpDelete("sessions/{templateName}")]
-    public ActionResult StopSession(string templateName)
-    {
-        _simulation.StopSession(templateName);
-        return NoContent();
-    }
+            var session = simulation.StartSession(body.TemplateName);
+            return Results.Ok(ToSessionDto(session));
+        }).WithName("StartSimulationSession");
 
-    /// <summary>Получить текущее состояние сессии.</summary>
-    [HttpGet("sessions/{templateName}")]
-    public ActionResult<SimulationSessionDto> GetSession(string templateName)
-    {
-        var session = _simulation.GetSession(templateName);
-        if (session is null)
-            return NotFound($"No active session for '{templateName}'.");
-        return Ok(ToSessionDto(session));
+        // POST /api/simulation/sessions/{templateName}/replay — запустить replay.
+        app.MapPost("/api/simulation/sessions/{templateName}/replay", (string templateName, ReplayRequest body, TemplateSimulationService simulation) =>
+        {
+            try
+            {
+                var result = simulation.RunReplay(templateName, body.WithFailures);
+                return Results.Ok(ToResultDto(result));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(ex.Message);
+            }
+        }).WithName("SimulationReplay");
+
+        // DELETE /api/simulation/sessions/{templateName} — остановить симуляционную сессию.
+        app.MapDelete("/api/simulation/sessions/{templateName}", (string templateName, TemplateSimulationService simulation) =>
+        {
+            simulation.StopSession(templateName);
+            return Results.NoContent();
+        }).WithName("StopSimulationSession");
+
+        // GET /api/simulation/sessions/{templateName} — текущее состояние сессии.
+        app.MapGet("/api/simulation/sessions/{templateName}", (string templateName, TemplateSimulationService simulation) =>
+        {
+            var session = simulation.GetSession(templateName);
+            if (session is null)
+            {
+                return Results.NotFound($"No active session for '{templateName}'.");
+            }
+
+            return Results.Ok(ToSessionDto(session));
+        }).WithName("GetSimulationSession");
     }
 
     private static SimulationSessionDto ToSessionDto(SimulationSession session)

@@ -1,0 +1,8 @@
+{
+  "max_agents": 20,
+  "max_delegation_hops": 4,
+  "max_concurrent_tasks_per_agent": 8,
+  "max_fan_out_width": 12,
+  "require_mutual_tls": true,
+  "require_signed_payloads": true
+}

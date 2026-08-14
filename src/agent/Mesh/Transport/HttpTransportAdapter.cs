@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Text;
 using Hercules.Mesh.Auth;
+using Hercules.Mesh.Observability;
 
 namespace Hercules.Mesh.Transport;
 
@@ -18,6 +19,7 @@ public sealed class HttpTransportAdapter : ITransport, IDisposable
     private readonly HttpClient _http;
     private readonly ICapabilityLookup _registry;
     private readonly IPeerCredentialProvider? _credentials;
+    private readonly IMeshObservabilityService? _meshObs;
     private readonly bool _weOwnClient;
 
     /// <summary>Default timeout для inter-agent HTTP-вызовов (мс).</summary>
@@ -39,6 +41,7 @@ public sealed class HttpTransportAdapter : ITransport, IDisposable
         _http = new HttpClient { Timeout = TimeSpan.FromMilliseconds(defaultTimeoutMs) };
         DefaultTimeoutMs = defaultTimeoutMs;
         _credentials = null;
+        _meshObs = null;
         _weOwnClient = true;
     }
 
@@ -49,12 +52,14 @@ public sealed class HttpTransportAdapter : ITransport, IDisposable
         ICapabilityLookup registry,
         HttpClient httpClient,
         int defaultTimeoutMs = 30_000,
-        IPeerCredentialProvider? credentials = null)
+        IPeerCredentialProvider? credentials = null,
+        IMeshObservabilityService? meshObservability = null)
     {
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _http = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         DefaultTimeoutMs = defaultTimeoutMs;
         _credentials = credentials;
+        _meshObs = meshObservability;
         _weOwnClient = false;
     }
 
@@ -160,6 +165,16 @@ public sealed class HttpTransportAdapter : ITransport, IDisposable
             if (!string.IsNullOrEmpty(envelope.IdempotencyKey))
             {
                 httpReq.Headers.TryAddWithoutValidation("X-Idempotency-Key", envelope.IdempotencyKey);
+            }
+
+            // task_054: inject distributed trace context headers (W3C TraceContext + B3)
+            if (_meshObs?.IsEnabled == true)
+            {
+                var traceHeaders = _meshObs.InjectTraceContext(Activity.Current, envelope.TraceId, null);
+                foreach (var header in traceHeaders)
+                {
+                    httpReq.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
             }
 
             using HttpResponseMessage resp = await _http.SendAsync(httpReq, cts.Token);

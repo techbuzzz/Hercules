@@ -1,0 +1,7 @@
+{
+  "default_degradation_mode": "Degraded",
+  "allowed_offline_skills": ["inventory-track", "cash-log", "alert-notify"],
+  "enable_outbox_queue": true,
+  "sync_interval_seconds": 120,
+  "enable_queued_work": false
+}
