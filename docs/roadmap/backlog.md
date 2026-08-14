@@ -106,7 +106,7 @@
 | 54 | 33 | [Централизованные логи и трейсы](tasks/task_054.md) | `centralized-observability` | done |
 | 55 | 40 | [Security operations](tasks/task_055.md) | `security-ops` | pending |
 | 56 | 35 | [Rate limits и квоты](tasks/task_056.md) | `rate-limits-quotas` | pending |
-| 57 | 36 | [Управление жизненным циклом](tasks/task_057.md) | `lifecycle-management` | pending |
+| 57 | 36 | [Управление жизненным циклом](tasks/task_057.md) | `lifecycle-management` | done |
 | 58 | 41 | [Configuration и policy rollout](tasks/task_058.md) | `config-policy-rollout` | pending |
 | 59 | 37 | [Edge provisioning](tasks/task_059.md) | `edge-provisioning` | pending |
 | 60 | 38 | [Offline resilience](tasks/task_060.md) | `offline-resilience` | pending |

@@ -10,6 +10,8 @@ using Hercules.Context;
 using Hercules.Context.Summarizer;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.Lifecycle;
+using Hercules.Mesh.Transport;
 using Hercules.Mcp;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
@@ -461,6 +463,15 @@ builder.ConfigureServices((context, services) =>
 
     services.AddSingleton<ReflectionEngine>();
     services.AddSingleton<AgentCore>();
+
+    // task_057: Lifecycle management
+    services.AddSingleton<ILifecycleService>(sp =>
+        new LifecycleService(
+            sp.GetRequiredService<AgentCore>(),
+            sp.GetRequiredService<SkillManager>(),
+            sp.GetRequiredService<CapabilityRegistry>(),
+            sp.GetRequiredService<ITransport>(),
+            sp.GetRequiredService<ILogger<LifecycleService>>()));
 
     // Интерфейсы
     services.AddSingleton<ConsoleUI>();

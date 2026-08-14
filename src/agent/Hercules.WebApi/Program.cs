@@ -8,6 +8,7 @@ using Hercules.CodeExecution;
 using Hercules.Config;
 using Hercules.Context;
 using Hercules.Context.Summarizer;
+using Hercules.Lifecycle;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Memory.Layers;
@@ -429,6 +430,15 @@ builder.Services.AddSingleton<IConfigReload>(sp => sp.GetRequiredService<SkillMa
 // Адаптер Web API
 builder.Services.AddSingleton<WebApiAdapter>();
 
+// task_057: Lifecycle management
+builder.Services.AddSingleton<ILifecycleService>(sp =>
+    new LifecycleService(
+        sp.GetRequiredService<AgentCore>(),
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<CapabilityRegistry>(),
+        sp.GetRequiredService<ITransport>(),
+        sp.GetRequiredService<ILogger<LifecycleService>>()));
+
 // --- CORS: разрешаем localhost-источники фронтенда ---
 const string corsPolicy = "frontend";
 builder.Services.AddCors(options =>
@@ -548,6 +558,7 @@ app.MapStats();
 app.MapConfig();
 app.MapMesh();
 app.MapMeshObservability();
+app.MapLifecycle();
 
 // Agent manifest — публикация на startup (task_032)
 try
