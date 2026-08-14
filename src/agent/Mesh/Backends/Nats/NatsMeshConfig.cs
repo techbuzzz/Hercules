@@ -82,4 +82,27 @@ public sealed class NatsMeshConfig
     ///     Default TTL for state store keys without explicit TTL (seconds). Default: 3600.
     /// </summary>
     public int DefaultTtlSeconds { get; set; } = 3600;
+
+    /// <summary>
+    ///     Max delivery attempts before JetStream stops redelivering a message.
+    ///     Maps to <c>ConsumerConfig.MaxDeliver</c>. Default: 10.
+    ///     task_074.
+    /// </summary>
+    public int MaxDeliveryAttempts { get; set; } = 10;
+
+    /// <summary>
+    ///     Local dead-letter queue file (JSONL). When a task is terminated
+    ///     after exceeding <see cref="MaxDeliveryAttempts"/> or worker MaxRetries,
+    ///     its serialized payload is appended here for manual or automatic requeue.
+    ///     Default: "{StreamPrefix}-dlq.jsonl" (resolved relative to the data root).
+    ///     task_074.
+    /// </summary>
+    public string DlqFileName { get; set; } = "";
+
+    /// <summary>
+    ///     Data root directory for the local DLQ file. Resolved at construction time
+    ///     by <see cref="Hercules.Mesh.Backends.Nats.NatsTaskQueue"/>; defaults to
+    ///     <c>AppContext.BaseDirectory</c> when unset. task_074.
+    /// </summary>
+    public string? DataRoot { get; set; }
 }

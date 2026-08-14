@@ -12,25 +12,29 @@ namespace Hercules.Mesh.Backends.Nats;
 /// <summary>
 ///     Durable task queue using NATS JetStream.
 ///     Enqueue: publish to JetStream stream. Dequeue: pull consumer fetch with visibility timeout.
-///     At-least-once delivery via JetStream acks.
-///     Spec: task_068.
+///     At-least-once delivery via JetStream acks (AckAsync / NakAsync / AckTerminateAsync).
+///     On retry exhaustion the message is terminated and appended to a local JSONL DLQ
+///     (<see cref="NatsTaskDlqStore"/>) for manual or automatic requeue.
+///     Spec: task_068 (initial); task_074 (ack/fail + DLQ).
 /// </summary>
 public sealed class NatsTaskQueue : ITaskQueue
 {
-    private readonly NatsConnection _connection;
+    private readonly NatsConnection? _connection;
     private readonly NatsMeshConfig _config;
     private readonly ILogger<NatsTaskQueue> _log;
     private readonly JsonSerializerOptions _json;
     private readonly ConcurrentDictionary<string, string> _consumerIds = new();
     private readonly Timer _ensureTimer;
     private readonly string _streamName;
-    private readonly string _dlqStreamName;
+    private readonly NatsTaskInFlightTracker _inFlight = new();
+    private readonly NatsTaskDlqStore? _dlq;
+    private readonly string _dlqFilePath;
     private bool _disposed;
 
     public string BackendKind => "nats";
 
     public NatsTaskQueue(
-        NatsConnection connection,
+        NatsConnection? connection,
         NatsMeshConfig config,
         ILogger<NatsTaskQueue> log)
     {
@@ -43,7 +47,18 @@ public sealed class NatsTaskQueue : ITaskQueue
             WriteIndented = false
         };
         _streamName = $"{config.StreamPrefix}-tasks";
-        _dlqStreamName = $"{config.StreamPrefix}-dlq";
+
+        // Resolve DLQ file path (task_074). Default: {DataRoot}/{StreamPrefix}-dlq.jsonl
+        var dataRoot = string.IsNullOrEmpty(config.DataRoot)
+            ? AppContext.BaseDirectory
+            : config.DataRoot;
+        var dlqFileName = string.IsNullOrEmpty(config.DlqFileName)
+            ? $"{config.StreamPrefix}-dlq.jsonl"
+            : config.DlqFileName;
+        _dlqFilePath = Path.IsPathRooted(dlqFileName)
+            ? dlqFileName
+            : Path.Combine(dataRoot, dlqFileName);
+        _dlq = new NatsTaskDlqStore(_dlqFilePath, log);
 
         _ensureTimer = new Timer(
             static state => ((NatsTaskQueue)state!).EnsureStreamAndConsumersAsync().ConfigureAwait(false).GetAwaiter().GetResult(),
@@ -51,6 +66,12 @@ public sealed class NatsTaskQueue : ITaskQueue
             TimeSpan.FromSeconds(1),
             TimeSpan.FromSeconds(30));
     }
+
+    /// <summary>Absolute path of the local JSONL DLQ file (task_074).</summary>
+    public string DlqFilePath => _dlqFilePath;
+
+    /// <summary>Exposed for tests/diagnostics: current in-flight tracker (task_074).</summary>
+    internal NatsTaskInFlightTracker InFlight => _inFlight;
 
     /// <inheritdoc />
     public async Task<QueuedTask> EnqueueAsync(MeshTask task, CancellationToken ct = default)
@@ -83,7 +104,11 @@ public sealed class NatsTaskQueue : ITaskQueue
 
         try
         {
-            if (_config.JetStreamEnabled)
+            if (_connection is null)
+            {
+                _log.LogWarning("[NatsTaskQueue] No connection available; enqueue of {TaskId} is a no-op", taskId);
+            }
+            else if (_config.JetStreamEnabled)
             {
                 var js = new NatsJSContext(_connection);
                 await js.PublishAsync(subject, json, cancellationToken: ct).ConfigureAwait(false);
@@ -118,6 +143,12 @@ public sealed class NatsTaskQueue : ITaskQueue
     {
         ThrowIfDisposed();
 
+        if (_connection is null)
+        {
+            _log.LogWarning("[NatsTaskQueue] DequeueAsync called with no NATS connection");
+            return null;
+        }
+
         var queue = string.IsNullOrEmpty(queueName) ? "default" : queueName;
         var consumerName = _consumerIds.GetOrAdd(queue, $"{_config.StreamPrefix}-consumer-{queue}");
 
@@ -142,7 +173,7 @@ public sealed class NatsTaskQueue : ITaskQueue
                             Name = consumerName,
                             DurableName = consumerName,
                             AckWait = visibilityTimeout,
-                            MaxDeliver = 10,
+                            MaxDeliver = _config.MaxDeliveryAttempts,
                             FilterSubject = $"{_config.StreamPrefix}.queue.{queue}"
                         },
                         ct).ConfigureAwait(false);
@@ -162,24 +193,41 @@ public sealed class NatsTaskQueue : ITaskQueue
 
                             var deliveryCount = (int)(msg.Metadata?.NumDelivered ?? 1);
 
+                            // Track for AckAsync / FailAsync (task_074).
+                            // Capture action delegates because the original NatsJSMsg may
+                            // be disposed when the fetch loop exits; JetStream ack/nak/term
+                            // is a separate publish and does not need the live message.
+                            var meshTask = new MeshTask
+                            {
+                                Id = payload.Id,
+                                QueueName = payload.QueueName,
+                                AssignedAgentId = payload.AssignedAgentId,
+                                Intent = payload.Intent,
+                                Payload = payload.Payload,
+                                MaxRetries = payload.MaxRetries,
+                                RetryDelay = payload.RetryDelay,
+                                Deadline = payload.Deadline,
+                                TraceId = payload.TraceId,
+                                RootRequestId = payload.RootRequestId,
+                                Metadata = payload.Metadata
+                            };
+                            var entry = new NatsTaskInFlightTracker.Entry
+                            {
+                                TaskId = payload.Id,
+                                QueueName = payload.QueueName,
+                                NumDelivered = deliveryCount,
+                                Task = meshTask,
+                                AckAsync = innerCt => msg.AckAsync(null, innerCt),
+                                NakAsync = (opts, innerCt) => msg.NakAsync(opts, innerCt),
+                                TerminateAsync = (opts, innerCt) => msg.AckTerminateAsync(opts, innerCt)
+                            };
+                            _inFlight.AddOrReplace(entry);
+
                             return new QueuedTask
                             {
                                 Id = payload.Id,
                                 ReceiptHandle = payload.Id,
-                                Task = new MeshTask
-                                {
-                                    Id = payload.Id,
-                                    QueueName = payload.QueueName,
-                                    AssignedAgentId = payload.AssignedAgentId,
-                                    Intent = payload.Intent,
-                                    Payload = payload.Payload,
-                                    MaxRetries = payload.MaxRetries,
-                                    RetryDelay = payload.RetryDelay,
-                                    Deadline = payload.Deadline,
-                                    TraceId = payload.TraceId,
-                                    RootRequestId = payload.RootRequestId,
-                                    Metadata = payload.Metadata
-                                },
+                                Task = meshTask,
                                 EnqueuedAt = payload.EnqueuedAt,
                                 RetryCount = payload.RetryCount,
                                 DeliveryCount = deliveryCount
@@ -266,86 +314,145 @@ public sealed class NatsTaskQueue : ITaskQueue
     public async Task AckAsync(string taskId, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-        await Task.CompletedTask.ConfigureAwait(false);
+
+        var entry = _inFlight.Get(taskId);
+        if (entry is null)
+        {
+            _log.LogDebug("[NatsTaskQueue] Ack for unknown or already-completed task {TaskId}", taskId);
+            return;
+        }
+
+        try
+        {
+            await entry.AckAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _log.LogWarning(ex, "[NatsTaskQueue] AckAsync failed for {TaskId}", taskId);
+        }
+        finally
+        {
+            _inFlight.Remove(taskId);
+        }
     }
 
     /// <inheritdoc />
     public async Task FailAsync(string taskId, string reason, int retry, CancellationToken ct = default)
     {
         ThrowIfDisposed();
-        _log.LogInformation("[NatsTaskQueue] Task {TaskId} failed (retry {Retry}): {Reason}", taskId, retry, reason);
-        await Task.CompletedTask.ConfigureAwait(false);
+
+        var entry = _inFlight.Get(taskId);
+        if (entry is null)
+        {
+            _log.LogDebug("[NatsTaskQueue] Fail for unknown or already-completed task {TaskId}", taskId);
+            return;
+        }
+
+        // Decision: Nak for retry, or Terminate + DLQ when budget exhausted.
+        // We honor both the worker's MaxRetries and JetStream's MaxDeliveryAttempts
+        // (whichever trips first) to guarantee no message is silently lost.
+        var maxRetries = entry.Task.MaxRetries;
+        var maxAttempts = _config.MaxDeliveryAttempts;
+        var shouldTerminate = retry >= maxRetries || entry.NumDelivered >= maxAttempts;
+
+        try
+        {
+            if (shouldTerminate)
+            {
+                await TerminateToDlqAsync(entry, reason, retry, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                await entry.NakAsync(null, ct).ConfigureAwait(false);
+                _log.LogInformation(
+                    "[NatsTaskQueue] Task {TaskId} nacked for retry {Retry}/{MaxRetries} (delivery {Delivery}/{MaxAttempts}): {Reason}",
+                    taskId, retry + 1, maxRetries, entry.NumDelivered, maxAttempts, reason);
+            }
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _log.LogWarning(ex, "[NatsTaskQueue] FailAsync failed for {TaskId}", taskId);
+        }
+        finally
+        {
+            _inFlight.Remove(taskId);
+        }
     }
+
+    private async Task TerminateToDlqAsync(
+        NatsTaskInFlightTracker.Entry entry,
+        string reason,
+        int retry,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        // 1. Append to local DLQ file first (so a failure to terminate doesn't lose the task).
+        if (_dlq is not null)
+        {
+            try
+            {
+                await _dlq.AppendAsync(entry.Task, reason, entry.NumDelivered, entry.QueueName, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "[NatsTaskQueue] Failed to write DLQ entry for {TaskId}", entry.TaskId);
+            }
+        }
+
+        // 2. Terminate the message so JetStream stops redelivering.
+        try
+        {
+            await entry.TerminateAsync(
+                new AckOpts { TerminateReason = TruncateReason(reason) },
+                ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _log.LogWarning(ex, "[NatsTaskQueue] TerminateAsync failed for {TaskId}", entry.TaskId);
+        }
+
+        _log.LogWarning(
+            "[NatsTaskQueue] Task {TaskId} moved to DLQ after {Retries} retries / {Deliveries} deliveries: {Reason}",
+            entry.TaskId, retry, entry.NumDelivered, reason);
+    }
+
+    private static string TruncateReason(string reason) =>
+        reason.Length <= 200 ? reason : reason[..200];
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<QueuedTask>> GetDeadLetterQueueAsync(string queueName, int limit = 100, CancellationToken ct = default)
     {
         ThrowIfDisposed();
 
-        if (!_config.JetStreamEnabled)
+        if (_dlq is null)
             return Array.Empty<QueuedTask>();
 
         try
         {
-            var js = new NatsJSContext(_connection);
-            var msgs = new List<QueuedTask>();
-
-            // Ephemeral consumer to peek DLQ messages
-            var consumer = await js.CreateConsumerAsync(
-                _dlqStreamName,
-                new ConsumerConfig
-                {
-                    Name = $"dlq-peek-{Guid.NewGuid():N}",
-                    MaxDeliver = limit,
-                    FilterSubject = $"{_config.StreamPrefix}.dlq.>"
-                },
-                ct).ConfigureAwait(false);
-
-            try
+            var entries = await _dlq.ListAsync(queueName, limit, ct).ConfigureAwait(false);
+            var result = new List<QueuedTask>(entries.Count);
+            foreach (var e in entries)
             {
-                var fetchOpts = new NatsJSFetchOpts { MaxMsgs = limit, Expires = TimeSpan.FromSeconds(5) };
-                await using var enumPeek = consumer.FetchAsync<string>(fetchOpts, cancellationToken: ct).WithCancellation(ct).GetAsyncEnumerator();
-                while (await enumPeek.MoveNextAsync())
+                result.Add(new QueuedTask
                 {
-                    var msg = enumPeek.Current;
-                    try
+                    Id = e.TaskId,
+                    ReceiptHandle = e.TaskId,
+                    Task = new MeshTask
                     {
-                        var payload = JsonSerializer.Deserialize<NatsTaskPayload>(msg.Data, _json);
-                        if (payload is not null)
-                        {
-                            msgs.Add(new QueuedTask
-                            {
-                                Id = payload.Id,
-                                ReceiptHandle = payload.Id,
-                                Task = new MeshTask
-                                {
-                                    Id = payload.Id,
-                                    QueueName = payload.QueueName,
-                                    AssignedAgentId = payload.AssignedAgentId,
-                                    Intent = payload.Intent,
-                                    Payload = payload.Payload,
-                                    MaxRetries = payload.MaxRetries,
-                                    RetryDelay = payload.RetryDelay,
-                                    Deadline = payload.Deadline,
-                                    TraceId = payload.TraceId,
-                                    RootRequestId = payload.RootRequestId,
-                                    Metadata = payload.Metadata
-                                },
-                                EnqueuedAt = payload.EnqueuedAt,
-                                RetryCount = payload.RetryCount,
-                                DeliveryCount = 1
-                            });
-                        }
-                    }
-                    catch { /* skip malformed */ }
-                }
+                        Id = e.TaskId,
+                        QueueName = e.QueueName,
+                        Intent = e.Intent,
+                        Payload = e.Payload,
+                        MaxRetries = e.MaxRetries,
+                        Metadata = new Dictionary<string, string>()
+                    },
+                    EnqueuedAt = e.FailedAt,
+                    RetryCount = e.RetryCount,
+                    DeliveryCount = e.DeliveryCount
+                });
             }
-            finally
-            {
-                // Ephemeral consumer auto-expires; no explicit delete needed.
-            }
-
-            return msgs;
+            return result;
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -359,47 +466,47 @@ public sealed class NatsTaskQueue : ITaskQueue
     {
         ThrowIfDisposed();
 
-        if (!_config.JetStreamEnabled)
+        if (_dlq is null || _connection is null)
             return;
 
+        // 1. Read DLQ file to find the entry.
+        var entries = await _dlq.ListAsync(queueName: null, limit: int.MaxValue, ct).ConfigureAwait(false);
+        var entry = entries.FirstOrDefault(e => string.Equals(e.TaskId, taskId, StringComparison.Ordinal));
+        if (entry is null)
+        {
+            _log.LogDebug("[NatsTaskQueue] RequeueDeadLetterAsync: {TaskId} not in DLQ", taskId);
+            return;
+        }
+
+        // 2. Republish into the working stream.
         try
         {
-            var js = new NatsJSContext(_connection);
-            var consumer = await js.CreateConsumerAsync(
-                _dlqStreamName,
-                new ConsumerConfig
-                {
-                    Name = $"dlq-requeue-{Guid.NewGuid():N}",
-                    FilterSubject = $"{_config.StreamPrefix}.dlq.>"
-                },
-                ct).ConfigureAwait(false);
+            var payload = new NatsTaskPayload
+            {
+                Id = entry.TaskId,
+                QueueName = entry.QueueName,
+                Intent = entry.Intent,
+                Payload = entry.Payload,
+                MaxRetries = entry.MaxRetries,
+                EnqueuedAt = DateTimeOffset.UtcNow,
+                RetryCount = 0
+            };
+            var json = JsonSerializer.Serialize(payload, _json);
+            var subject = $"{_config.StreamPrefix}.queue.{entry.QueueName}";
 
-            try
+            if (_config.JetStreamEnabled)
             {
-                var fetchOpts = new NatsJSFetchOpts { MaxMsgs = 1000, Expires = TimeSpan.FromSeconds(5) };
-                await using var enumDlq = consumer.FetchAsync<string>(fetchOpts, cancellationToken: ct).WithCancellation(ct).GetAsyncEnumerator();
-                while (await enumDlq.MoveNextAsync())
-                {
-                    var msg = enumDlq.Current;
-                    try
-                    {
-                        var payload = JsonSerializer.Deserialize<NatsTaskPayload>(msg.Data, _json);
-                        if (payload?.Id == taskId)
-                        {
-                            var subject = $"{_config.StreamPrefix}.queue.{payload.QueueName}";
-                            await js.PublishAsync(subject, msg.Data, cancellationToken: ct).ConfigureAwait(false);
-                            await msg.AckAsync(null, ct).ConfigureAwait(false);
-                            _log.LogInformation("[NatsTaskQueue] Requeued DLQ task {TaskId}", taskId);
-                            return;
-                        }
-                    }
-                    catch { /* continue */ }
-                }
+                var js = new NatsJSContext(_connection);
+                await js.PublishAsync(subject, json, cancellationToken: ct).ConfigureAwait(false);
             }
-            finally
+            else
             {
-                // Ephemeral consumer auto-expires; no explicit delete needed.
+                await _connection.PublishAsync(subject, json, cancellationToken: ct).ConfigureAwait(false);
             }
+
+            // 3. Remove the entry from the local DLQ file.
+            await _dlq.RemoveAsync(taskId, ct).ConfigureAwait(false);
+            _log.LogInformation("[NatsTaskQueue] Requeued DLQ task {TaskId} to queue {Queue}", taskId, entry.QueueName);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -411,6 +518,7 @@ public sealed class NatsTaskQueue : ITaskQueue
     public async ValueTask<bool> IsHealthyAsync(CancellationToken ct = default)
     {
         if (_disposed) return false;
+        if (_connection is null) return false;
         try
         {
             var rtt = await _connection.PingAsync(ct).ConfigureAwait(false);
@@ -425,6 +533,7 @@ public sealed class NatsTaskQueue : ITaskQueue
     private async Task EnsureStreamAndConsumersAsync()
     {
         if (!_config.JetStreamEnabled || _disposed) return;
+        if (_connection is null) return;
 
         try
         {
@@ -447,23 +556,9 @@ public sealed class NatsTaskQueue : ITaskQueue
             {
                 // Stream already exists — OK
             }
-
-            try
-            {
-                await js.CreateStreamAsync(
-                    new StreamConfig
-                    {
-                        Name = _dlqStreamName,
-                        Subjects = new[] { $"{_config.StreamPrefix}.dlq.*" },
-                        MaxBytes = _config.JetStreamMaxBytes,
-                        MaxAge = TimeSpan.FromDays(_config.JetStreamMaxAgeDays)
-                    },
-                    CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (NatsJSApiException ex) when (ex.Message.Contains("already exists"))
-            {
-                // Already exists — OK
-            }
+            // task_074: the local JSONL DLQ file is created on demand by NatsTaskDlqStore.
+            // The legacy JetStream DLQ stream (subjects: {prefix}.dlq.*) is no longer
+            // created or consumed — see NatsTaskDlqStore for the replacement.
         }
         catch (Exception ex)
         {

@@ -66,6 +66,10 @@ public class NatsTaskQueueTests : IDisposable
         Assert.Equal(5000, config.ConnectTimeoutMs);
         Assert.Equal(30000, config.PingIntervalMs);
         Assert.Equal(3600, config.DefaultTtlSeconds);
+        // task_074 additions
+        Assert.Equal(10, config.MaxDeliveryAttempts);
+        Assert.Equal("", config.DlqFileName);
+        Assert.Null(config.DataRoot);
     }
 
     [Fact]
@@ -102,6 +106,81 @@ public class NatsTaskQueueTests : IDisposable
 
         // Should not throw
         Assert.ThrowsAny<ObjectDisposedException>(() => queue3.EnqueueAsync(new MeshTask { Intent = "test" }).GetAwaiter().GetResult());
+    }
+
+    // task_074: AckAsync / FailAsync must be no-ops when no in-flight entry exists
+    // (worker may call after a crash, retry, or duplicate notify). They must not throw.
+
+    [Fact]
+    public async Task AckAsync_UnknownTask_IsNoOp()
+    {
+        // Tracker is empty — Ack must complete without exception.
+        await _queue.AckAsync("never-dequeued");
+    }
+
+    [Fact]
+    public async Task FailAsync_UnknownTask_IsNoOp()
+    {
+        await _queue.FailAsync("never-dequeued", "oops", retry: 0);
+    }
+
+    [Fact]
+    public async Task AckAsync_AfterDispose_Throws()
+    {
+        _queue.Dispose();
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => _queue.AckAsync("x"));
+    }
+
+    [Fact]
+    public async Task FailAsync_AfterDispose_Throws()
+    {
+        _queue.Dispose();
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => _queue.FailAsync("x", "r", 0));
+    }
+
+    [Fact]
+    public void DlqFilePath_DefaultsToStreamPrefixJsonl()
+    {
+        var config = new NatsMeshConfig { StreamPrefix = "test" };
+        var q = new NatsTaskQueue(null!, config, new Mock<ILogger<NatsTaskQueue>>().Object);
+        try
+        {
+            var expected = Path.Combine(AppContext.BaseDirectory, "test-dlq.jsonl");
+            Assert.Equal(expected, q.DlqFilePath);
+        }
+        finally
+        {
+            q.Dispose();
+        }
+    }
+
+    [Fact]
+    public void DlqFilePath_HonorsConfigDataRoot()
+    {
+        var customDir = Path.Combine(Path.GetTempPath(), "nats-dlq-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var config = new NatsMeshConfig { StreamPrefix = "h", DataRoot = customDir };
+            var q = new NatsTaskQueue(null!, config, new Mock<ILogger<NatsTaskQueue>>().Object);
+            try
+            {
+                Assert.StartsWith(customDir, q.DlqFilePath);
+            }
+            finally
+            {
+                q.Dispose();
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(customDir, recursive: true); } catch { /* ignore */ }
+        }
+    }
+
+    [Fact]
+    public void InFlight_IsExposed_AndStartsEmpty()
+    {
+        Assert.Equal(0, _queue.InFlight.Count);
     }
 
     public void Dispose() => _queue.Dispose();
