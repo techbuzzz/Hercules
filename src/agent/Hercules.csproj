@@ -50,6 +50,9 @@
     <!-- gRPC transport (task_037) -->
     <PackageReference Include="Grpc.Net.Client" Version="2.67.0" />
 
+    <!-- Redis/Valkey backend (task_067) — RESP-compatible pub/sub, state store, task queue -->
+    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+
     <!-- OpenTelemetry (task_013) — tracing, metrics, structured logs -->
     <PackageReference Include="OpenTelemetry" Version="1.10.0" />
     <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.10.0" />

@@ -167,6 +167,10 @@ public sealed class AppConfig
     // task_064: Operational SLOs
     /// <summary>SLO config (task_064): SLO definitions directory, alert thresholds.</summary>
     public SlosConfig Slos { get; set; } = new();
+
+    // task_067: Redis/Valkey coordination backend
+    /// <summary>Redis/Valkey backend config (task_067): connection string, key prefixes, TTL, visibility timeout.</summary>
+    public Hercules.Mesh.Backends.Redis.RedisMeshConfig Redis { get; set; } = new();
 }
 
 /// <summary>

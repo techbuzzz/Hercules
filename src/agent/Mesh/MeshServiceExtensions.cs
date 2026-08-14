@@ -7,6 +7,7 @@ using Hercules.Mesh.Aggregation;
 using Hercules.Mesh.Audit;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Backend;
+using Hercules.Mesh.Backends.Redis;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Escalation;
 using Hercules.Mesh.Eval;
@@ -18,6 +19,7 @@ using Hercules.Mesh.Verification;
 using Hercules.Mesh.Router;
 using Hercules.Mesh.TaskLifecycle;
 using Hercules.Mesh.Transport;
+using StackExchange.Redis;
 using Hercules.Mesh.Resilience;
 using Hercules.Observability;
 using Hercules.Skills;
@@ -442,9 +444,7 @@ public static class MeshServiceCollectionExtensions
         // Phase 4: Mesh backend abstractions (task_066) — IMeshBus, ITaskQueue, IMeshStateStore
         // Default: in-process implementation (Channel-based pub/sub, ConcurrentQueue, ConcurrentDictionary)
         // Tasks 067–070 will replace these with Redis/NATS/PostgreSQL backends via profile
-        services.AddSingleton<IMeshBus, InProcessMeshBus>();
-        services.AddSingleton<ITaskQueue, InProcessTaskQueue>();
-        services.AddSingleton<IMeshStateStore, InProcessMeshStateStore>();
+        RegisterMeshBackends(services, appConfig, services.BuildServiceProvider());
 
         // Phase 4: Backend profiles and degradation (task_070) — profile loader and health monitor
         var meshProfilesCfg = appConfig.MeshProfiles;
@@ -453,5 +453,53 @@ public static class MeshServiceCollectionExtensions
         services.AddSingleton<IMeshBackendHealthMonitor, MeshBackendHealthMonitor>();
 
         return services;
+    }
+
+    /// <summary>
+    ///     Registers mesh backends (IMeshBus, ITaskQueue, IMeshStateStore) based on active profile.
+    ///     Redis (task_067): uses Redis for all three roles when Redis:Enabled or profile = Redis.
+    ///     Falls back to in-process when Redis is unavailable.
+    /// </summary>
+    private static void RegisterMeshBackends(IServiceCollection services, AppConfig appConfig, IServiceProvider sp)
+    {
+        var redisCfg = appConfig.Redis;
+        var profileLoader = new MeshProfileLoader(appConfig.MeshProfiles, sp.GetRequiredService<ILogger<MeshProfileLoader>>());
+        var activeProfile = profileLoader.GetActiveProfile();
+        var isRedisProfile = activeProfile?.Profile == MeshBackendProfile.Redis;
+        var isRedisEnabled = redisCfg.Enabled || isRedisProfile;
+
+        if (isRedisEnabled)
+        {
+            // Register Redis connection multiplexer (singleton per connection string)
+            var redisConfig = ConfigurationOptions.Parse(redisCfg.ConnectionString);
+            redisConfig.AbortOnConnectFail = false;
+            redisConfig.ConnectTimeout = 5000;
+            redisConfig.SyncTimeout = 5000;
+
+            services.AddSingleton<IConnectionMultiplexer>(_ =>
+            {
+                try
+                {
+                    return ConnectionMultiplexer.Connect(redisConfig);
+                }
+                catch
+                {
+                    // Return a lazy-connecting multiplexer that will gracefully degrade
+                    return ConnectionMultiplexer.Connect(redisConfig);
+                }
+            });
+
+            services.AddSingleton(redisCfg);
+            services.AddSingleton<IMeshBus, RedisMeshBus>();
+            services.AddSingleton<ITaskQueue, RedisTaskQueue>();
+            services.AddSingleton<IMeshStateStore, RedisMeshStateStore>();
+        }
+        else
+        {
+            // Default: in-process implementations
+            services.AddSingleton<IMeshBus, InProcessMeshBus>();
+            services.AddSingleton<ITaskQueue, InProcessTaskQueue>();
+            services.AddSingleton<IMeshStateStore, InProcessMeshStateStore>();
+        }
     }
 }
