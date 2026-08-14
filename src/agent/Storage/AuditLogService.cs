@@ -20,6 +20,16 @@ public interface IAuditLog
 
     /// <summary>Получить записи по target (skill_id, session_id, etc.).</summary>
     Task<IReadOnlyList<AuditLogEntry>> GetByTargetAsync(string target, int limit = 50, CancellationToken ct = default);
+
+    /// <summary>
+    ///     task_077: Aggregate counts of audit_log rows filtered by <paramref name="action" />
+    ///     and an optional time window. Single SQL aggregate, no row materialisation.
+    /// </summary>
+    Task<AuditLogStats> GetAuditLogStatsAsync(
+        string action,
+        DateTime? from = null,
+        DateTime? to = null,
+        CancellationToken ct = default);
 }
 
 /// <summary>
@@ -50,5 +60,15 @@ public sealed class AuditLogService(SqliteSessionStore store) : IAuditLog
     public async Task<IReadOnlyList<AuditLogEntry>> GetByTargetAsync(string target, int limit = 50, CancellationToken ct = default)
     {
         return await store.GetAuditLogByTargetAsync(target, limit, ct);
+    }
+
+    /// <inheritdoc />
+    public async Task<AuditLogStats> GetAuditLogStatsAsync(
+        string action,
+        DateTime? from = null,
+        DateTime? to = null,
+        CancellationToken ct = default)
+    {
+        return await store.GetAuditLogStatsAsync(action, from, to, ct);
     }
 }

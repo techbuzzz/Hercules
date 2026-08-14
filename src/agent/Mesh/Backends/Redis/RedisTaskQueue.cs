@@ -39,7 +39,7 @@ public sealed class RedisTaskQueue : ITaskQueue
 
         // Background timer: scan for timed-out in-flight tasks and re-enqueue them
         _visibilityTimer = new Timer(
-            static state => ((RedisTaskQueue)state!).RequeueTimedOutTasks(),
+            static state => ((RedisTaskQueue)state!).RequeueTimedOutTasksTimer(),
             this,
             TimeSpan.FromSeconds(1),
             TimeSpan.FromSeconds(1));
@@ -474,10 +474,16 @@ public sealed class RedisTaskQueue : ITaskQueue
         }
     }
 
-    private void RequeueTimedOutTasks()
+    // task_077: Timer callbacks must be async-void + try/catch. We re-enter the loop via
+    // _ = RequeueTimedOutTasksAsync(); exceptions are caught inside the async method.
+    private void RequeueTimedOutTasksTimer()
     {
         if (_disposed) return;
+        _ = RequeueTimedOutTasksAsync();
+    }
 
+    private async Task RequeueTimedOutTasksAsync()
+    {
         try
         {
             var db = _redis.GetDatabase();
@@ -492,7 +498,7 @@ public sealed class RedisTaskQueue : ITaskQueue
                 foreach (var inFlightKey in inFlightKeys)
                 {
                     // Get expired tasks (score <= now)
-                    var expired = db.SortedSetRangeByScoreAsync(inFlightKey, 0, now).GetAwaiter().GetResult();
+                    var expired = await db.SortedSetRangeByScoreAsync(inFlightKey, 0, now).ConfigureAwait(false);
                     if (expired.Length == 0) continue;
 
                     var queueName = inFlightKey.ToString().Replace(_config.KeyPrefix, "").Replace(":inflight", "");
@@ -500,7 +506,7 @@ public sealed class RedisTaskQueue : ITaskQueue
                     foreach (var receipt in expired)
                     {
                         var receiptKey = ReceiptKey(receipt.ToString());
-                        var json = db.StringGetAsync(receiptKey).GetAwaiter().GetResult();
+                        var json = await db.StringGetAsync(receiptKey).ConfigureAwait(false);
 
                         if (!json.IsNullOrEmpty)
                         {
@@ -508,12 +514,12 @@ public sealed class RedisTaskQueue : ITaskQueue
                             var newReceipt = $"{Guid.NewGuid():N}:{Guid.NewGuid():N}";
                             var newReceiptKey = ReceiptKey(newReceipt);
                             var newTtl = TimeSpan.FromHours(1);
-                            db.StringSetAsync(newReceiptKey, json, newTtl).ConfigureAwait(false);
-                            db.ListRightPushAsync(QueueKey(queueName), newReceipt).GetAwaiter().GetResult();
+                            await db.StringSetAsync(newReceiptKey, json, newTtl).ConfigureAwait(false);
+                            await db.ListRightPushAsync(QueueKey(queueName), newReceipt).ConfigureAwait(false);
                         }
 
                         // Remove from in-flight
-                        db.SortedSetRemoveAsync(inFlightKey, receipt).GetAwaiter().GetResult();
+                        await db.SortedSetRemoveAsync(inFlightKey, receipt).ConfigureAwait(false);
                     }
                 }
 
@@ -521,13 +527,13 @@ public sealed class RedisTaskQueue : ITaskQueue
                 var pendingKeys = server.Keys(pattern: $"{_config.KeyPrefix}queue:*:pending").ToArray();
                 foreach (var pendingKey in pendingKeys)
                 {
-                    var ready = db.SortedSetRangeByScoreAsync(pendingKey, 0, now).GetAwaiter().GetResult();
+                    var ready = await db.SortedSetRangeByScoreAsync(pendingKey, 0, now).ConfigureAwait(false);
                     foreach (var receipt in ready)
                     {
                         var receiptKey = ReceiptKey(receipt.ToString());
                         var queueName = pendingKey.ToString().Replace(_config.KeyPrefix, "").Replace(":pending", "");
-                        db.ListRightPushAsync(QueueKey(queueName), receipt).GetAwaiter().GetResult();
-                        db.SortedSetRemoveAsync(pendingKey, receipt).GetAwaiter().GetResult();
+                        await db.ListRightPushAsync(QueueKey(queueName), receipt).ConfigureAwait(false);
+                        await db.SortedSetRemoveAsync(pendingKey, receipt).ConfigureAwait(false);
                     }
                 }
             }

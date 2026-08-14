@@ -699,13 +699,13 @@ public sealed class AgentCore : IConfigReload
             // [Policy] Check tool execution policy before running
             if (_policy is not null)
             {
-                var policyResult = _policy.Evaluate(new PolicyContext
+                var policyResult = await _policy.EvaluateAsync(new PolicyContext
                 {
                     ToolName = toolName,
                     ArgumentsJson = argsJson,
                     SessionId = sessionId,
                     SkillId = skillId
-                });
+                }, ct).ConfigureAwait(false);
 
                 if (policyResult.IsDenied)
                 {

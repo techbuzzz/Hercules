@@ -259,6 +259,19 @@ public sealed record AuditLogEntry(
 }
 
 /// <summary>
+///     task_077: Aggregate counts of audit_log rows within an optional time window,
+///     grouped by <c>result</c> class. Replaces the legacy
+///     <c>QueryAsync(limit: 100_000) + .Count()</c> hot path in SLO evaluation so we no longer
+///     materialise 100k rows just to count them.
+/// </summary>
+public sealed record AuditLogStats(
+    int Total,
+    int Successes,
+    int Failures,
+    int Timeouts,
+    int Denied);
+
+/// <summary>
 ///     Результат оценки навыка (SkillEvaluationEngine).
 ///     Хранится в SQLite для истории и анализа трендов.
 /// </summary>

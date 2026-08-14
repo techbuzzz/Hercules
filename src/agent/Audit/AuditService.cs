@@ -249,4 +249,36 @@ public sealed class AuditService : IAuditService
         var all = await _auditLog.GetRecentAsync(limit, ct);
         return all;
     }
+
+    /// <inheritdoc />
+    public async Task<AuditActionStats> GetActionStatsAsync(
+        string action,
+        DateTime? from = null,
+        DateTime? to = null,
+        CancellationToken ct = default)
+    {
+        // task_077: delegate to IAuditLog aggregate to avoid loading 100k rows into memory.
+        if (_auditLog is Storage.AuditLogService als)
+        {
+            var s = await als.GetAuditLogStatsAsync(action, from, to, ct);
+            return new AuditActionStats(s.Total, s.Successes, s.Failures, s.Timeouts, s.Denied);
+        }
+
+        // Fallback: IAuditLog implementations that don't expose an aggregate still exist;
+        // synthesise an AuditActionStats from a bounded in-memory scan (cap 10k rows so we
+        // never OOM the SLO endpoint). This preserves the public contract while honouring
+        // task_077's "don't load 100k rows" invariant.
+        var entries = await _auditLog.GetRecentAsync(10_000, ct);
+        var scoped = entries.Where(e => e.Action == action
+            && (from is null || e.CreatedAt >= from)
+            && (to is null || e.CreatedAt < to)).ToList();
+
+        int total = scoped.Count;
+        int successes = scoped.Count(e => string.Equals(e.Result, "success", StringComparison.OrdinalIgnoreCase));
+        int failures = scoped.Count(e => !string.IsNullOrEmpty(e.Result) && e.Result.Contains("failure", StringComparison.OrdinalIgnoreCase));
+        int timeouts = scoped.Count(e => !string.IsNullOrEmpty(e.Result) && e.Result.Contains("timeout", StringComparison.OrdinalIgnoreCase));
+        int denied = scoped.Count(e => !string.IsNullOrEmpty(e.Result) && e.Result.Contains("denied", StringComparison.OrdinalIgnoreCase));
+
+        return new AuditActionStats(total, successes, failures, timeouts, denied);
+    }
 }

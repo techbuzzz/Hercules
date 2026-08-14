@@ -86,10 +86,12 @@ public sealed class ToolPolicyEngine : IConfigReload
     /// <summary>
     ///     Проверить, разрешён ли tool к исполнению.
     ///     Вызывается из AgentCore перед каждым tool.ExecuteAsync.
+    ///     Async: обращается к <see cref="IApprovalService" /> и <see cref="ISkillGrantService" />.
     /// </summary>
     /// <param name="ctx">Контекст запроса.</param>
+    /// <param name="ct">Токен отмены.</param>
     /// <returns>Результат проверки.</returns>
-    public ToolPolicyResult Evaluate(PolicyContext ctx)
+    public async Task<ToolPolicyResult> EvaluateAsync(PolicyContext ctx, CancellationToken ct = default)
     {
         var toolName = ctx.ToolName;
 
@@ -149,9 +151,9 @@ public sealed class ToolPolicyEngine : IConfigReload
             {
                 var reason = $"Tool '{toolName}' has side_effect_level={descriptor.SideEffectLevel} " +
                              $"which requires human approval (threshold={_config.MinSideEffectLevelForApproval})";
-                var approvalResult = _approvalService
-                    .RequestAsync(ctx.SessionId ?? "default", toolName, ctx.ArgumentsJson, reason)
-                    .GetAwaiter().GetResult();
+                var approvalResult = await _approvalService
+                    .RequestAsync(ctx.SessionId ?? "default", toolName, ctx.ArgumentsJson, reason, ct: ct)
+                    .ConfigureAwait(false);
                 _ = AuditPolicyDecisionAsync("system", toolName, "NeedsApproval", descriptor.RequiredPermissions.ToString(), ctx.ArgumentsJson, ctx.SessionId);
                 return ToolPolicyResult.NeedsApproval(
                     $"{reason}. Approval request id={approvalResult.RequestId}, status={approvalResult.Status}");
@@ -175,8 +177,9 @@ public sealed class ToolPolicyEngine : IConfigReload
         // task_026: Skill grant check — навык проверяется только если SkillId указан
         if (_skillGrantService is not null && !string.IsNullOrWhiteSpace(ctx.SkillId))
         {
-            var grantResult = _skillGrantService.CheckAllPermissionsAsync(
-                ctx.SkillId, descriptor.RequiredPermissions, ctx.SessionId).GetAwaiter().GetResult();
+            var grantResult = await _skillGrantService
+                .CheckAllPermissionsAsync(ctx.SkillId, descriptor.RequiredPermissions, ctx.SessionId, ct)
+                .ConfigureAwait(false);
 
             if (!grantResult.IsValid)
             {
@@ -200,9 +203,9 @@ public sealed class ToolPolicyEngine : IConfigReload
             if (_approvalService is not null)
             {
                 var reason = $"Tool '{toolName}' is marked Critical";
-                var approvalResult = _approvalService
-                    .RequestAsync(ctx.SessionId ?? "default", toolName, ctx.ArgumentsJson, reason)
-                    .GetAwaiter().GetResult();
+                var approvalResult = await _approvalService
+                    .RequestAsync(ctx.SessionId ?? "default", toolName, ctx.ArgumentsJson, reason, ct: ct)
+                    .ConfigureAwait(false);
                 _ = AuditPolicyDecisionAsync("system", toolName, "NeedsApproval", descriptor.RequiredPermissions.ToString(), ctx.ArgumentsJson, ctx.SessionId);
                 return ToolPolicyResult.NeedsApproval(
                     $"{reason}. Approval request id={approvalResult.RequestId}, status={approvalResult.Status}");
@@ -216,6 +219,14 @@ public sealed class ToolPolicyEngine : IConfigReload
         _ = AuditPolicyDecisionAsync("system", toolName, "Allowed", descriptor.RequiredPermissions.ToString(), ctx.ArgumentsJson, ctx.SessionId);
         return ToolPolicyResult.Allowed();
     }
+
+    /// <summary>
+    ///     Синхронная обёртка над <see cref="EvaluateAsync" /> для legacy callers, которые
+    ///     ещё не перешли на async. По возможности избегайте: блокирует thread-pool.
+    /// </summary>
+    [Obsolete("Use EvaluateAsync to avoid sync-over-async. Will be removed once all callers are async.")]
+    public ToolPolicyResult Evaluate(PolicyContext ctx)
+        => EvaluateAsync(ctx, CancellationToken.None).GetAwaiter().GetResult();
 
     /// <summary>
     ///     Fire-and-forget audit logging of policy decision (task_014).

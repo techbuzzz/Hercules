@@ -5,15 +5,16 @@ namespace Hercules.WebApi.Controllers;
 /// <summary>
 ///     Operational SLO endpoints (task_064).
 ///     Availability, response-time, data-loss, recovery-time, cost tracking and reporting.
+///     task_077: handlers are async — no sync-over-async at the boundary.
 /// </summary>
 public static class SloController
 {
     public static void MapSlos(this IEndpointRouteBuilder app)
     {
         // GET /api/slos — сводка по SLO-статусу всех вертикалей.
-        app.MapGet("/api/slos", (ISloService slo) =>
+        app.MapGet("/api/slos", async (ISloService slo, CancellationToken ct) =>
         {
-            var summary = slo.GetSummary();
+            var summary = await slo.GetSummaryAsync(ct);
             return Results.Ok(summary);
         }).WithName("SloSummary");
 
@@ -30,16 +31,16 @@ public static class SloController
         }).WithName("SloDefinition");
 
         // GET /api/slos/{vertical} — текущий SLO-статус для вертикали.
-        app.MapGet("/api/slos/{vertical}", (string vertical, ISloService slo) =>
+        app.MapGet("/api/slos/{vertical}", async (string vertical, ISloService slo, CancellationToken ct) =>
         {
-            var status = slo.GetStatus(vertical);
+            var status = await slo.GetStatusAsync(vertical, ct);
             return Results.Ok(status);
         }).WithName("SloStatus");
 
         // GET /api/slos/{vertical}/report — полный SLO-отчёт по вертикали.
-        app.MapGet("/api/slos/{vertical}/report", (string vertical, ISloService slo) =>
+        app.MapGet("/api/slos/{vertical}/report", async (string vertical, ISloService slo, CancellationToken ct) =>
         {
-            var report = slo.GetReport(vertical);
+            var report = await slo.GetReportAsync(vertical, ct);
             return Results.Ok(report);
         }).WithName("SloReport");
 

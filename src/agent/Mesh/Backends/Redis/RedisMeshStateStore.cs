@@ -279,7 +279,7 @@ public sealed class RedisMeshStateStore : IMeshStateStore
             }
 
             var timer = new Timer(
-                state => ((RedisMeshStateStore)state!).PollPrefixWatchers(prefix, channel),
+                state => ((RedisMeshStateStore)state!).PollPrefixWatchersTimer((prefix, channel)),
                 this,
                 TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs),
                 TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs));
@@ -306,7 +306,7 @@ public sealed class RedisMeshStateStore : IMeshStateStore
                 new UnboundedChannelOptions { SingleReader = true, SingleWriter = true }));
 
         var exactTimer = new Timer(
-            state => ((RedisMeshStateStore)state!).PollExactWatchers(key, exactChannel),
+            state => ((RedisMeshStateStore)state!).PollExactWatchersTimer((key, exactChannel)),
             this,
             TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs),
             TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs));
@@ -444,11 +444,23 @@ public sealed class RedisMeshStateStore : IMeshStateStore
 
     private string? _lastExactSnapshot;
 
-    private void PollExactWatchers(string key, Channel<StoredValue> channel)
+    // task_077: Timer callbacks must be void; they re-enter via fire-and-forget async helpers.
+    // Exceptions are caught inside the async methods.
+    private void PollExactWatchersTimer((string Key, Channel<StoredValue> Channel) args)
+    {
+        _ = PollExactWatchersAsync(args.Key, args.Channel);
+    }
+
+    private void PollPrefixWatchersTimer((string Prefix, Channel<StoredValue> Channel) args)
+    {
+        _ = PollPrefixWatchersAsync(args.Prefix, args.Channel);
+    }
+
+    private async Task PollExactWatchersAsync(string key, Channel<StoredValue> channel)
     {
         try
         {
-            var stored = GetAsync(key, CancellationToken.None).GetAwaiter().GetResult();
+            var stored = await GetAsync(key, CancellationToken.None).ConfigureAwait(false);
             var snapshot = stored?.Version ?? "";
             if (snapshot != _lastExactSnapshot)
             {
@@ -465,14 +477,14 @@ public sealed class RedisMeshStateStore : IMeshStateStore
         catch { /* Polling — ignore errors */ }
     }
 
-    private void PollPrefixWatchers(string prefix, Channel<StoredValue> channel)
+    private async Task PollPrefixWatchersAsync(string prefix, Channel<StoredValue> channel)
     {
         try
         {
-            var keys = ScanKeysAsync(prefix, 10, CancellationToken.None).GetAwaiter().GetResult();
+            var keys = await ScanKeysAsync(prefix, 10, CancellationToken.None).ConfigureAwait(false);
             foreach (var k in keys)
             {
-                var stored = GetAsync(k, CancellationToken.None).GetAwaiter().GetResult();
+                var stored = await GetAsync(k, CancellationToken.None).ConfigureAwait(false);
                 if (stored != null)
                     channel.Writer.TryWrite(stored);
             }

@@ -1063,6 +1063,55 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         }
     }
 
+    /// <summary>
+    ///     task_077: Aggregated counts of <c>audit_log</c> rows filtered by <paramref name="action" />
+    ///     and an optional time window. Replaces the 100k-row <c>QueryAsync</c> + in-memory
+    ///     <c>.Count()</c> hot path used by SLO evaluation. Single SQL aggregate, no row materialisation.
+    /// </summary>
+    public async Task<AuditLogStats> GetAuditLogStatsAsync(
+        string action,
+        DateTime? from = null,
+        DateTime? to = null,
+        CancellationToken ct = default)
+    {
+        await _connLock.WaitAsync(ct);
+        try
+        {
+            using SqliteCommand cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                              SELECT
+                                  COUNT(*) AS total,
+                                  SUM(CASE WHEN result = 'success' THEN 1 ELSE 0 END) AS successes,
+                                  SUM(CASE WHEN result LIKE '%failure%' THEN 1 ELSE 0 END) AS failures,
+                                  SUM(CASE WHEN result LIKE '%timeout%' THEN 1 ELSE 0 END) AS timeouts,
+                                  SUM(CASE WHEN result LIKE '%denied%' THEN 1 ELSE 0 END) AS denied
+                              FROM audit_log
+                              WHERE action = $a
+                                AND ($from IS NULL OR created_at >= $from)
+                                AND ($to   IS NULL OR created_at <  $to)
+                              """;
+            cmd.Parameters.AddWithValue("$a", action);
+            cmd.Parameters.AddWithValue("$from", (object?)from?.ToString("o") ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$to", (object?)to?.ToString("o") ?? DBNull.Value);
+            using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+            if (!await r.ReadAsync(ct))
+            {
+                return new AuditLogStats(0, 0, 0, 0, 0);
+            }
+
+            return new AuditLogStats(
+                r.IsDBNull(0) ? 0 : r.GetInt32(0),
+                r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                r.IsDBNull(2) ? 0 : r.GetInt32(2),
+                r.IsDBNull(3) ? 0 : r.GetInt32(3),
+                r.IsDBNull(4) ? 0 : r.GetInt32(4));
+        }
+        finally
+        {
+            _connLock.Release();
+        }
+    }
+
     public List<AuditLogEntry> GetAuditLog(int limit = 100)
     {
         return GetAuditLogAsync(limit).GetAwaiter().GetResult();

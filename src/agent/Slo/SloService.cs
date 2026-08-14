@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Hercules.Audit;
 using Hercules.Config;
@@ -24,8 +25,11 @@ public sealed class SloService : ISloService
 
     private readonly string _slosDir;
     private readonly Dictionary<string, SloDefinition> _definitionsCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, SloStatus> _statusCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, List<SloViolationRecord>> _violations = new(StringComparer.OrdinalIgnoreCase);
+    // task_077: shared state is read/written from async methods on potentially
+    // concurrent threads (multiple GET /api/slos requests + background re-evaluators),
+    // so promote to ConcurrentDictionary to remove the dictionary race.
+    private readonly ConcurrentDictionary<string, SloStatus> _statusCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, List<SloViolationRecord>> _violations = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -71,7 +75,7 @@ public sealed class SloService : ISloService
     }
 
     /// <inheritdoc />
-    public SloStatus Evaluate(string vertical)
+    public async Task<SloStatus> EvaluateAsync(string vertical, CancellationToken ct = default)
     {
         var def = GetDefinition(vertical);
         if (def == null)
@@ -90,23 +94,23 @@ public sealed class SloService : ISloService
         var objectives = new List<SloObjectiveStatus>();
 
         // 1. Availability
-        var availStatus = EvaluateAvailability(def, objectives);
+        var availStatus = await EvaluateAvailabilityAsync(def, objectives, ct).ConfigureAwait(false);
         objectives.Add(availStatus);
 
         // 2. Response time
-        var respStatus = EvaluateResponseTime(def, objectives);
+        var respStatus = await EvaluateResponseTimeAsync(def, objectives, ct).ConfigureAwait(false);
         objectives.Add(respStatus);
 
         // 3. Data loss
-        var dataLossStatus = EvaluateDataLoss(def, objectives);
+        var dataLossStatus = await EvaluateDataLossAsync(def, objectives, ct).ConfigureAwait(false);
         objectives.Add(dataLossStatus);
 
         // 4. Recovery time
-        var recoveryStatus = EvaluateRecoveryTime(def, objectives);
+        var recoveryStatus = await EvaluateRecoveryTimeAsync(def, objectives, ct).ConfigureAwait(false);
         objectives.Add(recoveryStatus);
 
         // 5. Cost
-        var costStatus = EvaluateCost(def, objectives);
+        var costStatus = await EvaluateCostAsync(def, objectives, ct).ConfigureAwait(false);
         objectives.Add(costStatus);
 
         status.Objectives = objectives;
@@ -132,22 +136,22 @@ public sealed class SloService : ISloService
     }
 
     /// <inheritdoc />
-    public SloStatus GetStatus(string vertical)
+    public async Task<SloStatus> GetStatusAsync(string vertical, CancellationToken ct = default)
     {
         if (_statusCache.TryGetValue(vertical, out var cached))
             return cached;
-        return Evaluate(vertical);
+        return await EvaluateAsync(vertical, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public SloReport GetReport(string vertical)
+    public async Task<SloReport> GetReportAsync(string vertical, CancellationToken ct = default)
     {
         var def = GetDefinition(vertical);
         if (def == null)
             return new SloReport { Vertical = vertical };
 
-        var status = GetStatus(vertical);
-        var compliance = ComputeCompliance(vertical, def);
+        var status = await GetStatusAsync(vertical, ct).ConfigureAwait(false);
+        var compliance = await ComputeComplianceAsync(vertical, def, ct).ConfigureAwait(false);
 
         return new SloReport
         {
@@ -160,14 +164,14 @@ public sealed class SloService : ISloService
     }
 
     /// <inheritdoc />
-    public SloSummary GetSummary()
+    public async Task<SloSummary> GetSummaryAsync(CancellationToken ct = default)
     {
         var definitions = GetAllDefinitions();
         var verticals = new List<SloStatus>();
 
         foreach (var def in definitions)
         {
-            var status = GetStatus(def.Vertical);
+            var status = await GetStatusAsync(def.Vertical, ct).ConfigureAwait(false);
             verticals.Add(status);
         }
 
@@ -225,9 +229,10 @@ public sealed class SloService : ISloService
 
     // ─── Evaluation helpers ────────────────────────────────────────────────────
 
-    private SloObjectiveStatus EvaluateAvailability(
+    private async Task<SloObjectiveStatus> EvaluateAvailabilityAsync(
         SloDefinition def,
-        List<SloObjectiveStatus> objectives)
+        List<SloObjectiveStatus> objectives,
+        CancellationToken ct)
     {
         var windowStart = DateTime.UtcNow.AddDays(-1);
         var total = 0;
@@ -235,19 +240,15 @@ public sealed class SloService : ISloService
 
         try
         {
-            var entries = _audit.QueryAsync(
+            // task_077: SQL aggregate instead of loading up to 10k rows.
+            var stats = await _audit.GetActionStatsAsync(
                 action: "tool_execution",
-                result: null,
                 from: windowStart,
                 to: DateTime.UtcNow,
-                limit: 10_000).GetAwaiter().GetResult();
+                ct: ct).ConfigureAwait(false);
 
-            total = entries.Count;
-            failures = entries.Count(e =>
-                !string.IsNullOrEmpty(e.Result) &&
-                (e.Result.Contains("failure", StringComparison.OrdinalIgnoreCase) ||
-                 e.Result.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
-                 e.Result.Contains("denied", StringComparison.OrdinalIgnoreCase)));
+            total = stats.Total;
+            failures = stats.Failures + stats.Timeouts + stats.Denied;
         }
         catch (Exception ex)
         {
@@ -271,9 +272,10 @@ public sealed class SloService : ISloService
         };
     }
 
-    private SloObjectiveStatus EvaluateResponseTime(
+    private async Task<SloObjectiveStatus> EvaluateResponseTimeAsync(
         SloDefinition def,
-        List<SloObjectiveStatus> objectives)
+        List<SloObjectiveStatus> objectives,
+        CancellationToken ct)
     {
         // Estimate P95 response time from audit log (tool execution latency encoded in result field).
         // In a real system this would come from mesh latency histogram (hercules.mesh.delegation_latency_ms).
@@ -281,15 +283,16 @@ public sealed class SloService : ISloService
 
         try
         {
-            var windowStart = DateTime.UtcNow.AddDays(-1);
-            var entries = _audit.QueryAsync(
+            // task_077: a single row count tells us "do we have any data at all" without
+            // materialising 10k rows. We still need a histogram for real P95, but the
+            // pre-task_077 hot path was loading 10k rows just to test `Count > 0`.
+            var stats = await _audit.GetActionStatsAsync(
                 action: "tool_execution",
-                result: null,
-                from: windowStart,
+                from: DateTime.UtcNow.AddDays(-1),
                 to: DateTime.UtcNow,
-                limit: 10_000).GetAwaiter().GetResult();
+                ct: ct).ConfigureAwait(false);
 
-            if (entries.Count > 0)
+            if (stats.Total > 0)
             {
                 // Simulate P95 from a reasonable distribution based on entry count
                 // In production: query histogram buckets from OTLP / MeshObservabilityService metrics
@@ -317,16 +320,17 @@ public sealed class SloService : ISloService
         };
     }
 
-    private SloObjectiveStatus EvaluateDataLoss(
+    private async Task<SloObjectiveStatus> EvaluateDataLossAsync(
         SloDefinition def,
-        List<SloObjectiveStatus> objectives)
+        List<SloObjectiveStatus> objectives,
+        CancellationToken ct)
     {
         var pendingCount = 0;
         if (_outbox != null)
         {
             try
             {
-                pendingCount = _outbox.GetPendingCountAsync().GetAwaiter().GetResult();
+                pendingCount = await _outbox.GetPendingCountAsync(ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -350,25 +354,26 @@ public sealed class SloService : ISloService
         };
     }
 
-    private SloObjectiveStatus EvaluateRecoveryTime(
+    private async Task<SloObjectiveStatus> EvaluateRecoveryTimeAsync(
         SloDefinition def,
-        List<SloObjectiveStatus> objectives)
+        List<SloObjectiveStatus> objectives,
+        CancellationToken ct)
     {
         // Recovery time is measured when degradation events occur.
         // For now: check audit for recent degradation transitions.
         var maxRecovery = 0;
-        var windowStart = DateTime.UtcNow.AddDays(-7);
 
         try
         {
-            var entries = _audit.QueryAsync(
+            // task_077: a count is enough for the boolean "do we have degradation events?".
+            var stats = await _audit.GetActionStatsAsync(
                 action: "degradation",
-                from: windowStart,
+                from: DateTime.UtcNow.AddDays(-7),
                 to: DateTime.UtcNow,
-                limit: 1000).GetAwaiter().GetResult();
+                ct: ct).ConfigureAwait(false);
 
-            // Estimate from entries (real impl: measure time between degraded→full transition)
-            maxRecovery = entries.Count > 0 ? def.RecoveryTimeTargetMinutes : 0;
+            // Estimate from total (real impl: measure time between degraded→full transition)
+            maxRecovery = stats.Total > 0 ? def.RecoveryTimeTargetMinutes : 0;
         }
         catch (Exception ex)
         {
@@ -391,16 +396,17 @@ public sealed class SloService : ISloService
         };
     }
 
-    private SloObjectiveStatus EvaluateCost(
+    private async Task<SloObjectiveStatus> EvaluateCostAsync(
         SloDefinition def,
-        List<SloObjectiveStatus> objectives)
+        List<SloObjectiveStatus> objectives,
+        CancellationToken ct)
     {
         var dailyCost = 0m;
         if (_budget != null)
         {
             try
             {
-                var daily = _budget.GetDailyAsync(1).GetAwaiter().GetResult();
+                var daily = await _budget.GetDailyAsync(1, ct).ConfigureAwait(false);
                 dailyCost = daily.Count > 0 ? daily[0].CostUsd : 0m;
             }
             catch (Exception ex)
@@ -493,43 +499,44 @@ public sealed class SloService : ISloService
 
     private void TrackViolations(string vertical, SloStatus status, List<SloObjectiveStatus> objectives)
     {
-        if (!_violations.ContainsKey(vertical))
-            _violations[vertical] = new List<SloViolationRecord>();
-
-        var activeViolations = _violations[vertical];
-
-        foreach (var obj in objectives.Where(o => o.Severity != SloSeverity.Ok))
+        // task_077: serialise per-vertical mutation to avoid races between concurrent
+        // GetStatusAsync invocations that both read and append to the list.
+        var activeViolations = _violations.GetOrAdd(vertical, _ => new List<SloViolationRecord>());
+        lock (activeViolations)
         {
-            var existing = activeViolations
-                .FirstOrDefault(v => v.Objective == obj.Objective && v.ResolvedAt == null);
-
-            if (existing == null)
+            foreach (var obj in objectives.Where(o => o.Severity != SloSeverity.Ok))
             {
-                activeViolations.Add(new SloViolationRecord
+                var existing = activeViolations
+                    .FirstOrDefault(v => v.Objective == obj.Objective && v.ResolvedAt == null);
+
+                if (existing == null)
                 {
-                    Vertical = vertical,
-                    Objective = obj.Objective,
-                    Severity = obj.Severity,
-                    ActualValue = obj.CurrentValue,
-                    TargetValue = obj.TargetValue,
-                    BreachDescription = obj.BreachDescription
-                });
+                    activeViolations.Add(new SloViolationRecord
+                    {
+                        Vertical = vertical,
+                        Objective = obj.Objective,
+                        Severity = obj.Severity,
+                        ActualValue = obj.CurrentValue,
+                        TargetValue = obj.TargetValue,
+                        BreachDescription = obj.BreachDescription
+                    });
+                }
+                else
+                {
+                    existing.Severity = obj.Severity;
+                    existing.ActualValue = obj.CurrentValue;
+                    existing.BreachDescription = obj.BreachDescription;
+                }
             }
-            else
-            {
-                existing.Severity = obj.Severity;
-                existing.ActualValue = obj.CurrentValue;
-                existing.BreachDescription = obj.BreachDescription;
-            }
-        }
 
-        // Mark resolved
-        foreach (var v in activeViolations.Where(v => v.ResolvedAt == null))
-        {
-            var stillBreaching = objectives.Any(o =>
-                o.Objective == v.Objective && o.Severity != SloSeverity.Ok);
-            if (!stillBreaching)
-                v.ResolvedAt = DateTime.UtcNow;
+            // Mark resolved
+            foreach (var v in activeViolations.Where(v => v.ResolvedAt == null))
+            {
+                var stillBreaching = objectives.Any(o =>
+                    o.Objective == v.Objective && o.Severity != SloSeverity.Ok);
+                if (!stillBreaching)
+                    v.ResolvedAt = DateTime.UtcNow;
+            }
         }
     }
 
@@ -542,7 +549,10 @@ public sealed class SloService : ISloService
 
     // ─── Compliance ───────────────────────────────────────────────────────────
 
-    private SloComplianceSummary ComputeCompliance(string vertical, SloDefinition def)
+    private async Task<SloComplianceSummary> ComputeComplianceAsync(
+        string vertical,
+        SloDefinition def,
+        CancellationToken ct)
     {
         var summary = new SloComplianceSummary
         {
@@ -551,18 +561,16 @@ public sealed class SloService : ISloService
 
         try
         {
-            var windowStart = DateTime.UtcNow.AddDays(-7);
-            var entries = _audit.QueryAsync(
+            // task_077: SQL aggregate over a 7-day window — was previously loading
+            // up to 100 000 audit rows into memory just to count failures.
+            var stats = await _audit.GetActionStatsAsync(
                 action: "tool_execution",
-                from: windowStart,
+                from: DateTime.UtcNow.AddDays(-7),
                 to: DateTime.UtcNow,
-                limit: 100_000).GetAwaiter().GetResult();
+                ct: ct).ConfigureAwait(false);
 
-            var total = entries.Count;
-            var failures = entries.Count(e =>
-                !string.IsNullOrEmpty(e.Result) &&
-                (e.Result.Contains("failure", StringComparison.OrdinalIgnoreCase) ||
-                 e.Result.Contains("timeout", StringComparison.OrdinalIgnoreCase)));
+            var total = stats.Total;
+            var failures = stats.Failures + stats.Timeouts;
 
             summary.AvailabilityAchievementPct = total > 0
                 ? (1.0 - (double)failures / total) * 100.0
@@ -582,7 +590,7 @@ public sealed class SloService : ISloService
         {
             try
             {
-                summary.DataLossEventsTotal = _outbox.GetPendingCountAsync().GetAwaiter().GetResult();
+                summary.DataLossEventsTotal = await _outbox.GetPendingCountAsync(ct).ConfigureAwait(false);
             }
             catch { /* non-fatal */ }
         }
@@ -592,7 +600,7 @@ public sealed class SloService : ISloService
         {
             try
             {
-                var weekly = _budget.GetDailyAsync(7).GetAwaiter().GetResult();
+                var weekly = await _budget.GetDailyAsync(7, ct).ConfigureAwait(false);
                 summary.TotalCostUsd = weekly.Sum(d => d.CostUsd);
             }
             catch { /* non-fatal */ }

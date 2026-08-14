@@ -523,22 +523,28 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
         var timerKey = "exact:" + key;
         if (_watchTimers.ContainsKey(timerKey)) return;
 
+        // task_077: timer callback is sync void; it re-enters via fire-and-forget async helper.
         var timer = new Timer(
             state =>
             {
                 var (k, ch) = ((string, Channel<StoredValue?>))state!;
-                try
-                {
-                    var stored = GetAsync(k, CancellationToken.None).GetAwaiter().GetResult();
-                    ch.Writer.TryWrite(stored);
-                }
-                catch { /* swallow */ }
+                _ = PollExactAsync(k, ch);
             },
             (key, channel),
             TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs),
             TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs));
 
         _watchTimers.TryAdd(timerKey, timer);
+    }
+
+    private async Task PollExactAsync(string key, Channel<StoredValue?> channel)
+    {
+        try
+        {
+            var stored = await GetAsync(key, CancellationToken.None).ConfigureAwait(false);
+            channel.Writer.TryWrite(stored);
+        }
+        catch { /* swallow */ }
     }
 
     private async Task<IDisposable> WatchPrefixAsync(
@@ -571,21 +577,12 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
 
         // Periodically scan matching keys and emit them
         var timerKey = "prefix:" + prefix;
+        // task_077: timer callback is sync void; it re-enters via fire-and-forget async helper.
         var timer = new Timer(
             state =>
             {
                 var (p, ch) = ((string, Channel<StoredValue?>))state!;
-                try
-                {
-                    var keys = ScanKeysAsync(p, 100, CancellationToken.None).GetAwaiter().GetResult();
-                    foreach (var k in keys)
-                    {
-                        var stored = GetAsync(k, CancellationToken.None).GetAwaiter().GetResult();
-                        if (stored is not null)
-                            ch.Writer.TryWrite(stored);
-                    }
-                }
-                catch { /* swallow */ }
+                _ = PollPrefixAsync(p, ch);
             },
             (prefix, channel),
             TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs),
@@ -593,6 +590,21 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
         _watchTimers.TryAdd(timerKey, timer);
 
         return new PrefixWatcher(watchers, channel, timerKey, _watchTimers);
+    }
+
+    private async Task PollPrefixAsync(string prefix, Channel<StoredValue?> channel)
+    {
+        try
+        {
+            var keys = await ScanKeysAsync(prefix, 100, CancellationToken.None).ConfigureAwait(false);
+            foreach (var k in keys)
+            {
+                var stored = await GetAsync(k, CancellationToken.None).ConfigureAwait(false);
+                if (stored is not null)
+                    channel.Writer.TryWrite(stored);
+            }
+        }
+        catch { /* swallow */ }
     }
 
     private static StoredValue? ReadStoredValue(NpgsqlDataReader reader)
