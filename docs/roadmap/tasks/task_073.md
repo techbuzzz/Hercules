@@ -1,6 +1,6 @@
 # Task 73 — Outbox synced-state and bounded-queue prune fix
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

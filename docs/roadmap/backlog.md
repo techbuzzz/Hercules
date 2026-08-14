@@ -99,24 +99,7 @@
 | 69 | 29 | [PostgreSQL shared state backend](tasks/task_069.md) | `postgres-shared-state` | done |
 | 70 | 30 | [Backend-профили и деградация](tasks/task_070.md) | `backend-profiles-degradation` | done |
 
-## Phase 5 — IoT/edge fleet and mesh operations (Q3 2027)
-
-| # | Initiative | Task | Slug | Status |
-|---|------------|------|------|--------|
-| 53 | 32 | [Mesh dashboard](tasks/task_053.md) | `mesh-dashboard` | done |
-| 54 | 33 | [Централизованные логи и трейсы](tasks/task_054.md) | `centralized-observability` | done |
-| 55 | 40 | [Security operations](tasks/task_055.md) | `security-ops` | done |
-| 56 | 35 | [Rate limits и квоты](tasks/task_056.md) | `rate-limits-quotas` | done |
-| 57 | 36 | [Управление жизненным циклом](tasks/task_057.md) | `lifecycle-management` | done |
-| 58 | 41 | [Configuration и policy rollout](tasks/task_058.md) | `config-policy-rollout` | done |
-| 59 | 37 | [Edge provisioning](tasks/task_059.md) | `edge-provisioning` | done |
-| 60 | 38 | [Offline resilience](tasks/task_060.md) | `offline-resilience` | done |
-| 61 | 42 | [Local-first degradation](tasks/task_061.md) | `local-degradation` | pending |
-| 62 | 39 | [Fleet templates](tasks/task_062.md) | `fleet-templates` | pending |
-| 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | done |
-| 64 | 44 | [Операционные SLO](tasks/task_064.md) | `operational-slos` | pending |
-
-## Phase 6 — Performance and high availability hardening (Q4 2027)
+## Phase 5 — Performance and high availability hardening (Q4 2027)
 
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
@@ -137,6 +120,23 @@
 | 85 | 47 | [OpenTelemetry polish: console gating, process instrumentation, histogram buckets, async logging](tasks/task_085.md) | `otel-logging-polish` | pending |
 | 86 | 47 | [Backpressure, bounded channels, and DLQ/requeue fixes](tasks/task_086.md) | `backpressure-bounded-channels-dlq` | pending |
 | 87 | 47 | [Misc hardening: DelegationBoundary TTL, ResilientTransport trim, CORS, backup passphrase, SLO real metrics](tasks/task_087.md) | `misc-hardening` | pending |
+
+## Phase 6 — IoT/edge fleet and mesh operations (Q3 2027)
+
+| # | Initiative | Task | Slug | Status |
+|---|------------|------|------|--------|
+| 53 | 32 | [Mesh dashboard](tasks/task_053.md) | `mesh-dashboard` | done |
+| 54 | 33 | [Централизованные логи и трейсы](tasks/task_054.md) | `centralized-observability` | done |
+| 55 | 40 | [Security operations](tasks/task_055.md) | `security-ops` | done |
+| 56 | 35 | [Rate limits и квоты](tasks/task_056.md) | `rate-limits-quotas` | done |
+| 57 | 36 | [Управление жизненным циклом](tasks/task_057.md) | `lifecycle-management` | done |
+| 58 | 41 | [Configuration и policy rollout](tasks/task_058.md) | `config-policy-rollout` | done |
+| 59 | 37 | [Edge provisioning](tasks/task_059.md) | `edge-provisioning` | done |
+| 60 | 38 | [Offline resilience](tasks/task_060.md) | `offline-resilience` | done |
+| 61 | 42 | [Local-first degradation](tasks/task_061.md) | `local-degradation` | pending |
+| 62 | 39 | [Fleet templates](tasks/task_062.md) | `fleet-templates` | pending |
+| 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | done |
+| 64 | 44 | [Операционные SLO](tasks/task_064.md) | `operational-slos` | pending |
 
 ## Workflow
 

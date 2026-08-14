@@ -1,6 +1,6 @@
-﻿# Task 53 — Mesh dashboard
+# Task 53 — Mesh dashboard
 
-**Phase:** 5
+**Phase:** 6
 **Initiative:** 32
 **Status:** done
 **Owner:** —

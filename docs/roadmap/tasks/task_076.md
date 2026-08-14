@@ -1,6 +1,6 @@
 # Task 76 — ResilientLLMClient per-call provider/model
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

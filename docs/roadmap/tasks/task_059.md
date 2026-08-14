@@ -1,6 +1,6 @@
-﻿# Task 59 — Edge provisioning
+# Task 59 — Edge provisioning
 
-**Phase:** 5
+**Phase:** 6
 **Initiative:** 37
 **Status:** done
 **Owner:** —

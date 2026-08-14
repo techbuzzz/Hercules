@@ -1,6 +1,6 @@
 # Task 87 — Misc hardening: DelegationBoundary TTL, ResilientTransport trim, CORS, backup passphrase, SLO real metrics
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 46
 **Status:** pending
 **Owner:** —

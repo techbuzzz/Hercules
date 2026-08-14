@@ -1,6 +1,6 @@
 # Task 71 — SQLite thread-safety and sync-over-async removal
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

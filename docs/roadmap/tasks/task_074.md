@@ -1,6 +1,6 @@
 # Task 74 — NATS JetStream ack/fail implementation
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

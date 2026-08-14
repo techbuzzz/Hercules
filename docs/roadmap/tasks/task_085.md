@@ -1,6 +1,6 @@
 # Task 85 — OpenTelemetry polish: console gating, process instrumentation, histogram buckets, async logging
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 46
 **Status:** pending
 **Owner:** —

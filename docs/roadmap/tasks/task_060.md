@@ -1,6 +1,6 @@
-﻿# Task 60 — Offline resilience
+# Task 60 — Offline resilience
 
-**Phase:** 5
+**Phase:** 6
 **Initiative:** 38
 **Status:** done
 **Owner:** —

@@ -1,6 +1,6 @@
-﻿# Task 58 — Configuration и policy rollout
+# Task 58 — Configuration и policy rollout
 
-**Phase:** 5
+**Phase:** 6
 **Initiative:** 41
 **Status:** done
 **Owner:** —

@@ -1,6 +1,6 @@
 # Task 86 — Backpressure, bounded channels, and DLQ/requeue fixes
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 46
 **Status:** pending
 **Owner:** —

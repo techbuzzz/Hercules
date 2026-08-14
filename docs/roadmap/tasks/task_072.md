@@ -1,6 +1,6 @@
 # Task 72 — QuotaService cleanup fix and distributed quotas
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

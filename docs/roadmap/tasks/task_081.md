@@ -1,6 +1,6 @@
 # Task 81 — Kestrel tuning, framework rate limiter, compression, output cache
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

@@ -1,6 +1,6 @@
 # Task 80 — Graceful shutdown and drain
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

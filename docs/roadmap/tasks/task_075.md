@@ -1,6 +1,6 @@
 # Task 75 — DI lifetime fixes: captive dependency and AgentCore singleton
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

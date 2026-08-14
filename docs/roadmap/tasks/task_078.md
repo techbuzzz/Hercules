@@ -1,6 +1,6 @@
 # Task 78 — IHttpClientFactory adoption and standard resilience handlers
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

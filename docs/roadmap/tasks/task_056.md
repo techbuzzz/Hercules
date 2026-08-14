@@ -1,6 +1,6 @@
-﻿# Task 56 — Rate limits и квоты
+# Task 56 — Rate limits и квоты
 
-**Phase:** 5
+**Phase:** 6
 **Initiative:** 35
 **Status:** done
 **Owner:** —

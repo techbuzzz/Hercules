@@ -1,6 +1,6 @@
 # Task 79 — Real health checks infrastructure
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

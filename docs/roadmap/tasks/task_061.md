@@ -1,6 +1,6 @@
-﻿# Task 61 — Local-first degradation
+# Task 61 — Local-first degradation
 
-**Phase:** 5
+**Phase:** 6
 **Initiative:** 42
 **Status:** done
 **Owner:** —

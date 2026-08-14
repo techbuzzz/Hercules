@@ -1,6 +1,6 @@
 # Task 84 — ProposalStore caching, async I/O, and hot-path allocations
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 46
 **Status:** pending
 **Owner:** —

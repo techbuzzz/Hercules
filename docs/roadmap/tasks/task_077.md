@@ -1,6 +1,6 @@
 # Task 77 — Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 45
 **Status:** pending
 **Owner:** —

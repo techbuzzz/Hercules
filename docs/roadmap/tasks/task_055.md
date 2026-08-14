@@ -1,6 +1,6 @@
-﻿# Task 55 — Security operations
+# Task 55 — Security operations
 
-**Phase:** 5
+**Phase:** 6
 **Initiative:** 40
 **Status:** done
 **Owner:** —

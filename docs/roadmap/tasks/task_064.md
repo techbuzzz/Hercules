@@ -1,6 +1,6 @@
-﻿# Task 64 — Операционные SLO
+# Task 64 — Операционные SLO
 
-**Phase:** 5
+**Phase:** 6
 **Initiative:** 44
 **Status:** done
 **Owner:** —

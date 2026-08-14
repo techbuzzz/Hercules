@@ -1,6 +1,6 @@
 # Task 83 — CacheService stampede, eviction, and sliding expiration
 
-**Phase:** 6
+**Phase:** 5
 **Initiative:** 46
 **Status:** pending
 **Owner:** —
