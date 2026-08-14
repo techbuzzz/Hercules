@@ -2,7 +2,7 @@
 
 **Phase:** 4
 **Initiative:** 27
-**Status:** in_progress
+**Status:** done
 **Owner:** —
 **Slug:** `redis-coordination-backend`
 
