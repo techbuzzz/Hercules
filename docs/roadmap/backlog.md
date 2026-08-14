@@ -12,8 +12,9 @@
 - [Phase 2 — Composable skills and tool use (Q4 2026)](#phase-2--composable-skills-and-tool-use-q4-2026)
 - [Phase 3 — Inter-agent protocol (Q1 2027)](#phase-3--inter-agent-protocol-q1-2027)
 - [Phase 4 — Mesh orchestration (Q2 2027)](#phase-4--mesh-orchestration-q2-2027)
-- [Phase 5 — IoT/edge fleet and mesh operations (Q3 2027)](#phase-5--iotedge-fleet-and-mesh-operations-q3-2027)
-- [Phase 6 — Performance and high availability hardening (Q4 2027)](#phase-6--performance-and-high-availability-hardening-q4-2027)
+- [Phase 5 — Performance and high availability hardening (Q4 2027)](#phase-5--performance-and-high-availability-hardening-q4-2027)
+- [Phase 6 — IoT/edge fleet and mesh operations (Q3 2027)](#phase-6--iotedge-fleet-and-mesh-operations-q3-2027)
+- [Phase 7 — Web UI follow-ups (cross-cutting)](#phase-7--web-ui-follow-ups-cross-cutting)
 - [Workflow](#workflow)
 - [Roadmap cron](#roadmap-cron)
 
@@ -137,6 +138,21 @@
 | 62 | 39 | [Fleet templates](tasks/task_062.md) | `fleet-templates` | pending |
 | 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | done |
 | 64 | 44 | [Операционные SLO](tasks/task_064.md) | `operational-slos` | pending |
+
+## Phase 7 — Web UI follow-ups (cross-cutting)
+
+Инициатива 48 — доведение `src/hercules-web` (Astro 6.4) до полного покрытия уже готового backend API. Все backend-задачи, к которым эти web-задачи привязаны, должны быть в `done` до старта соответствующего web-таска.
+
+| # | Initiative | Task | Slug | Status |
+|---|------------|------|------|--------|
+| 88 | 48 | [A2A Agent Card panel](tasks/task_088.md) | `web-a2a-card-panel` | pending |
+| 89 | 48 | [Capability registry panel](tasks/task_089.md) | `web-capability-registry-panel` | pending |
+| 90 | 48 | [Discovery panel](tasks/task_090.md) | `web-discovery-panel` | pending |
+| 91 | 48 | [Trust admission policy panel](tasks/task_091.md) | `web-trust-admission-panel` | pending |
+| 92 | 48 | [Mesh profiles & backend health](tasks/task_092.md) | `web-mesh-profiles-health` | pending |
+| 93 | 48 | [Mesh observability & centralized logs](tasks/task_093.md) | `web-mesh-observability` | pending |
+| 94 | 48 | [Backup & SLO panel](tasks/task_094.md) | `web-backup-slo-panel` | pending |
+| 95 | 48 | [Security, quotas & rollout panel](tasks/task_095.md) | `web-security-quotas-rollout` | pending |
 
 ## Workflow
 
