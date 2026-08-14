@@ -1,0 +1,19 @@
+{
+  "metric_thresholds": {
+    "cpu_pct": { "warning": 70.0, "critical": 90.0, "unit": "%", "window_seconds": 60 },
+    "memory_pct": { "warning": 75.0, "critical": 90.0, "unit": "%", "window_seconds": 60 },
+    "disk_pct": { "warning": 80.0, "critical": 95.0, "unit": "%", "window_seconds": 300 },
+    "temperature_c": { "warning": 35.0, "critical": 45.0, "unit": "°C", "window_seconds": 60 },
+    "humidity_pct": { "warning": 90.0, "critical": 98.0, "unit": "%", "window_seconds": 60 },
+    "task_queue_depth": { "warning": 20.0, "critical": 50.0, "unit": "", "window_seconds": 60 },
+    "sensor_reading_latency_ms": { "warning": 500.0, "critical": 2000.0, "unit": "ms", "window_seconds": 60 }
+  },
+  "alert_rules": [
+    { "id": "greenhouse-high-temp", "description": "Greenhouse temperature critically high — risk of crop damage", "severity": "Critical", "condition": "temperature_c > 45", "cooldown_seconds": 300 },
+    { "id": "greenhouse-high-humidity", "description": "Greenhouse humidity critically high — mold/fungus risk", "severity": "Critical", "condition": "humidity_pct > 98", "cooldown_seconds": 600 },
+    { "id": "greenhouse-device-hot", "description": "Edge device temperature high — Raspberry Pi thermal throttling", "severity": "Warning", "condition": "temperature_c > 60", "cooldown_seconds": 300 },
+    { "id": "greenhouse-task-queue-full", "description": "Task queue near capacity — agents may be overloaded", "severity": "Warning", "condition": "task_queue_depth > 50", "cooldown_seconds": 120 }
+  ],
+  "min_log_level": "Information",
+  "metrics_export_interval_seconds": 30
+}

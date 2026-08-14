@@ -6,13 +6,18 @@ using Hercules.Budget;
 using Hercules.Cache;
 using Hercules.CodeExecution;
 using Hercules.Config;
+using Hercules.Config.Rollout;
 using Hercules.Context;
 using Hercules.Context.Summarizer;
+using Hercules.Lifecycle;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
+using Hercules.Mesh.A2A;
+using Hercules.Mesh.Auth;
 using Hercules.Observability;
+using Hercules.Quotas;
 using Hercules.Redaction;
 using Hercules.Simulation;
 using Hercules.Skills;
@@ -23,6 +28,7 @@ using Hercules.Skills.Routing;
 using Hercules.Skills.Routing.ScoringComponents;
 using Hercules.Skills.Routing.Deterministic;
 using Hercules.Storage;
+using Hercules.Mesh.Transport;
 using Hercules.Tasks;
 using Hercules.Telegram;
 using Hercules.Tools;
@@ -197,7 +203,7 @@ builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
 builder.Services.AddSingleton<Bus>();
 
 // Phase 3: Inter-agent mesh (manifest, capability registry, intent routing, transport)
-builder.Services.AddMeshServices(appConfig.Mesh, appConfig.Storage.DataRoot);
+builder.Services.AddMeshServices(appConfig, appConfig.Storage.DataRoot);
 
 // Reactor подписывается на изменения конфигурации и перезагружает runtime-зависимости
 builder.Services.AddHostedService<RuntimeConfigHostedService>();
@@ -240,6 +246,16 @@ builder.Services.AddSingleton<BudgetGuard>(sp =>
     new BudgetGuard(
         sp.GetRequiredService<BudgetConfig>(),
         sp.GetRequiredService<ILogger<BudgetGuard>>()));
+
+// Rate limits and quotas (task_056)
+builder.Services.AddSingleton(appConfig.Quotas);
+builder.Services.AddSingleton<IQuotaService>(sp =>
+    new QuotaService(
+        sp.GetRequiredService<QuotasConfig>(),
+        sp.GetRequiredService<ILogger<QuotaService>>()));
+builder.Services.AddSingleton<QuotaGuard>(sp =>
+    new QuotaGuard(
+        sp.GetRequiredService<ILogger<QuotaGuard>>()));
 
 // Layered memory (task_011)
 builder.Services.AddScoped<IWorkingMemory, WorkingMemoryService>();
@@ -285,16 +301,15 @@ builder.Services.AddSingleton<ISkillScoringEngine>(sp =>
     new SkillScoringEngine(
         sp.GetRequiredService<SkillManager>(),
         sp.GetRequiredService<Phase2Config>(),
-        new ISkillScorer[]
-        {
+        [
             sp.GetRequiredService<EmbeddingScorer>(),
             sp.GetRequiredService<LexicalScorer>(),
             sp.GetRequiredService<SchemaCompatibilityScorer>(),
             sp.GetRequiredService<HistoricalQualityScorer>(),
             sp.GetRequiredService<LatencyScorer>(),
             sp.GetRequiredService<PolicyEligibilityScorer>(),
-            sp.GetRequiredService<SkillQualityScorer>(),
-        },
+            sp.GetRequiredService<SkillQualityScorer>()
+        ],
         sp.GetService<ToolRegistry>()?.Names ?? Enumerable.Empty<string>(),
         sp.GetService<EmbeddingScorer>()));
 // Task 023: Deterministic router (offline-safe keyword + tag + type matching)
@@ -416,6 +431,22 @@ builder.Services.AddSingleton<IConfigReload>(sp => sp.GetRequiredService<SkillMa
 // Адаптер Web API
 builder.Services.AddSingleton<WebApiAdapter>();
 
+// task_057: Lifecycle management
+builder.Services.AddSingleton<ILifecycleService>(sp =>
+    new LifecycleService(
+        sp.GetRequiredService<AgentCore>(),
+        sp.GetRequiredService<SkillManager>(),
+        sp.GetRequiredService<CapabilityRegistry>(),
+        sp.GetRequiredService<ITransport>(),
+        sp.GetRequiredService<ILogger<LifecycleService>>()));
+
+// task_058: Config & policy rollout — staged signed bundles with expiry and LKG fallback
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ConfigRollout);
+builder.Services.AddSingleton<ISignedBundleValidator, SignedBundleValidator>();
+builder.Services.AddSingleton<LocalConfigValidator>();
+builder.Services.AddSingleton<IRolloutManager, RolloutManager>();
+builder.Services.AddHostedService<RolloutExpiryChecker>();
+
 // --- CORS: разрешаем localhost-источники фронтенда ---
 const string corsPolicy = "frontend";
 builder.Services.AddCors(options =>
@@ -461,6 +492,8 @@ app.UseCors(corsPolicy);
 app.UseMiddleware<RequestBodyLimitMiddleware>();
 app.UseMiddleware<ApiKeyMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
+// task_039: peer auth middleware for /api/mesh/* endpoints
+app.UseMiddleware<PeerAuthMiddleware>();
 
 // --- Инициализация сессии агента ---
 app.Services.GetRequiredService<WebApiAdapter>().EnsureSessionStarted();
@@ -470,8 +503,8 @@ app.MapGet("/", () => Results.Ok(new
 {
     name = "Hercules Web API",
     version = "1.0",
-    endpoints = new[]
-    {
+    endpoints = (string[])
+    [
         "POST /api/chat", "GET /api/skills", "POST /api/skills",
         "GET /api/skills/{id}", "PUT /api/skills/{id}", "POST /api/skills/{id}/improve",
         "GET /api/skills/{id}/export", "POST /api/skills/import",
@@ -504,9 +537,25 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/mesh/capabilities/search", "POST /api/mesh/intent",
         "GET /api/tools", "GET /api/tools/{name}", "GET /api/tools/{name}/health",
         "GET /api/tools/categories", "POST /api/tools/{name}/enable", "POST /api/tools/{name}/disable"
-    }
+    ]
 }));
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", time = DateTime.UtcNow }));
+
+// A2A Agent Card — статический файл по спецификации (task_033)
+app.MapGet("/agent-card.json", () =>
+{
+    // agent-card.json публикуется в dataRoot при старте;.TryReadFromFile чтобы избежать
+    // NRE если файл ещё не создан (например, CLI-only запуск)
+    var dataRoot = app.Services.GetRequiredService<StorageConfig>().DataRoot;
+    var cardPath = Path.Combine(dataRoot, "agent-card.json");
+    if (!File.Exists(cardPath))
+    {
+        return Results.NotFound(new { error = "agent-card.json not published yet" });
+    }
+
+    var json = File.ReadAllText(cardPath);
+    return Results.Text(json, "application/json");
+});
 
 // --- Доменные эндпоинты ---
 app.MapChat();
@@ -516,7 +565,11 @@ app.MapSkillQuality();
 app.MapMemory();
 app.MapStats();
 app.MapConfig();
+app.MapRollout();
 app.MapMesh();
+app.MapMeshProfiles();
+app.MapMeshObservability();
+app.MapLifecycle();
 
 // Agent manifest — публикация на startup (task_032)
 try
@@ -527,7 +580,7 @@ try
     if (errors.Count > 0)
     {
         Console.WriteLine($"[Manifest] Опубликован с предупреждениями: {manifestService.ManifestPath}");
-        foreach (string err in errors)
+        foreach (var err in errors)
         {
             Console.WriteLine($"  ⚠ {err}");
         }
@@ -542,10 +595,38 @@ catch (Exception ex)
     Console.WriteLine($"[Manifest] Publishing failed: {ex.Message}");
 }
 
+// A2A Agent Card — публикация на startup (task_033)
+try
+{
+    var agentCardService = app.Services.GetRequiredService<IAgentCardService>();
+    var a2aConfig = app.Services.GetRequiredService<A2AConfig>();
+    if (a2aConfig.AgentCard.Publish)
+    {
+        var path = await agentCardService.PublishAsync();
+        Console.WriteLine($"[AgentCard] Published: {path}");
+    }
+    else
+    {
+        Console.WriteLine("[AgentCard] Publishing disabled (A2A.AgentCard.Publish = false)");
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[AgentCard] Publishing failed: {ex.Message}");
+}
+
 app.MapBudget();
+app.MapQuotas();
 app.MapAudit();
 app.MapLlm();
+app.MapA2A();
+app.MapBackups();
+app.MapFleetTemplates();
+app.MapGrants();
+app.MapSimulation();
+app.MapSlos();
 app.MapApprovals();
+app.MapEscalations();
 app.MapObservability();
 app.MapSkillHarness();
 app.MapSelfImprovement();

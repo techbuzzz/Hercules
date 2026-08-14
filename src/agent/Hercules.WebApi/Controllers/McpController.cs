@@ -39,7 +39,9 @@ public static class McpController
         {
             var states = mcpService.ServerStates;
             if (!states.TryGetValue(name, out var state))
+            {
                 return Results.NotFound(new { error = $"MCP server '{name}' not found" });
+            }
 
             return Results.Ok(new
             {

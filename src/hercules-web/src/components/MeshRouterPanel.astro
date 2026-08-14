@@ -1,0 +1,257 @@
+---
+// Mesh Router Panel (Phase 4 task_043).
+---
+
+<div class="flex flex-col gap-4">
+  <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h2 class="text-sm font-medium text-gray-300">Mesh Router</h2>
+      <button id="router-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+
+    <div class="flex gap-2">
+      <input id="router-capability-input" type="text"
+        placeholder="capability или intent…"
+        class="flex-1 rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-violet-500/50" />
+      <button id="router-search-btn" type="button"
+        class="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50">
+        Найти
+      </button>
+    </div>
+  </div>
+
+  <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div id="router-results-empty" class="py-6 text-center text-xs text-gray-500">
+      Введите capability и нажмите «Найти» для маршрутизации.
+    </div>
+    <div id="router-results" class="hidden">
+      <div class="mb-3 flex items-center justify-between">
+        <h3 class="text-xs font-medium text-gray-400">
+          Кандидаты: <span id="router-count" class="text-gray-200">0</span>
+        </h3>
+        <span id="router-cap-label" class="text-xs text-gray-500"></span>
+      </div>
+      <div id="router-list" class="flex flex-col gap-2"></div>
+    </div>
+    <div id="router-error" class="mt-2 hidden text-xs text-rose-400"></div>
+  </div>
+
+  <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-xs font-medium text-gray-400">Health peers</h3>
+      <button id="router-health-refresh" type="button"
+        class="rounded border border-white/10 px-2 py-1 text-xs text-gray-400 transition-colors hover:bg-white/5">↻</button>
+    </div>
+    <div id="router-health-empty" class="py-3 text-center text-xs text-gray-500">Нет данных.</div>
+    <div id="router-health-list" class="grid grid-cols-2 gap-2 sm:grid-cols-3 hidden"></div>
+  </div>
+
+  <div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-xs font-medium text-gray-400">Circuit Breakers</h3>
+      <button id="router-circuits-refresh" type="button"
+        class="rounded border border-white/10 px-2 py-1 text-xs text-gray-400 transition-colors hover:bg-white/5">↻</button>
+    </div>
+    <div id="router-circuits-empty" class="py-3 text-center text-xs text-gray-500">Нет отслеживаемых peer'ов.</div>
+    <div id="router-circuits-list" class="flex flex-col gap-1.5 hidden"></div>
+  </div>
+</div>
+
+<script>
+  const API_BASE = (import.meta.env.PUBLIC_API_BASE as string) || "http://localhost:5000";
+  const API_KEY = (import.meta.env.PUBLIC_API_KEY as string) || "dev-local-key";
+
+  function h() { return document.getElementById(arguments[0]) as HTMLElement; }
+
+  function showError(msg: string) {
+    const el = h("router-error");
+    if (el) { el.classList.remove("hidden"); el.textContent = "Ошибка: " + msg; }
+  }
+
+  function esc(s: string | null | undefined): string {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function scoreBadge(score: number): string {
+    if (score >= 0.75) return "bg-emerald-500/20 text-emerald-400";
+    if (score >= 0.4) return "bg-amber-500/20 text-amber-400";
+    return "bg-rose-500/20 text-rose-400";
+  }
+
+  function circuitBadge(state: string): string {
+    switch (state.toLowerCase()) {
+      case "closed": return "text-emerald-400";
+      case "open": return "text-rose-400";
+      case "halfopen": return "text-amber-400";
+      default: return "text-gray-400";
+    }
+  }
+
+  function trustBadge(level: string): string {
+    switch (level.toLowerCase()) {
+      case "verified": return "text-emerald-400";
+      case "trusted": return "text-emerald-400/80";
+      case "provisionally-trusted": return "text-amber-400";
+      case "unverified": return "text-gray-400";
+      case "suspicious": return "text-rose-400";
+      case "denied": return "text-rose-500";
+      default: return "text-gray-400";
+    }
+  }
+
+  async function searchRoutes() {
+    const input = h("router-capability-input") as HTMLInputElement;
+    const cap = input.value.trim();
+    if (!cap) return;
+
+    const resultsEmpty = h("router-results-empty");
+    const results = h("router-results");
+    const list = h("router-list");
+    const error = h("router-error");
+
+    resultsEmpty.classList.add("hidden");
+    results.classList.add("hidden");
+    error.classList.add("hidden");
+
+    try {
+      const url = `${API_BASE}/api/mesh/router/routes?capability=${encodeURIComponent(cap)}`;
+      const res = await fetch(url, { headers: { "X-Api-Key": API_KEY } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { capability: string; count: number; candidates: Array<{
+        agentId: string; displayName: string; endpoint: string;
+        healthScore: number; latencyMs: number; qualityScore: number;
+        trustLevel: string; compositeScore: number; costHintUsd: number;
+        circuitState: string; lastSeen: string; trustPassed: boolean;
+      }> };
+
+      h("router-count").textContent = String(data.count);
+      h("router-cap-label").textContent = data.capability;
+      list.innerHTML = "";
+
+      if (data.count === 0) {
+        results.classList.remove("hidden");
+        list.innerHTML = `<div class="py-4 text-center text-xs text-gray-500">Нет кандидатов.</div>`;
+        return;
+      }
+
+      results.classList.remove("hidden");
+
+      for (const c of data.candidates) {
+        const pct = Math.round(c.compositeScore * 100);
+        const lastSeen = c.lastSeen ? new Date(c.lastSeen).toLocaleString("ru", {
+          day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit"
+        }) : "—";
+
+        const item = document.createElement("div");
+        item.className = "flex flex-col gap-1.5 rounded-lg border border-white/5 bg-[#0a0a0b] p-3";
+        item.innerHTML = [
+          `<div class="flex items-center justify-between">`,
+          `<div class="flex items-center gap-2">`,
+          `<span class="text-sm font-medium text-gray-200">${esc(c.displayName || c.agentId)}</span>`,
+          `<span class="rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] text-violet-300 font-mono">${esc(c.agentId)}</span>`,
+          `<span class="rounded px-1.5 py-0.5 text-[10px] ${circuitBadge(c.circuitState)}">${esc(c.circuitState)}</span>`,
+          `</div>`,
+          `<div class="flex items-center gap-2">`,
+          `<span class="text-xs ${trustBadge(c.trustLevel)}">${esc(c.trustLevel)}</span>`,
+          `<span class="rounded ${scoreBadge(c.compositeScore)} px-2 py-0.5 text-xs font-medium">${pct}%</span>`,
+          `</div>`,
+          `</div>`,
+          `<div class="flex gap-4 text-xs text-gray-500">`,
+          `<span>health: <span class="${c.healthScore >= 0.75 ? "text-emerald-400" : c.healthScore >= 0.4 ? "text-amber-400" : "text-rose-400"}">${(c.healthScore * 100).toFixed(0)}%</span></span>`,
+          `<span>latency: <span class="text-gray-300">${c.latencyMs}ms</span></span>`,
+          `<span>quality: <span class="text-gray-300">${(c.qualityScore * 100).toFixed(0)}%</span></span>`,
+          `<span>cost: <span class="text-gray-300">$${c.costHintUsd.toFixed(4)}</span></span>`,
+          `<span>seen: <span class="text-gray-400">${esc(lastSeen)}</span></span>`,
+          `</div>`,
+          c.endpoint ? `<div class="text-[10px] text-gray-600 font-mono truncate">${esc(c.endpoint)}</div>` : "",
+        ].join("");
+
+        list.appendChild(item);
+      }
+    } catch (e) {
+      showError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function loadHealth() {
+    try {
+      const res = await fetch(`${API_BASE}/api/mesh/router/health`, { headers: { "X-Api-Key": API_KEY } });
+      if (!res.ok) return;
+      const data = await res.json() as { count: number; health: Record<string, { healthScore: number; avgLatencyMs: number }> };
+      const list = h("router-health-list");
+      const empty = h("router-health-empty");
+
+      if (data.count === 0) {
+        list.classList.add("hidden");
+        empty.classList.remove("hidden");
+        return;
+      }
+
+      empty.classList.add("hidden");
+      list.classList.remove("hidden");
+      list.innerHTML = "";
+
+      for (const [agentId, info] of Object.entries(data.health)) {
+        const score = info.healthScore;
+        const colorCls = score >= 0.75 ? "text-emerald-400" : score >= 0.4 ? "text-amber-400" : "text-rose-400";
+        const barCls = score >= 0.75 ? "bg-emerald-500" : score >= 0.4 ? "bg-amber-500" : "bg-rose-500";
+
+        const item = document.createElement("div");
+        item.className = "flex flex-col gap-1 rounded-lg border border-white/5 bg-[#0a0a0b] p-2";
+        item.innerHTML = [
+          `<div class="flex items-center justify-between">`,
+          `<span class="text-xs text-gray-200 font-mono truncate max-w-[80px]" title="${esc(agentId)}">${esc(agentId)}</span>`,
+          `<span class="text-xs font-medium ${colorCls}">${(score * 100).toFixed(0)}%</span>`,
+          `</div>`,
+          `<div class="text-[10px] text-gray-500">latency: ${info.avgLatencyMs}ms</div>`,
+          `<div class="h-1 overflow-hidden rounded-full bg-white/5">`,
+          `<div class="h-full rounded-full transition-all ${barCls}" style="width:${(score * 100).toFixed(0)}%"></div>`,
+          `</div>`,
+        ].join("");
+        list.appendChild(item);
+      }
+    } catch { /* non-critical */ }
+  }
+
+  async function loadCircuits() {
+    try {
+      const res = await fetch(`${API_BASE}/api/mesh/circuits`, { headers: { "X-Api-Key": API_KEY } });
+      if (!res.ok) return;
+      const data = await res.json() as Record<string, string>;
+      const list = h("router-circuits-list");
+      const empty = h("router-circuits-empty");
+
+      const entries = Object.entries(data);
+      if (entries.length === 0) {
+        list.classList.add("hidden");
+        empty.classList.remove("hidden");
+        return;
+      }
+
+      empty.classList.add("hidden");
+      list.classList.remove("hidden");
+      list.innerHTML = "";
+
+      for (const [agentId, state] of entries) {
+        const item = document.createElement("div");
+        item.className = "flex items-center justify-between rounded border border-white/5 bg-[#0a0a0b] px-3 py-2 text-xs";
+        item.innerHTML = `<span class="font-mono text-gray-300">${esc(agentId)}</span><span class="${circuitBadge(state)} font-medium">${esc(state)}</span>`;
+        list.appendChild(item);
+      }
+    } catch { /* non-critical */ }
+  }
+
+  h("router-search-btn").addEventListener("click", searchRoutes);
+  (h("router-capability-input") as HTMLInputElement).addEventListener("keydown", (e) => {
+    if (e.key === "Enter") searchRoutes();
+  });
+  h("router-refresh").addEventListener("click", searchRoutes);
+  h("router-health-refresh").addEventListener("click", loadHealth);
+  h("router-circuits-refresh").addEventListener("click", loadCircuits);
+
+  loadHealth();
+  loadCircuits();
+</script>

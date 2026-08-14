@@ -13,6 +13,7 @@
 - [Phase 3 — Inter-agent protocol (Q1 2027)](#phase-3--inter-agent-protocol-q1-2027)
 - [Phase 4 — Mesh orchestration (Q2 2027)](#phase-4--mesh-orchestration-q2-2027)
 - [Phase 5 — IoT/edge fleet and mesh operations (Q3 2027)](#phase-5--iotedge-fleet-and-mesh-operations-q3-2027)
+- [Phase 6 — Performance and high availability hardening (Q4 2027)](#phase-6--performance-and-high-availability-hardening-q4-2027)
 - [Workflow](#workflow)
 - [Roadmap cron](#roadmap-cron)
 
@@ -24,23 +25,23 @@
 
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
-| 1 | 1 | [Базовый цикл агента](tasks/task_001.md) | `core-agent-loop` | pending |
-| 2 | 2 | [Жизненный цикл навыков](tasks/task_002.md) | `skill-lifecycle` | pending |
-| 3 | 3 | [Гибридное хранилище](tasks/task_003.md) | `hybrid-storage` | pending |
-| 4 | 4 | [Мульти-провайдер LLM](tasks/task_004.md) | `multi-provider-llm` | pending |
+| 1 | 1 | [Базовый цикл агента](tasks/task_001.md) | `core-agent-loop` | done |
+| 2 | 2 | [Жизненный цикл навыков](tasks/task_002.md) | `skill-lifecycle` | done |
+| 3 | 3 | [Гибридное хранилище](tasks/task_003.md) | `hybrid-storage` | done |
+| 4 | 4 | [Мульти-провайдер LLM](tasks/task_004.md) | `multi-provider-llm` | done |
 | 5 | 5 | [Интерфейсы](tasks/task_005.md) | `interfaces` | done |
-| 6 | 6 | [Тесты и бенчмарки](tasks/task_006.md) | `tests-and-benchmarks` | pending |
-| 7 | — | [Типизированные контракты агента](tasks/task_007.md) | `typed-contracts` | pending |
+| 6 | 6 | [Тесты и бенчмарки](tasks/task_006.md) | `tests-and-benchmarks` | done |
+| 7 | — | [Типизированные контракты агента](tasks/task_007.md) | `typed-contracts` | done |
 | 8 | — | [Ограниченный цикл исполнения](tasks/task_008.md) | `bounded-execution` | done |
 | 9 | — | [Граница инструментов и policy engine](tasks/task_009.md) | `tool-boundary-policy` | done |
-| 10 | — | [Гейты подтверждения](tasks/task_010.md) | `approval-gates` | pending |
-| 11 | — | [Слоистая память](tasks/task_011.md) | `layered-memory` | pending |
-| 12 | — | [Бюджеты и guardrails](tasks/task_012.md) | `budget-guardrails` | pending |
-| 13 | — | [Фундамент OpenTelemetry](tasks/task_013.md) | `opentelemetry` | pending |
+| 10 | — | [Гейты подтверждения](tasks/task_010.md) | `approval-gates` | done |
+| 11 | — | [Слоистая память](tasks/task_011.md) | `layered-memory` | done |
+| 12 | — | [Бюджеты и guardrails](tasks/task_012.md) | `budget-guardrails` | done |
+| 13 | — | [Фундамент OpenTelemetry](tasks/task_013.md) | `opentelemetry` | done |
 | 14 | — | [Аудит и приватность](tasks/task_014.md) | `audit-privacy` | done |
-| 15 | — | [Секреты и конфигурация](tasks/task_015.md) | `secrets-config` | pending |
-| 16 | — | [Оценка навыков (eval harness)](tasks/task_016.md) | `eval-harness` | pending |
-| 17 | — | [Безопасное самоулучшение](tasks/task_017.md) | `safe-self-improvement` | pending |
+| 15 | — | [Секреты и конфигурация](tasks/task_015.md) | `secrets-config` | done |
+| 16 | — | [Оценка навыков (eval harness)](tasks/task_016.md) | `eval-harness` | done |
+| 17 | — | [Безопасное самоулучшение](tasks/task_017.md) | `safe-self-improvement` | done |
 | 18 | — | [Устойчивый жизненный цикл задач](tasks/task_018.md) | `durable-task-lifecycle` | done |
 
 ## Phase 2 — Composable skills and tool use (Q4 2026)
@@ -52,68 +53,90 @@
 | 21 | 8 | [Маркетплейс навыков](tasks/task_021.md) | `skill-marketplace` | done |
 | 22 | 9 | [Семантическая маршрутизация](tasks/task_022.md) | `semantic-routing` | done |
 | 23 | — | [Детерминированный fallback маршрутизатора](tasks/task_023.md) | `deterministic-router` | done |
-| 24 | 10 | [Реестр инструментов](tasks/task_024.md) | `tool-registry` | pending |
-| 25 | — | [MCP-адаптер](tasks/task_025.md) | `mcp-adapter` | pending |
-| 26 | — | [Least-privilege grants](tasks/task_026.md) | `least-privilege-grants` | pending |
+| 24 | 10 | [Реестр инструментов](tasks/task_024.md) | `tool-registry` | done |
+| 25 | — | [MCP-адаптер](tasks/task_025.md) | `mcp-adapter` | done |
+| 26 | — | [Least-privilege grants](tasks/task_026.md) | `least-privilege-grants` | done |
 | 27 | — | [Сборка и сжатие контекста](tasks/task_027.md) | `context-assembly` | done |
 | 28 | — | [Кэширование](tasks/task_028.md) | `caching` | done |
 | 29 | — | [Score качества навыка](tasks/task_029.md) | `skill-quality-score` | done |
-| 30 | 11 | [Шаблоны агентов](tasks/task_030.md) | `agent-templates` | pending |
+| 30 | 11 | [Шаблоны агентов](tasks/task_030.md) | `agent-templates` | done |
 | 31 | — | [Симуляция шаблонов](tasks/task_031.md) | `template-simulation` | done |
 
 ## Phase 3 — Inter-agent protocol (Q1 2027)
 
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
-| 32 | 12 | [Манифест агента](tasks/task_032.md) | `agent-manifest` | pending |
-| 33 | — | [A2A Agent Card совместимость](tasks/task_033.md) | `a2a-agent-card` | pending |
-| 34 | 13 | [Capability registry](tasks/task_034.md) | `capability-registry` | pending |
-| 35 | 14 | [Формат inter-agent сообщений](tasks/task_035.md) | `delegation-envelope` | pending |
-| 36 | — | [Протокол жизненного цикла задач](tasks/task_036.md) | `task-lifecycle-protocol` | pending |
-| 37 | 15 | [Опции транспорта](tasks/task_037.md) | `transports` | pending |
-| 38 | 16 | [Механизмы discovery](tasks/task_038.md) | `discovery` | pending |
-| 39 | — | [Идентичность и делегация](tasks/task_039.md) | `identity-delegation` | pending |
-| 40 | — | [Trust и admission policy](tasks/task_040.md) | `trust-admission` | pending |
-| 41 | — | [Inter-agent audit trail](tasks/task_041.md) | `inter-agent-audit` | pending |
-| 42 | — | [Контрактные и chaos тесты](tasks/task_042.md) | `protocol-tests` | pending |
+| 32 | 12 | [Манифест агента](tasks/task_032.md) | `agent-manifest` | done |
+| 33 | — | [A2A Agent Card совместимость](tasks/task_033.md) | `a2a-agent-card` | done |
+| 34 | 13 | [Capability registry](tasks/task_034.md) | `capability-registry` | done |
+| 35 | 14 | [Формат inter-agent сообщений](tasks/task_035.md) | `delegation-envelope` | done |
+| 36 | — | [Протокол жизненного цикла задач](tasks/task_036.md) | `task-lifecycle-protocol` | done |
+| 37 | 15 | [Опции транспорта](tasks/task_037.md) | `transports` | done |
+| 38 | 16 | [Механизмы discovery](tasks/task_038.md) | `discovery` | done |
+| 39 | — | [Идентичность и делегация](tasks/task_039.md) | `identity-delegation` | done |
+| 40 | — | [Trust и admission policy](tasks/task_040.md) | `trust-admission` | done |
+| 41 | — | [Inter-agent audit trail](tasks/task_041.md) | `inter-agent-audit` | done |
+| 42 | — | [Контрактные и chaos тесты](tasks/task_042.md) | `protocol-tests` | done |
 
 ## Phase 4 — Mesh orchestration (Q2 2027)
 
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
-| 43 | 17 | [Mesh router](tasks/task_043.md) | `mesh-router` | pending |
-| 44 | 17 | [Сложность и стоимость](tasks/task_044.md) | `complexity-router` | pending |
-| 45 | 18 | [Fan-out / fan-in](tasks/task_045.md) | `fan-out-in` | pending |
-| 46 | 22 | [Verification pipeline](tasks/task_046.md) | `verification-pipeline` | pending |
-| 47 | 19 | [Retry, timeout, circuit breaker](tasks/task_047.md) | `retry-timeout-breaker` | pending |
-| 48 | 23 | [Границы делегации](tasks/task_048.md) | `delegation-boundaries` | pending |
-| 49 | 24 | [Human-in-the-loop эскалация](tasks/task_049.md) | `human-escalation` | pending |
-| 50 | 20 | [Distributed reflection](tasks/task_050.md) | `distributed-reflection` | pending |
-| 51 | 21 | [Shared memory sync](tasks/task_051.md) | `shared-memory-sync` | pending |
-| 52 | 31 | [Mesh evaluation suite](tasks/task_052.md) | `mesh-eval-suite` | pending |
-| 65 | 25 | [Mesh observability](tasks/task_065.md) | `mesh-observability` | pending |
-| 66 | 26 | [Абстракция mesh-бэкендов](tasks/task_066.md) | `mesh-backends-abstraction` | pending |
-| 67 | 27 | [Redis/Valkey coordination backend](tasks/task_067.md) | `redis-coordination-backend` | pending |
-| 68 | 28 | [NATS / JetStream transport option](tasks/task_068.md) | `nats-jetstream-transport` | pending |
-| 69 | 29 | [PostgreSQL shared state backend](tasks/task_069.md) | `postgres-shared-state` | pending |
-| 70 | 30 | [Backend-профили и деградация](tasks/task_070.md) | `backend-profiles-degradation` | pending |
+| 43 | 17 | [Mesh router](tasks/task_043.md) | `mesh-router` | done |
+| 44 | 17 | [Сложность и стоимость](tasks/task_044.md) | `complexity-router` | done |
+| 45 | 18 | [Fan-out / fan-in](tasks/task_045.md) | `fan-out-in` | done |
+| 46 | 22 | [Verification pipeline](tasks/task_046.md) | `verification-pipeline` | done |
+| 47 | 19 | [Retry, timeout, circuit breaker](tasks/task_047.md) | `retry-timeout-breaker` | done |
+| 48 | 23 | [Границы делегации](tasks/task_048.md) | `delegation-boundaries` | done |
+| 49 | 24 | [Human-in-the-loop эскалация](tasks/task_049.md) | `human-escalation` | done |
+| 50 | 20 | [Distributed reflection](tasks/task_050.md) | `distributed-reflection` | done |
+| 51 | 21 | [Shared memory sync](tasks/task_051.md) | `shared-memory-sync` | done |
+| 52 | 31 | [Mesh evaluation suite](tasks/task_052.md) | `mesh-eval-suite` | done |
+| 65 | 25 | [Mesh observability](tasks/task_065.md) | `mesh-observability` | done |
+| 66 | 26 | [Абстракция mesh-бэкендов](tasks/task_066.md) | `mesh-backends-abstraction` | done |
+| 67 | 27 | [Redis/Valkey coordination backend](tasks/task_067.md) | `redis-coordination-backend` | done |
+| 68 | 28 | [NATS / JetStream transport option](tasks/task_068.md) | `nats-jetstream-transport` | done |
+| 69 | 29 | [PostgreSQL shared state backend](tasks/task_069.md) | `postgres-shared-state` | done |
+| 70 | 30 | [Backend-профили и деградация](tasks/task_070.md) | `backend-profiles-degradation` | done |
 
 ## Phase 5 — IoT/edge fleet and mesh operations (Q3 2027)
 
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
-| 53 | 32 | [Mesh dashboard](tasks/task_053.md) | `mesh-dashboard` | pending |
-| 54 | 33 | [Централизованные логи и трейсы](tasks/task_054.md) | `centralized-observability` | pending |
-| 55 | 40 | [Security operations](tasks/task_055.md) | `security-ops` | pending |
-| 56 | 35 | [Rate limits и квоты](tasks/task_056.md) | `rate-limits-quotas` | pending |
-| 57 | 36 | [Управление жизненным циклом](tasks/task_057.md) | `lifecycle-management` | pending |
-| 58 | 41 | [Configuration и policy rollout](tasks/task_058.md) | `config-policy-rollout` | pending |
-| 59 | 37 | [Edge provisioning](tasks/task_059.md) | `edge-provisioning` | pending |
-| 60 | 38 | [Offline resilience](tasks/task_060.md) | `offline-resilience` | pending |
+| 53 | 32 | [Mesh dashboard](tasks/task_053.md) | `mesh-dashboard` | done |
+| 54 | 33 | [Централизованные логи и трейсы](tasks/task_054.md) | `centralized-observability` | done |
+| 55 | 40 | [Security operations](tasks/task_055.md) | `security-ops` | done |
+| 56 | 35 | [Rate limits и квоты](tasks/task_056.md) | `rate-limits-quotas` | done |
+| 57 | 36 | [Управление жизненным циклом](tasks/task_057.md) | `lifecycle-management` | done |
+| 58 | 41 | [Configuration и policy rollout](tasks/task_058.md) | `config-policy-rollout` | done |
+| 59 | 37 | [Edge provisioning](tasks/task_059.md) | `edge-provisioning` | done |
+| 60 | 38 | [Offline resilience](tasks/task_060.md) | `offline-resilience` | done |
 | 61 | 42 | [Local-first degradation](tasks/task_061.md) | `local-degradation` | pending |
 | 62 | 39 | [Fleet templates](tasks/task_062.md) | `fleet-templates` | pending |
-| 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | pending |
+| 63 | 43 | [Backup и recovery](tasks/task_063.md) | `backup-recovery` | done |
 | 64 | 44 | [Операционные SLO](tasks/task_064.md) | `operational-slos` | pending |
+
+## Phase 6 — Performance and high availability hardening (Q4 2027)
+
+| # | Initiative | Task | Slug | Status |
+|---|------------|------|------|--------|
+| 71 | 45 | [SQLite thread-safety and sync-over-async removal](tasks/task_071.md) | `sqlite-thread-safety` | pending |
+| 72 | 45 | [QuotaService cleanup fix and distributed quotas](tasks/task_072.md) | `quota-cleanup-fix` | pending |
+| 73 | 45 | [Outbox synced-state and bounded-queue prune fix](tasks/task_073.md) | `outbox-synced-fix` | pending |
+| 74 | 45 | [NATS JetStream ack/fail implementation](tasks/task_074.md) | `nats-jetstream-ack` | pending |
+| 75 | 46 | [DI lifetime fixes: captive dependency and AgentCore singleton](tasks/task_075.md) | `di-lifetime-fixes` | pending |
+| 76 | 46 | [ResilientLLMClient per-call provider/model](tasks/task_076.md) | `resilient-llm-per-call-provider` | pending |
+| 77 | 46 | [Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController](tasks/task_077.md) | `sync-over-async-sweep` | pending |
+| 78 | 46 | [IHttpClientFactory adoption and standard resilience handlers](tasks/task_078.md) | `httpclient-factory-adoption` | pending |
+| 79 | 46 | [Real health checks infrastructure](tasks/task_079.md) | `health-checks-infrastructure` | pending |
+| 80 | 46 | [Graceful shutdown and drain](tasks/task_080.md) | `graceful-shutdown-drain` | pending |
+| 81 | 46 | [Kestrel tuning, framework rate limiter, compression, output cache](tasks/task_081.md) | `kestrel-rate-limiter-compression` | pending |
+| 82 | 46 | [RouterHealthTracker, Redis CAS, Postgres reconnect, BuildServiceProvider](tasks/task_082.md) | `router-redis-postgres-di-fixes` | pending |
+| 83 | 47 | [CacheService stampede, eviction, and sliding expiration](tasks/task_083.md) | `cache-stampede-eviction` | pending |
+| 84 | 47 | [ProposalStore caching, async I/O, and hot-path allocations](tasks/task_084.md) | `proposal-store-hotpath-alloc` | pending |
+| 85 | 47 | [OpenTelemetry polish: console gating, process instrumentation, histogram buckets, async logging](tasks/task_085.md) | `otel-logging-polish` | pending |
+| 86 | 47 | [Backpressure, bounded channels, and DLQ/requeue fixes](tasks/task_086.md) | `backpressure-bounded-channels-dlq` | pending |
+| 87 | 47 | [Misc hardening: DelegationBoundary TTL, ResilientTransport trim, CORS, backup passphrase, SLO real metrics](tasks/task_087.md) | `misc-hardening` | pending |
 
 ## Workflow
 

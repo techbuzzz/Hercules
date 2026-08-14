@@ -86,7 +86,7 @@ public sealed class TemplateController : ControllerBase
 
     private TemplateManifest ReadManifest(string fileName)
     {
-        var path = System.IO.Path.Combine(_templates.DirectoryPath, fileName);
+        var path = Path.Combine(_templates.DirectoryPath, fileName);
         if (!System.IO.File.Exists(path))
         {
             throw new FileNotFoundException($"Шаблон '{fileName}' не найден.");
@@ -96,7 +96,7 @@ public sealed class TemplateController : ControllerBase
         using var archive = new System.IO.Compression.ZipArchive(stream, System.IO.Compression.ZipArchiveMode.Read);
         var entry = archive.GetEntry("template.json")
             ?? throw new InvalidOperationException("template.json не найден в архиве шаблона.");
-        using var reader = new System.IO.StreamReader(entry.Open());
+        using var reader = new StreamReader(entry.Open());
         var json = reader.ReadToEnd();
         return System.Text.Json.JsonSerializer.Deserialize<TemplateManifest>(json, JsonOpts)
             ?? throw new InvalidOperationException("Не удалось десериализовать манифест шаблона.");

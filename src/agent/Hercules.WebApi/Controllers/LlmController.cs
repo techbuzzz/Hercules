@@ -1,72 +1,58 @@
 using Hercules.Config;
 using Hercules.LLM;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Routing;
 
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
 ///     LLM provider health, capability and configuration endpoints.
 /// </summary>
-[ApiController]
-public sealed class LlmController : ControllerBase
+public static class LlmController
 {
-    private readonly LlmConfig _cfg;
-    private readonly ProviderHealthChecker _healthChecker;
-    private readonly ProviderCapabilityDetector _capabilityDetector;
-
-    public LlmController(
-        LlmConfig cfg,
-        ProviderHealthChecker healthChecker,
-        ProviderCapabilityDetector capabilityDetector)
+    public static void MapLlm(this IEndpointRouteBuilder app)
     {
-        _cfg = cfg;
-        _healthChecker = healthChecker;
-        _capabilityDetector = capabilityDetector;
-    }
-
-    [HttpGet("/api/llm/health")]
-    public async Task<ActionResult<IReadOnlyList<ProviderHealthResult>>> GetHealth(CancellationToken ct = default)
-    {
-        var results = await _healthChecker.CheckAllAsync(ct);
-        return Ok(results);
-    }
-
-    [HttpGet("/api/llm/health/{provider}")]
-    public async Task<ActionResult<ProviderHealthResult>> GetHealthByProvider(string provider, CancellationToken ct = default)
-    {
-        var result = await _healthChecker.CheckAsync(provider, ct);
-        return Ok(result);
-    }
-
-    [HttpGet("/api/llm/capabilities")]
-    public async Task<ActionResult<IReadOnlyList<ProviderCapabilities>>> GetCapabilities(CancellationToken ct = default)
-    {
-        var results = await _capabilityDetector.DetectAllAsync(ct);
-        return Ok(results);
-    }
-
-    [HttpGet("/api/llm/capabilities/{provider}")]
-    public async Task<ActionResult<ProviderCapabilities>> GetCapabilitiesByProvider(string provider, CancellationToken ct = default)
-    {
-        var result = await _capabilityDetector.DetectAsync(provider, ct);
-        return Ok(result);
-    }
-
-    [HttpGet("/api/llm/config")]
-    public ActionResult<LlmConfigDto> GetConfig()
-    {
-        return Ok(new LlmConfigDto
+        // GET /api/llm/health — общий health-check по всем провайдерам.
+        app.MapGet("/api/llm/health", async (ProviderHealthChecker healthChecker, CancellationToken ct) =>
         {
-            Provider = _cfg.Provider,
-            Fallback = _cfg.Fallback,
-            YandexGptModel = _cfg.YandexGpt.Model,
-            OllamaCloudModel = _cfg.OllamaCloud.Model,
-            OllamaLocalModel = _cfg.OllamaLocal.Model,
-            OpenAICompatibleEndpoint = _cfg.OpenAICompatible.Endpoint,
-            OpenAICompatibleModel = _cfg.OpenAICompatible.Model,
-            OpenAICompatibleDisplayName = _cfg.OpenAICompatible.DisplayName
-        });
+            var results = await healthChecker.CheckAllAsync(ct);
+            return Results.Ok(results);
+        }).WithName("LlmHealthAll");
+
+        // GET /api/llm/health/{provider} — health-check конкретного провайдера.
+        app.MapGet("/api/llm/health/{provider}", async (string provider, ProviderHealthChecker healthChecker, CancellationToken ct) =>
+        {
+            var result = await healthChecker.CheckAsync(provider, ct);
+            return Results.Ok(result);
+        }).WithName("LlmHealthByProvider");
+
+        // GET /api/llm/capabilities — общие capabilities по всем провайдерам.
+        app.MapGet("/api/llm/capabilities", async (ProviderCapabilityDetector capabilityDetector, CancellationToken ct) =>
+        {
+            var results = await capabilityDetector.DetectAllAsync(ct);
+            return Results.Ok(results);
+        }).WithName("LlmCapabilitiesAll");
+
+        // GET /api/llm/capabilities/{provider} — capabilities конкретного провайдера.
+        app.MapGet("/api/llm/capabilities/{provider}", async (string provider, ProviderCapabilityDetector capabilityDetector, CancellationToken ct) =>
+        {
+            var result = await capabilityDetector.DetectAsync(provider, ct);
+            return Results.Ok(result);
+        }).WithName("LlmCapabilitiesByProvider");
+
+        // GET /api/llm/config — публичный конфиг (без секретов).
+        app.MapGet("/api/llm/config", (LlmConfig cfg) =>
+        {
+            return Results.Ok(new LlmConfigDto
+            {
+                Provider = cfg.Provider,
+                Fallback = cfg.Fallback,
+                YandexGptModel = cfg.YandexGpt.Model,
+                OllamaCloudModel = cfg.OllamaCloud.Model,
+                OllamaLocalModel = cfg.OllamaLocal.Model,
+                OpenAICompatibleEndpoint = cfg.OpenAICompatible.Endpoint,
+                OpenAICompatibleModel = cfg.OpenAICompatible.Model,
+                OpenAICompatibleDisplayName = cfg.OpenAICompatible.DisplayName
+            });
+        }).WithName("LlmConfig");
     }
 }
 
@@ -81,13 +67,4 @@ public sealed record LlmConfigDto
     public string OpenAICompatibleEndpoint { get; init; } = "";
     public string OpenAICompatibleModel { get; init; } = "";
     public string OpenAICompatibleDisplayName { get; init; } = "";
-}
-
-/// <summary>Extension method to map LLM endpoints.</summary>
-public static class LlmControllerExtensions
-{
-    public static void MapLlm(this IEndpointRouteBuilder app)
-    {
-        app.MapControllers();
-    }
 }

@@ -1,0 +1,8 @@
+{
+  "default_degradation_mode": "Offline",
+  "allowed_offline_skills": ["rack-monitor", "incident-log", "alert-notify"],
+  "enable_outbox_queue": true,
+  "sync_interval_seconds": 15,
+  "enable_queued_work": true,
+  "offline_notification_url": "https://ops.example.com/webhook/incident"
+}

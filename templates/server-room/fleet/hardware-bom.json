@@ -1,0 +1,12 @@
+{
+  "cpu": "Intel Atom C3338 2-core @ 1.5 GHz or Raspberry Pi Compute Module 4",
+  "ram_gb": 4,
+  "storage_gb": 32,
+  "storage_type": "Industrial microSD A2 or SATA SSD",
+  "network": "Ethernet 1 Gbps redundant + IPMI",
+  "power_watts": 10,
+  "operating_temp": "0°C to +55°C (server room ambient)",
+  "form_factor": "1U rack-mount or DIN-rail",
+  "supported_sensors": ["temperature", "humidity", "airflow", "smoke-detector", "door-switch", "pdu-load", "ups-status"],
+  "notes": "Industrial-grade edge node. IPMI/iDRAC integration recommended for out-of-band management. UPS-backed power preferred. Temp sensors: one per rack U, calibrated PT100."
+}

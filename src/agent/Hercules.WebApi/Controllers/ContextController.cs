@@ -15,7 +15,9 @@ public static class ContextController
         app.MapGet("/api/context/budget", (IContextBuilder? ctxBuilder) =>
         {
             if (ctxBuilder is null)
+            {
                 return Results.NotFound(new { error = "ContextBuilder not available (context assembly disabled)" });
+            }
 
             var budget = ctxBuilder.GetCurrentBudget();
             return Results.Ok(new
@@ -33,7 +35,9 @@ public static class ContextController
         app.MapGet("/api/context/summary", (IContextBuilder? ctxBuilder) =>
         {
             if (ctxBuilder is null)
+            {
                 return Results.NotFound(new { error = "ContextBuilder not available (context assembly disabled)" });
+            }
 
             var budget = ctxBuilder.GetCurrentBudget();
             return Results.Ok(new
@@ -59,10 +63,14 @@ public static class ContextController
             CancellationToken ct) =>
         {
             if (ctxBuilder is null)
+            {
                 return Results.NotFound(new { error = "ContextBuilder not available" });
+            }
 
-            if (trace is null || trace.Count == 0)
+            if (trace.Count == 0)
+            {
                 return Results.BadRequest(new { error = "Trace must contain at least one entry" });
+            }
 
             var compressed = await ctxBuilder.CompressTraceAsync(trace, sessionId, ct);
             return Results.Ok(new

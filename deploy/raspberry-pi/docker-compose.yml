@@ -1,0 +1,60 @@
+# =============================================================================
+# Hercules — Raspberry Pi Docker Compose
+# Usage:
+#   1. Copy this directory to the Pi
+#   2. Edit provision.env with real credentials
+#   3. Run: docker compose up -d
+# =============================================================================
+
+services:
+  hercules:
+    build:
+      context: ../..
+      dockerfile: deploy/raspberry-pi/Dockerfile
+      platforms:
+        - linux/arm64
+    image: hercules/agent:latest-arm64
+    container_name: hercules-agent
+    restart: unless-stopped
+
+    # Provisioned credentials (fill provision.env before starting)
+    env_file:
+      - provision.env
+
+    # Overlay config (optional overrides via host bind-mount)
+    volumes:
+      # Persistent data (identity, skills, memory, sessions)
+      - hercules-data:/data
+      # Host Wi-Fi config (wpa_supplicant) — bind-mount so first-boot can update
+      - /etc/wpa_supplicant/wpa_supplicant.conf:/etc/wpa_supplicant/wpa_supplicant.conf:ro
+      # Optional: custom skills
+      # - ./skills:/data/skills:ro
+    ports:
+      - "8080:8080"  # HTTP API / health
+
+    # Device access (Wi-Fi provisioning needs wpa_cli)
+    devices:
+      - /dev/gpiomem:/dev/gpiomem
+
+    # Network mode: host allows direct mesh discovery on LAN
+    network_mode: host
+
+    # Privileged required for wpa_supplicant management
+    privileged: true
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  hercules-data:
+    driver: local

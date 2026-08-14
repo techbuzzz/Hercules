@@ -11,7 +11,7 @@ namespace Hercules.WebApi.Auth;
 /// </summary>
 public sealed class ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILogger<ApiKeyMiddleware> logger)
 {
-    public const string HeaderName = "X-Api-Key";
+    private const string HeaderName = "X-Api-Key";
 
     private readonly byte[] _expectedKeyBytes = Encoding.UTF8.GetBytes(cfg.ApiKey ?? "");
 

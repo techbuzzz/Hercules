@@ -1,0 +1,418 @@
+---
+// Mesh Dashboard (Phase 5 task_053).
+// Live topology, traffic, health, policy denials, budgets, queued tasks,
+// skill usage heatmap, and recent eval results.
+---
+
+<div class="flex flex-col gap-5" id="mesh-dashboard">
+
+  <!-- Header + refresh -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-base font-semibold text-white">Mesh Dashboard</h2>
+      <p class="text-xs text-gray-500">Обзор mesh-сети и производительности.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="dashboard-updated" class="text-xs text-gray-600"></span>
+      <button id="dash-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- === TOPOLOGY === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">Topology <span id="topo-count" class="ml-1 text-xs text-gray-500"></span></h3>
+      <button id="topo-refresh" type="button" class="text-xs text-gray-500 hover:text-gray-300">↻</button>
+    </div>
+    <div id="topo-empty" class="py-6 text-center text-xs text-gray-500">Нет данных. Mesh пуст или агенты не зарегистрированы.</div>
+    <div id="topo-grid" class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 hidden"></div>
+    <div id="topo-error" class="mt-2 hidden text-xs text-rose-400"></div>
+  </section>
+
+  <!-- === TRAFFIC === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">Traffic</h3>
+    <div id="traffic-empty" class="py-4 text-center text-xs text-gray-500">Нет данных о трафике.</div>
+    <div id="traffic-cards" class="grid grid-cols-2 gap-3 sm:grid-cols-3 hidden">
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3 text-center">
+        <div class="text-xl font-semibold text-white" id="tr-total">0</div>
+        <div class="text-xs text-gray-400">Всего запросов</div>
+      </div>
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3 text-center">
+        <div class="text-xl font-semibold text-violet-400" id="tr-fanout">0</div>
+        <div class="text-xs text-gray-400">Fan-out</div>
+      </div>
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3 text-center">
+        <div class="text-xl font-semibold text-amber-400" id="tr-cb-rej">0</div>
+        <div class="text-xs text-gray-400">CB отклонений</div>
+      </div>
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3 text-center">
+        <div class="text-xl font-semibold text-sky-400" id="tr-lat">0ms</div>
+        <div class="text-xs text-gray-400">Avg latency</div>
+      </div>
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3 text-center">
+        <div class="text-xl font-semibold text-emerald-400" id="tr-router-hits">0</div>
+        <div class="text-xs text-gray-400">Router hits</div>
+      </div>
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3 text-center">
+        <div class="text-xl font-semibold text-gray-200" id="tr-deleg">0</div>
+        <div class="text-xs text-gray-400">Delegations</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- === HEALTH + CIRCUIT BREAKERS === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Health
+        <span id="health-summary" class="ml-2 text-xs font-normal"></span>
+      </h3>
+      <button id="health-refresh" type="button" class="text-xs text-gray-500 hover:text-gray-300">↻</button>
+    </div>
+    <div id="health-empty" class="py-4 text-center text-xs text-gray-500">Нет данных о здоровье агентов.</div>
+    <div id="health-grid" class="grid grid-cols-2 gap-2 sm:grid-cols-3 hidden"></div>
+  </section>
+
+  <!-- === POLICY DENIALS === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">Policy Denials <span id="denials-count" class="ml-1 text-xs text-gray-500"></span></h3>
+      <button id="denials-refresh" type="button" class="text-xs text-gray-500 hover:text-gray-300">↻</button>
+    </div>
+    <div id="denials-empty" class="py-6 text-center text-xs text-gray-500">Отказов не зафиксировано.</div>
+    <div id="denials-list" class="max-h-56 overflow-y-auto hidden"></div>
+  </section>
+
+  <!-- === SKILL HEATMAP === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Skill Heatmap <span id="heatmap-count" class="ml-1 text-xs text-gray-500"></span>
+      </h3>
+      <button id="heatmap-refresh" type="button" class="text-xs text-gray-500 hover:text-gray-300">↻</button>
+    </div>
+    <div id="heatmap-empty" class="py-6 text-center text-xs text-gray-500">Нет данных о навыках.</div>
+    <div id="heatmap-grid" class="hidden">
+      <div class="mb-2 flex gap-2 text-xs text-gray-600">
+        <span>низкая</span>
+        <div class="flex flex-1 flex-col justify-center gap-px">
+          <div class="flex h-2 overflow-hidden rounded-full bg-gradient-to-r from-emerald-900/60 via-amber-900/60 to-rose-900/60"></div>
+        </div>
+        <span>высокая</span>
+      </div>
+      <div id="heatmap-cells" class="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4"></div>
+    </div>
+  </section>
+
+  <!-- === EVAL SUMMARY === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Eval Summary
+        <span id="eval-pass-count" class="ml-2 text-xs text-emerald-400"></span>
+        <span id="eval-fail-count" class="ml-1 text-xs text-rose-400"></span>
+      </h3>
+      <button id="eval-refresh" type="button" class="text-xs text-gray-500 hover:text-gray-300">↻</button>
+    </div>
+    <div id="eval-empty" class="py-6 text-center text-xs text-gray-500">Eval ещё не запускался.</div>
+    <div id="eval-list" class="max-h-56 overflow-y-auto hidden"></div>
+  </section>
+
+  <!-- Global error -->
+  <div id="dash-error" class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200"></div>
+</div>
+
+<script>
+  import { api } from "../lib/api";
+
+  const $ = (id: string) => document.getElementById(id)!;
+
+  function esc(s: string | null | undefined): string {
+    return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function scoreColor(score: number): string {
+    return score >= 0.75 ? "text-emerald-400" : score >= 0.4 ? "text-amber-400" : "text-rose-400";
+  }
+
+  function circuitBadge(state: string): string {
+    switch (state.toLowerCase()) {
+      case "closed": return "text-emerald-400";
+      case "open": return "text-rose-400";
+      case "halfopen": return "text-amber-400";
+      default: return "text-gray-400";
+    }
+  }
+
+  function fmtDate(iso: string | null | undefined): string {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleString("ru", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+    catch { return "—"; }
+  }
+
+  // ---- Topology ----
+  async function loadTopology() {
+    const empty = $("topo-empty");
+    const grid = $("topo-grid");
+    const error = $("topo-error");
+    const count = $("topo-count");
+
+    empty.classList.add("hidden");
+    grid.classList.add("hidden");
+    error.classList.add("hidden");
+
+    try {
+      const data = await api.getMeshTopology();
+      count.textContent = `(${data.agentCount})`;
+
+      if (data.agentCount === 0) {
+        empty.classList.remove("hidden");
+        return;
+      }
+
+      grid.classList.remove("hidden");
+      grid.innerHTML = "";
+
+      for (const a of data.agents) {
+        const score = a.healthScore;
+        const healthColor = score >= 0.75 ? "emerald" : score >= 0.4 ? "amber" : "rose";
+        const item = document.createElement("div");
+        item.className = "flex flex-col gap-1 rounded-lg border border-white/5 bg-[#0a0a0b] p-3";
+        item.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium text-gray-200">${esc(a.displayName || a.agentId)}</span>
+            <span class="rounded px-1.5 py-0.5 text-[10px] text-${healthColor}-400 font-medium border border-${healthColor}-500/30">${(score * 100).toFixed(0)}%</span>
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <span class="rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] text-violet-300 font-mono">${esc(a.agentId)}</span>
+            <span class="rounded px-1.5 py-0.5 text-[10px] ${circuitBadge("closed")} border border-white/5">${esc(a.trustLevel)}</span>
+          </div>
+          <div class="flex gap-3 text-[10px] text-gray-500">
+            <span>latency: <span class="text-gray-400">${a.latencyMs}ms</span></span>
+            <span>seen: <span class="text-gray-400">${fmtDate(a.lastSeen)}</span></span>
+          </div>
+          ${a.capabilities.length > 0 ? `<div class="flex flex-wrap gap-1">${a.capabilities.slice(0,3).map(c => `<span class="rounded bg-white/5 px-1 py-0.5 text-[9px] text-gray-500">${esc(c)}</span>`).join("")}</div>` : ""}
+        `;
+        grid.appendChild(item);
+      }
+    } catch (e) {
+      error.classList.remove("hidden");
+      error.textContent = "Ошибка: " + (e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // ---- Traffic ----
+  async function loadTraffic() {
+    try {
+      const data = await api.getMeshDashboard();
+      const t = data.traffic;
+      const empty = $("traffic-empty");
+      const cards = $("traffic-cards");
+
+      empty.classList.add("hidden");
+      cards.classList.remove("hidden");
+
+      $("tr-total").textContent = fmtNum(t.totalRequests);
+      $("tr-fanout").textContent = fmtNum(t.fanOutRequests);
+      $("tr-cb-rej").textContent = String(t.circuitBreakerRejections);
+      $("tr-lat").textContent = t.avgLatencyMs > 0 ? `${t.avgLatencyMs.toFixed(0)}ms` : "—";
+      $("tr-router-hits").textContent = fmtNum(t.meshRouterHits);
+      $("tr-deleg").textContent = fmtNum(t.meshDelegations);
+    } catch { /* non-critical */ }
+  }
+
+  // ---- Health ----
+  async function loadHealth() {
+    const empty = $("health-empty");
+    const grid = $("health-grid");
+    const summary = $("health-summary");
+
+    empty.classList.add("hidden");
+    grid.classList.add("hidden");
+
+    try {
+      const data = await api.getMeshHealth();
+      summary.textContent = `(${data.healthyCount} healthy / ${data.degradedCount} degraded / ${data.unhealthyCount} unhealthy)`;
+
+      if (data.agents.length === 0) {
+        empty.classList.remove("hidden");
+        return;
+      }
+
+      grid.classList.remove("hidden");
+      grid.innerHTML = "";
+
+      for (const a of data.agents) {
+        const score = a.healthScore;
+        const barCls = score >= 0.75 ? "bg-emerald-500" : score >= 0.4 ? "bg-amber-500" : "bg-rose-500";
+        const barColor = score >= 0.75 ? "emerald" : score >= 0.4 ? "amber" : "rose";
+
+        const item = document.createElement("div");
+        item.className = "flex flex-col gap-1.5 rounded-lg border border-white/5 bg-[#0a0a0b] p-3";
+        item.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-gray-200 truncate max-w-[100px]" title="${esc(a.agentId)}">${esc(a.displayName || a.agentId)}</span>
+            <span class="text-xs font-semibold text-${barColor}-400">${(score * 100).toFixed(0)}%</span>
+          </div>
+          <div class="h-1.5 overflow-hidden rounded-full bg-white/5">
+            <div class="h-full rounded-full transition-all ${barCls}" style="width:${(score * 100).toFixed(0)}%"></div>
+          </div>
+          <div class="flex items-center justify-between text-[10px] text-gray-500">
+            <span class="${circuitBadge(a.circuitState)}">CB: ${a.circuitState}</span>
+            <span>latency: ${a.avgLatencyMs}ms</span>
+          </div>
+          ${a.consecutiveFailures > 0 ? `<div class="text-[10px] text-rose-500">failures: ${a.consecutiveFailures}</div>` : ""}
+        `;
+        grid.appendChild(item);
+      }
+    } catch { /* non-critical */ }
+  }
+
+  // ---- Policy Denials ----
+  async function loadDenials() {
+    const empty = $("denials-empty");
+    const list = $("denials-list");
+    const count = $("denials-count");
+
+    empty.classList.add("hidden");
+    list.classList.add("hidden");
+
+    try {
+      const data = await api.getMeshDenials(50);
+      count.textContent = `(${data.count})`;
+
+      if (data.count === 0) {
+        empty.classList.remove("hidden");
+        return;
+      }
+
+      list.classList.remove("hidden");
+      list.innerHTML = data.denials.map(d => `
+        <div class="flex gap-3 border-b border-white/5 py-2 text-xs">
+          <span class="shrink-0 text-gray-600">${fmtDate(d.createdAt)}</span>
+          <span class="shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-rose-300">${esc(d.actor)}</span>
+          <span class="shrink-0 text-gray-400">${esc(d.action)}</span>
+          <span class="truncate text-gray-500">${esc(d.details || d.policyDecision || "-")}</span>
+        </div>
+      `).join("");
+    } catch { /* non-critical */ }
+  }
+
+  // ---- Skill Heatmap ----
+  async function loadHeatmap() {
+    const empty = $("heatmap-empty");
+    const grid = $("heatmap-grid");
+    const cells = $("heatmap-cells");
+    const count = $("heatmap-count");
+
+    empty.classList.add("hidden");
+    grid.classList.add("hidden");
+
+    try {
+      const data = await api.getMeshSkillHeatmap();
+      count.textContent = `(${data.totalSkills})`;
+
+      if (data.totalSkills === 0) {
+        empty.classList.remove("hidden");
+        return;
+      }
+
+      grid.classList.remove("hidden");
+      cells.innerHTML = "";
+
+      // Normalize usage for color intensity
+      const maxUses = Math.max(1, ...data.skills.map(s => s.totalUses));
+
+      for (const s of data.skills) {
+        const intensity = s.totalUses / maxUses; // 0..1
+        const bgColor = s.successRate >= 0.8
+          ? `rgba(16,185,129,${0.1 + intensity * 0.5})`  // emerald
+          : s.successRate >= 0.5
+          ? `rgba(245,158,11,${0.1 + intensity * 0.5})`  // amber
+          : `rgba(244,63,94,${0.1 + intensity * 0.5})`;  // rose
+
+        const cell = document.createElement("div");
+        cell.className = "group relative flex flex-col justify-between rounded-lg border border-white/5 p-2 text-xs transition-all hover:border-white/20 cursor-default";
+        cell.style.backgroundColor = bgColor;
+        cell.title = `${s.skillName}: ${s.totalUses} uses, ${(s.successRate * 100).toFixed(0)}% success`;
+        cell.innerHTML = `
+          <div class="truncate font-medium text-gray-200 text-[11px]">${esc(s.skillName)}</div>
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] text-gray-400">${s.totalUses}u</span>
+            <span class="text-[10px] ${s.successRate >= 0.8 ? "text-emerald-400" : s.successRate >= 0.5 ? "text-amber-400" : "text-rose-400"}">${(s.successRate * 100).toFixed(0)}%</span>
+          </div>
+        `;
+        cells.appendChild(cell);
+      }
+    } catch { /* non-critical */ }
+  }
+
+  // ---- Eval Summary ----
+  async function loadEval() {
+    const empty = $("eval-empty");
+    const list = $("eval-list");
+    const passCount = $("eval-pass-count");
+    const failCount = $("eval-fail-count");
+
+    empty.classList.add("hidden");
+    list.classList.add("hidden");
+
+    try {
+      const data = await api.getMeshEvalSummary();
+
+      if (data.totalRuns === 0) {
+        empty.classList.remove("hidden");
+        return;
+      }
+
+      passCount.textContent = `✓ ${data.passedRuns}`;
+      failCount.textContent = data.failedRuns > 0 ? `✗ ${data.failedRuns}` : "";
+
+      list.classList.remove("hidden");
+      list.innerHTML = data.recentRuns.map(r => `
+        <div class="flex items-center gap-3 border-b border-white/5 py-2 text-xs">
+          <span class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-mono ${r.passed ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"}">${r.passed ? "PASS" : "FAIL"}</span>
+          <span class="shrink-0 rounded bg-violet-500/15 px-1.5 py-0.5 text-violet-300">${esc(r.scenarioType)}</span>
+          <span class="text-gray-400">score: <span class="${scoreColor(r.score)}">${(r.score * 100).toFixed(0)}%</span></span>
+          <span class="text-gray-500">${r.assertionsPassed}p / ${r.assertionsFailed}f</span>
+          <span class="text-gray-600">${r.durationMs}ms</span>
+          <span class="ml-auto text-gray-600">${fmtDate(r.startTimeUtc)}</span>
+        </div>
+      `).join("");
+    } catch { /* non-critical */ }
+  }
+
+  function fmtNum(n: number): string {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+    return String(n);
+  }
+
+  function showError(msg: string) {
+    const e = $("dash-error");
+    e.classList.remove("hidden");
+    e.textContent = "Ошибка: " + msg;
+  }
+
+  async function loadAll() {
+    try {
+      await Promise.all([loadTopology(), loadTraffic(), loadHealth(), loadDenials(), loadHeatmap(), loadEval()]);
+      $("dashboard-updated").textContent = new Date().toLocaleTimeString("ru");
+    } catch (e) {
+      showError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  $("dash-refresh").addEventListener("click", loadAll);
+  $("topo-refresh").addEventListener("click", loadTopology);
+  $("health-refresh").addEventListener("click", loadHealth);
+  $("denials-refresh").addEventListener("click", loadDenials);
+  $("heatmap-refresh").addEventListener("click", loadHeatmap);
+  $("eval-refresh").addEventListener("click", loadEval);
+
+  loadAll();
+</script>

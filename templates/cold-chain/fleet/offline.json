@@ -1,0 +1,7 @@
+{
+  "default_degradation_mode": "Degraded",
+  "allowed_offline_skills": ["temperature-monitor", "gps-track", "alert-notify", "compliance-log"],
+  "enable_outbox_queue": true,
+  "sync_interval_seconds": 30,
+  "enable_queued_work": true
+}

@@ -1,0 +1,227 @@
+---
+// EscalationPanel — Human-in-the-loop escalation UI (task_049).
+// Displays pending escalations, allows approve/deny and batch-approve.
+const API = "";
+---
+
+<div class="rounded-xl border border-white/10 bg-[#101012] p-4">
+  <div class="mb-4 flex items-center justify-between">
+    <div>
+      <h3 class="text-sm font-medium text-gray-300">Эскалации</h3>
+      <p class="text-xs text-gray-500">Операции, требующие подтверждения оператором</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="esc-count" class="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-xs font-medium text-amber-400">0</span>
+      <button
+        id="esc-refresh"
+        type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5"
+      >
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- Batch actions -->
+  <div id="esc-batch-bar" class="mb-3 flex items-center gap-2 hidden">
+    <input type="checkbox" id="esc-select-all" class="h-4 w-4 rounded border-gray-600 bg-[#0a0a0b] text-amber-500 focus:ring-amber-500/50" />
+    <label for="esc-select-all" class="text-xs text-gray-400">Выбрать все</label>
+    <button
+      id="esc-batch-approve"
+      type="button"
+      class="ml-auto rounded-lg bg-emerald-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-500"
+    >
+      Одобрить выбранные
+    </button>
+  </div>
+
+  <!-- Escalations list -->
+  <div id="esc-list" class="space-y-2">
+    <div id="esc-empty" class="py-6 text-center text-xs text-gray-500">
+      Нет активных эскалаций
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div id="esc-error" class="mt-3 hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-400"></div>
+</div>
+
+<script define:vars={{ API }}>
+  const escList = document.getElementById("esc-list");
+  const escEmpty = document.getElementById("esc-empty");
+  const escCount = document.getElementById("esc-count");
+  const escBatchBar = document.getElementById("esc-batch-bar");
+  const escError = document.getElementById("esc-error");
+  const escSelectAll = document.getElementById("esc-select-all");
+
+  function severityColor(sev) {
+    return {
+      Critical: "text-rose-400",
+      High: "text-orange-400",
+      Medium: "text-amber-400",
+      Low: "text-gray-400",
+    }[sev] || "text-gray-400";
+  }
+
+  function severityBg(sev) {
+    return {
+      Critical: "bg-rose-500/20",
+      High: "bg-orange-500/20",
+      Medium: "bg-amber-500/20",
+      Low: "bg-gray-500/20",
+    }[sev] || "bg-gray-500/20";
+  }
+
+  function typeLabel(type) {
+    return type
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, s => s.toUpperCase())
+      .trim();
+  }
+
+  function formatAge(dateStr) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "только что";
+    if (mins < 60) return `${mins} мин. назад`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} ч. назад`;
+    return `${Math.floor(hours / 24)} дн. назад`;
+  }
+
+  async function fetchEscalations() {
+    escError.classList.add("hidden");
+    try {
+      const r = await fetch(`${API}/api/escalations/pending`);
+      if (!r.ok) throw new Error(await r.text());
+      const data = await r.json();
+      render(data.escalations || []);
+    } catch (e) {
+      escError.textContent = "Ошибка загрузки: " + e.message;
+      escError.classList.remove("hidden");
+    }
+  }
+
+  function render(escalations) {
+    const count = escalations.length;
+    escCount.textContent = count;
+
+    if (count === 0) {
+      escEmpty.classList.remove("hidden");
+      escBatchBar.classList.add("hidden");
+      escList.innerHTML = "";
+      escList.appendChild(escEmpty);
+      return;
+    }
+
+    escEmpty.classList.add("hidden");
+    escBatchBar.classList.remove("hidden");
+
+    escList.innerHTML = escalations.map((esc, i) => `
+      <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3" data-esc-id="${esc.escalationId}">
+        <div class="mb-2 flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              class="esc-check h-4 w-4 rounded border-gray-600 bg-[#0a0a0b] text-amber-500 focus:ring-amber-500/50"
+              data-id="${esc.escalationId}"
+            />
+            <span class="rounded px-1.5 py-0.5 text-xs font-medium ${severityColor(esc.severity)} ${severityBg(esc.severity)}">
+              ${esc.severity}
+            </span>
+            <span class="rounded bg-white/5 px-1.5 py-0.5 text-xs text-gray-400">
+              ${typeLabel(esc.type)}
+            </span>
+            ${esc.toolOrIntentName ? `<span class="text-xs text-gray-500">· ${esc.toolOrIntentName}</span>` : ""}
+          </div>
+          <span class="text-xs text-gray-500">${formatAge(esc.createdAt)}</span>
+        </div>
+
+        <div class="mb-2 text-sm font-medium text-gray-200">${esc.actionPlan}</div>
+        ${esc.context ? `<div class="mb-3 max-h-24 overflow-y-auto rounded bg-white/5 p-2 text-xs text-gray-400">${esc.context}</div>` : ""}
+
+        <div class="flex items-center gap-2">
+          <button
+            class="esc-approve rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-500"
+            data-id="${esc.escalationId}"
+          >
+            Одобрить
+          </button>
+          <button
+            class="esc-deny rounded border border-white/10 px-3 py-1 text-xs font-medium text-gray-300 transition-colors hover:bg-white/5"
+            data-id="${esc.escalationId}"
+          >
+            Отклонить
+          </button>
+          <span class="ml-auto text-xs text-gray-500">ID: ${esc.escalationId.slice(0, 16)}</span>
+        </div>
+      </div>
+    `).join("");
+
+    // Attach handlers
+    escList.querySelectorAll(".esc-approve").forEach(btn => {
+      btn.addEventListener("click", () => approve(btn.dataset.id));
+    });
+    escList.querySelectorAll(".esc-deny").forEach(btn => {
+      btn.addEventListener("click", () => deny(btn.dataset.id));
+    });
+    escList.querySelectorAll(".esc-check").forEach(cb => {
+      cb.addEventListener("change", updateBatchBar);
+    });
+
+    escSelectAll.addEventListener("change", () => {
+      escList.querySelectorAll(".esc-check").forEach(cb => { cb.checked = escSelectAll.checked; });
+    });
+  }
+
+  function updateBatchBar() {
+    const checked = [...escList.querySelectorAll(".esc-check:checked")];
+    const batchBtn = document.getElementById("esc-batch-approve");
+    if (batchBtn) {
+      batchBtn.textContent = `Одобрить выбранные (${checked.length})`;
+      batchBtn.disabled = checked.length === 0;
+    }
+  }
+
+  async function approve(id) {
+    const r = await fetch(`${API}/api/escalations/${id}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resolvedBy: "web-ui" })
+    });
+    if (r.ok) fetchEscalations();
+    else alert("Ошибка: " + (await r.text()));
+  }
+
+  async function deny(id) {
+    const r = await fetch(`${API}/api/escalations/${id}/deny`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resolvedBy: "web-ui" })
+    });
+    if (r.ok) fetchEscalations();
+    else alert("Ошибка: " + (await r.text()));
+  }
+
+  document.getElementById("esc-refresh").addEventListener("click", fetchEscalations);
+  document.getElementById("esc-batch-approve").addEventListener("click", async () => {
+    const ids = [...escList.querySelectorAll(".esc-check:checked")].map(cb => cb.dataset.id);
+    if (!ids.length) return;
+    const r = await fetch(`${API}/api/escalations/batch-approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids })
+    });
+    if (r.ok) {
+      escSelectAll.checked = false;
+      fetchEscalations();
+    } else {
+      alert("Ошибка: " + (await r.text()));
+    }
+  });
+
+  // Initial load
+  fetchEscalations();
+  // Auto-refresh every 30s
+  setInterval(fetchEscalations, 30000);
+</script>

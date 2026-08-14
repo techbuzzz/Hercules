@@ -1,6 +1,8 @@
 using System.Text;
 using Hercules.Agent;
+using Hercules.Lifecycle;
 using Hercules.Mesh;
+using Hercules.Mesh.A2A;
 using Hercules.Simulation;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
@@ -33,6 +35,8 @@ public sealed class ConsoleUI(
     DistributedReflection distributedReflection,
     SharedMemorySync sharedMemorySync,
     TemplateSimulationService simulation,
+    ILifecycleService? lifecycleService = null,
+    IAgentCardService? agentCardService = null,
     IApprovalService? approvalService = null,
     IEvalHarnessService? evalHarness = null)
 {
@@ -221,6 +225,14 @@ public sealed class ConsoleUI(
                 await HandleManifestCommandAsync(parts, ct);
                 break;
 
+            case "/lifecycle":
+                await HandleLifecycleCommandAsync(parts, ct);
+                break;
+
+            case "/agent-card":
+                await HandleAgentCardCommandAsync(parts, ct);
+                break;
+
             case "/skill":
                 if (parts.Length >= 3 && parts[1] == "eval")
                 {
@@ -379,6 +391,114 @@ public sealed class ConsoleUI(
 
             default:
                 AnsiConsole.MarkupLine("[yellow]Использование: /manifest show|refresh|validate[/]");
+                break;
+        }
+    }
+
+    private async Task HandleAgentCardCommandAsync(string[] parts, CancellationToken ct)
+    {
+        if (agentCardService is null)
+        {
+            AnsiConsole.MarkupLine("[yellow]Agent Card service не зарегистрирован.[/]");
+            return;
+        }
+
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "show";
+
+        switch (sub)
+        {
+            case "show":
+            {
+                AgentCard card = await agentCardService.GetAgentCardAsync(ct);
+                var table = new Table().Border(TableBorder.Rounded).Title("A2A Agent Card");
+                table.AddColumn("Поле");
+                table.AddColumn("Значение");
+                table.AddRow("Name", card.Name);
+                table.AddRow("Version", card.Version);
+                table.AddRow("Url", card.Url);
+                table.AddRow("Description", card.Description);
+                table.AddRow("Provider", card.Provider?.Organization ?? "—");
+                table.AddRow("Streaming", card.Capabilities.Streaming.ToString());
+                table.AddRow("PushNotifications", card.Capabilities.PushNotifications.ToString());
+                table.AddRow("Skills", card.Skills.Count.ToString());
+                table.AddRow("Auth", card.Authentication?.Schemes.Count > 0
+                    ? string.Join(", ", card.Authentication.Schemes)
+                    : "—");
+                table.AddRow("GeneratedAt", card.GeneratedAt);
+                table.AddRow("Fresh", agentCardService.IsCurrent() ? "[green]yes[/]" : "[yellow]stale[/]");
+                AnsiConsole.Write(table);
+
+                if (card.Skills.Count > 0)
+                {
+                    var skillTable = new Table().Border(TableBorder.Rounded).Title("AgentCard Skills");
+                    skillTable.AddColumn("Id");
+                    skillTable.AddColumn("Name");
+                    skillTable.AddColumn("Description");
+                    foreach (AgentCardSkill skill in card.Skills)
+                    {
+                        skillTable.AddRow(
+                            Markup.Escape(skill.Id),
+                            Markup.Escape(skill.Name),
+                            Markup.Escape(skill.Description));
+                    }
+                    AnsiConsole.Write(skillTable);
+                }
+
+                break;
+            }
+
+            case "refresh":
+            {
+                await AnsiConsole.Status().StartAsync("Обновляю Agent Card...", async _ =>
+                {
+                    // Invalidate cache by publishing
+                    await agentCardService.PublishAsync(ct);
+                });
+                AgentCard refreshed = await agentCardService.GetAgentCardAsync(ct);
+                AnsiConsole.MarkupLineInterpolated($"[green]✓ Agent Card обновлён:[/] {refreshed.Name} v{refreshed.Version}");
+                break;
+            }
+
+            case "import":
+            {
+                if (parts.Length < 3)
+                {
+                    AnsiConsole.MarkupLine("[yellow]Использование: /agent-card import <url>[/]");
+                    return;
+                }
+
+                string url = parts[2];
+                try
+                {
+                    AgentCard card = await AnsiConsole.Status().StartAsync(
+                        $"Импортирую Agent Card с {url}...",
+                        _ => agentCardService.ImportFromUrlAsync(url, ct));
+
+                    AnsiConsole.MarkupLineInterpolated($"[green]✓ Импортирован:[/] {card.Name} ({card.Url})");
+                    if (card.Skills.Count > 0)
+                    {
+                        AnsiConsole.MarkupLineInterpolated($"  Навыков: {card.Skills.Count}");
+                        foreach (AgentCardSkill skill in card.Skills.Take(5))
+                        {
+                            AnsiConsole.MarkupLineInterpolated($"  • {skill.Id}: {skill.Description}");
+                        }
+
+                        if (card.Skills.Count > 5)
+                        {
+                            AnsiConsole.MarkupLineInterpolated($"  ... и ещё {card.Skills.Count - 5}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]✗ Ошибка импорта:[/] {ex.Message}");
+                }
+
+                break;
+            }
+
+            default:
+                AnsiConsole.MarkupLine("[yellow]Использование: /agent-card show|refresh|import <url>[/]");
                 break;
         }
     }
@@ -923,8 +1043,10 @@ public sealed class ConsoleUI(
                     IntentIds.NewRequestId(),
                     manifestService.Current.AgentId,
                     messageText,
-                    messageText,
-                    TraceId: Guid.NewGuid().ToString("N")[..8]);
+                    messageText)
+                {
+                    TraceId = Guid.NewGuid().ToString("N")[..8]
+                };
                 try
                 {
                     var resp = await intentRouter.RouteAsync(envelope, ct);
@@ -954,8 +1076,10 @@ public sealed class ConsoleUI(
                     IntentIds.NewRequestId(),
                     manifestService.Current.AgentId,
                     fanOutMessage,
-                    fanOutMessage,
-                    TraceId: Guid.NewGuid().ToString("N")[..8]);
+                    fanOutMessage)
+                {
+                    TraceId = Guid.NewGuid().ToString("N")[..8]
+                };
                 try
                 {
                     var result = await meshRouter.RouteWithFanOutAsync(fanOutEnvelope, ct);
@@ -1141,6 +1265,21 @@ public sealed class ConsoleUI(
         table.AddRow("/manifest show", "Показать текущий манифест агента");
         table.AddRow("/manifest refresh", "Пересобрать и сохранить манифест в файл");
         table.AddRow("/manifest validate", "Провалидировать манифест (проверить ошибки)");
+        table.AddRow("/agent-card show", "Показать A2A Agent Card");
+        table.AddRow("/agent-card refresh", "Обновить и сохранить Agent Card");
+        table.AddRow("/agent-card import {url}", "Импортировать remote Agent Card");
+        table.AddRow("/lifecycle inventory", "Fleet inventory (agents + skill packages)");
+        table.AddRow("/lifecycle health", "Проверить health локального агента");
+        table.AddRow("/lifecycle health {agentId}", "Проверить health конкретного агента");
+        table.AddRow("/lifecycle start {agentId}", "Start агент");
+        table.AddRow("/lifecycle stop {agentId}", "Stop агент");
+        table.AddRow("/lifecycle drain {agentId}", "Drain агент (прекратить приём новых запросов)");
+        table.AddRow("/lifecycle decommission {agentId}", "Decommission агент");
+        table.AddRow("/lifecycle rollback {agentId}", "Rollback агента");
+        table.AddRow("/lifecycle update {pkgId} {agentId}", "Update skill package на агенте");
+        table.AddRow("/lifecycle canary {pkgId} {agentId}", "Canary deploy skill package");
+        table.AddRow("/lifecycle promote {pkgId} {agentId}", "Promote canary в полную deploy");
+        table.AddRow("/lifecycle rollback-pkg {pkgId} {agentId}", "Rollback skill package");
         table.AddRow("/help", "Эта справка");
         table.AddRow("/exit", "Выход с сохранением контекста");
         AnsiConsole.Write(table);
@@ -1204,5 +1343,200 @@ public sealed class ConsoleUI(
         }
 
         return result.ToArray();
+    }
+
+    private async Task HandleLifecycleCommandAsync(string[] parts, CancellationToken ct)
+    {
+        if (lifecycleService is null)
+        {
+            AnsiConsole.MarkupLine("[yellow]LifecycleService не зарегистрирован (CLI). Используйте Web API.[/]");
+            return;
+        }
+
+        var sub = parts.Length >= 2 ? parts[1].ToLowerInvariant() : "help";
+
+        switch (sub)
+        {
+            case "inventory":
+            {
+                var agents = await lifecycleService.GetAgentInventoryAsync(ct);
+                var packages = await lifecycleService.GetSkillPackageInventoryAsync(ct);
+
+                var aTable = new Table().Border(TableBorder.Rounded).Title("Agent Inventory");
+                aTable.AddColumn("AgentId");
+                aTable.AddColumn("Display");
+                aTable.AddColumn("State");
+                aTable.AddColumn("Health");
+                aTable.AddColumn("Skills");
+                foreach (var a in agents)
+                {
+                    aTable.AddRow(
+                        Markup.Escape(a.AgentId),
+                        Markup.Escape(a.DisplayName),
+                        a.State,
+                        a.HealthStatus,
+                        a.SkillPackages.Count.ToString());
+                }
+                AnsiConsole.Write(aTable);
+
+                var pTable = new Table().Border(TableBorder.Rounded).Title("Skill Package Inventory");
+                pTable.AddColumn("PackageId");
+                pTable.AddColumn("Version");
+                pTable.AddColumn("State");
+                pTable.AddColumn("Canary");
+                foreach (var p in packages)
+                {
+                    pTable.AddRow(
+                        Markup.Escape(p.PackageId),
+                        p.Version,
+                        p.State,
+                        p.IsCanary ? "✓" : "");
+                }
+                AnsiConsole.Write(pTable);
+                break;
+            }
+
+            case "health":
+            {
+                var agentId = parts.Length >= 3 ? parts[2] : null;
+                var result = await lifecycleService.CheckHealthAsync(agentId, ct);
+
+                var hTable = new Table().Border(TableBorder.Rounded).Title($"Health: {result.AgentId}");
+                hTable.AddColumn("Параметр");
+                hTable.AddColumn("Значение");
+                hTable.AddRow("Status", result.Status);
+                hTable.AddRow("Latency", $"{result.LatencyMs}ms");
+                hTable.AddRow("Checked", result.CheckedAt.ToString("O"));
+                if (result.Issues.Count > 0)
+                {
+                    hTable.AddRow("Issues", string.Join("; ", result.Issues));
+                }
+                foreach (var (k, v) in result.Details)
+                {
+                    hTable.AddRow(k, v);
+                }
+                AnsiConsole.Write(hTable);
+                break;
+            }
+
+            case "start":
+            case "stop":
+            case "drain":
+            case "decommission":
+            {
+                if (parts.Length < 3)
+                {
+                    AnsiConsole.MarkupLine($"[yellow]Использование: /lifecycle {sub} {{agentId}}[/]");
+                    return;
+                }
+                var agentId = parts[2];
+                var result = sub switch
+                {
+                    "start" => await lifecycleService.StartAgentAsync(agentId, ct),
+                    "stop" => await lifecycleService.StopAgentAsync(agentId, ct),
+                    "drain" => await lifecycleService.DrainAgentAsync(agentId, ct),
+                    "decommission" => await lifecycleService.DecommissionAgentAsync(agentId, ct),
+                    _ => throw new InvalidOperationException()
+                };
+
+                if (result.Success)
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[green]✓[/] {sub} succeeded: {result.Message}");
+                    if (result.NewState is not null)
+                        AnsiConsole.MarkupLineInterpolated($"[grey]  State: {result.PreviousState} → {result.NewState}[/]");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLineInterpolated($"[red]✗[/] {sub} failed: {result.Message}");
+                }
+                break;
+            }
+
+            case "rollback":
+            {
+                if (parts.Length < 3)
+                {
+                    AnsiConsole.MarkupLine("[yellow]Использование: /lifecycle rollback {agentId}[/]");
+                    return;
+                }
+                var agentId = parts[2];
+                var result = await lifecycleService.RollbackAgentAsync(agentId, ct);
+                if (result.Success)
+                    AnsiConsole.MarkupLineInterpolated($"[green]✓[/] Agent rollback: {result.FromVersion} → {result.ToVersion}");
+                else
+                    AnsiConsole.MarkupLineInterpolated($"[red]✗[/] {result.Error}");
+                break;
+            }
+
+            case "update":
+            case "rollback-pkg":
+            {
+                if (parts.Length < 4)
+                {
+                    AnsiConsole.MarkupLine($"[yellow]Использование: /lifecycle {sub} {{packageId}} {{agentId}}[/]");
+                    return;
+                }
+                var packageId = parts[2];
+                var targetAgentId = parts[3];
+
+                if (sub == "update")
+                {
+                    var result = await lifecycleService.UpdateSkillPackageAsync(packageId, targetAgentId, ct);
+                    AnsiConsole.MarkupLine(result.Success
+                        ? $"[green]✓[/] Package '{packageId}' updated on '{targetAgentId}'"
+                        : $"[red]✗[/] {result.Message}");
+                }
+                else
+                {
+                    var result = await lifecycleService.RollbackSkillPackageAsync(packageId, targetAgentId, ct);
+                    if (result.Success)
+                        AnsiConsole.MarkupLineInterpolated($"[green]✓[/] Package rollback: {result.FromVersion} → {result.ToVersion}");
+                    else
+                        AnsiConsole.MarkupLineInterpolated($"[red]✗[/] {result.Error}");
+                }
+                break;
+            }
+
+            case "canary":
+            {
+                if (parts.Length < 4)
+                {
+                    AnsiConsole.MarkupLine("[yellow]Использование: /lifecycle canary {packageId} {agentId} [traffic%][/]");
+                    return;
+                }
+                var packageId = parts[2];
+                var targetAgentId = parts[3];
+                var traffic = parts.Length >= 5 && int.TryParse(parts[4], out var t) ? t : 10;
+
+                var result = await lifecycleService.DeployCanaryAsync(packageId, targetAgentId, traffic, ct);
+                if (result.Success)
+                    AnsiConsole.MarkupLineInterpolated($"[green]✓[/] Canary deployed: {packageId} on {targetAgentId} ({traffic}% traffic)");
+                else
+                    AnsiConsole.MarkupLineInterpolated($"[red]✗[/] {result.Error}");
+                break;
+            }
+
+            case "promote":
+            {
+                if (parts.Length < 4)
+                {
+                    AnsiConsole.MarkupLine("[yellow]Использование: /lifecycle promote {packageId} {agentId}[/]");
+                    return;
+                }
+                var packageId = parts[2];
+                var targetAgentId = parts[3];
+                var result = await lifecycleService.PromoteCanaryAsync(packageId, targetAgentId, ct);
+                AnsiConsole.MarkupLine(result.Success
+                    ? $"[green]✓[/] Canary promoted: {packageId}"
+                    : $"[red]✗[/] {result.Message}");
+                break;
+            }
+
+            default:
+                AnsiConsole.MarkupLine("[yellow]/lifecycle —.lifecycle management. Используйте /lifecycle inventory для начала.[/]");
+                AnsiConsole.MarkupLine("  agents: start | stop | drain | decommission | rollback");
+                AnsiConsole.MarkupLine("  packages: update | canary | promote | rollback-pkg");
+                break;
+        }
     }
 }

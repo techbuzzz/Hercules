@@ -17,7 +17,9 @@ public static class SkillQualityController
             {
                 var skill = adapter.GetSkill(id);
                 if (skill is null)
+                {
                     return Results.NotFound(new { error = "Навык не найден." });
+                }
 
                 var score = await service.ComputeScoreAsync(id, skill.Meta.Version, ct);
                 return Results.Ok(score);
@@ -25,10 +27,7 @@ public static class SkillQualityController
 
         // GET /api/skills/{id}/quality/history — all versions history
         app.MapGet("/api/skills/{id}/quality/history",
-            (string id, ISkillQualityService service) =>
-            {
-                return Results.Ok(service.GetHistoryAsync(id));
-            }).WithName("GetSkillQualityHistory");
+            (string id, ISkillQualityService service) => Results.Ok((object?)service.GetHistoryAsync(id))).WithName("GetSkillQualityHistory");
 
         // POST /api/skills/{id}/quality/record — record a quality event
         app.MapPost("/api/skills/{id}/quality/record",
@@ -38,7 +37,9 @@ public static class SkillQualityController
             {
                 var skill = adapter.GetSkill(id);
                 if (skill is null)
+                {
                     return Results.NotFound(new { error = "Навык не найден." });
+                }
 
                 switch (req.Event?.ToLowerInvariant())
                 {
@@ -69,7 +70,9 @@ public static class SkillQualityController
             {
                 var skill = adapter.GetSkill(id);
                 if (skill is null)
+                {
                     return Results.NotFound(new { error = "Навык не найден." });
+                }
 
                 var score = await service.ComputeScoreAsync(id, skill.Meta.Version, ct);
                 return Results.Ok(new

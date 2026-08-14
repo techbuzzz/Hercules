@@ -1,0 +1,7 @@
+{
+  "name": "Vending Machine Fleet",
+  "description": "Fleet template for vending operations: inventory tracking, cashless payments, predictive restocking, machine health monitoring. Validated for outdoor and indoor vending.",
+  "version": 1,
+  "vertical": "vending",
+  "agent_template_file": "vending.agenttemplate"
+}
