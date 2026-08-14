@@ -42,6 +42,11 @@ Interface change (`LlmResponse` получает новые поля) — backwa
 ## Validation
 - `dotnet build src/agent/Hercules.csproj` — passes.
 - `dotnet test tests/Hercules.Agent.Tests/Hercules.Agent.Tests.csproj --filter "FullyQualifiedName~ResilientLLMClient"` — passes (новые тесты + старые retry-тесты).
+- `dotnet test tests/Hercules.Agent.Tests/Hercules.Agent.Tests.csproj --filter "FullyQualifiedName~LLM|FullyQualifiedName~AgentCore"` — 241/241 passed.
+- Полный прогон: 1783 passed, 10 failed (все failures pre-existing — OtelServiceTests, NumericValidatorTests, BudgetGuardTests, WasmToolTests, RedisTaskQueueTests — environmental, не связаны с правкой; подтверждено `git stash` + re-run).
+
+## Commit
+- `8169d87` — `fix(roadmap): complete task 076 - per-call provider/model in LlmResponse`
 
 ## Links
 - Backlog: [../backlog.md](../backlog.md)
