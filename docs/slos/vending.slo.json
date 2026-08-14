@@ -1,0 +1,109 @@
+{
+  "vertical": "vending",
+  "description": "Vending machine management: MDB/CCTalk integration, payment processing, inventory tracking. Revenue-critical, offline-queuing disabled.",
+  "version": "1.0",
+  "availabilityTarget": 0.995,
+  "responseTimeTargetMs": 3000.0,
+  "dataLossTargetPerDay": 0,
+  "recoveryTimeTargetMinutes": 10,
+  "costTargetUsd": 2.00,
+  "alertThresholds": {
+    "availabilityWarningPct": 99.0,
+    "availabilityCriticalPct": 97.0,
+    "responseTimeWarningMs": 5000.0,
+    "responseTimeCriticalMs": 10000.0,
+    "dataLossWarningPerDay": 0,
+    "dataLossCriticalPerDay": 1,
+    "recoveryTimeWarningMinutes": 5,
+    "recoveryTimeCriticalMinutes": 15,
+    "costWarningPct": 80.0,
+    "costCriticalPct": 95.0
+  },
+  "runbooks": {
+    "availability": {
+      "title": "Vending agent unavailable",
+      "symptoms": [
+        "Agent heartbeat missing",
+        "MDB/CCTalk commands not processing",
+        "Payment requests failing"
+      ],
+      "diagnosisSteps": [
+        "Check vending machine power",
+        "Check hercules-agent process status",
+        "Review mesh connectivity",
+        "Check if in offline mode"
+      ],
+      "mitigationSteps": [
+        "Restart agent service",
+        "Verify MDB interface operational",
+        "Check payment gateway connectivity"
+      ],
+      "escalationTrigger": "If down >20 minutes, escalate to field service."
+    },
+    "responseTime": {
+      "title": "Vending response time degraded",
+      "symptoms": [
+        "Payment processing delays >3s",
+        "MDB commands timing out"
+      ],
+      "diagnosisSteps": [
+        "Check network latency",
+        "Review mesh observability",
+        "Check LLM response times"
+      ],
+      "mitigationSteps": [
+        "Switch to degraded mode",
+        "Reduce skill complexity",
+        "Use faster LLM model"
+      ],
+      "escalationTrigger": "If response >10s and affecting payments, escalate immediately."
+    },
+    "dataLoss": {
+      "title": "Vending data loss",
+      "symptoms": [
+        "Outbox pending >0 (queued work disabled offline)",
+        "Transaction log gaps"
+      ],
+      "diagnosisSteps": [
+        "Check network connectivity",
+        "Review payment transaction log"
+      ],
+      "mitigationSteps": [
+        "Reconnect to cloud",
+        "Verify transaction log integrity"
+      ],
+      "escalationTrigger": "If any payment transaction is lost, escalate to finance/compliance."
+    },
+    "recoveryTime": {
+      "title": "Vending recovery time exceeded",
+      "symptoms": [
+        "Recovery from outage >10 minutes"
+      ],
+      "diagnosisSteps": [
+        "Review degradation events",
+        "Check network stability"
+      ],
+      "mitigationSteps": [
+        "Verify MDB interface restored",
+        "Confirm payment gateway responding"
+      ],
+      "escalationTrigger": "If recovery >15 min, escalate to field service."
+    },
+    "cost": {
+      "title": "Vending daily cost budget exceeded",
+      "symptoms": [
+        "Daily cost >$2.00"
+      ],
+      "diagnosisSteps": [
+        "Review LLM call count",
+        "Check skill evaluation rate"
+      ],
+      "mitigationSteps": [
+        "Switch to cheapest model",
+        "Reduce eval to monthly",
+        "Disable self-improvement"
+      ],
+      "escalationTrigger": "If cost >$3/day, escalate to operations."
+    }
+  }
+}

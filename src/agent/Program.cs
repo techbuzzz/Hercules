@@ -1,6 +1,7 @@
 using System.Text;
 using Hercules.Agent;
 using Hercules.Audit;
+using Hercules.Backup;
 using Hercules.Budget;
 using Hercules.CLI;
 using Hercules.CodeExecution;
@@ -24,6 +25,7 @@ using Hercules.Observability;
 using Hercules.Quotas;
 using Hercules.Redaction;
 using Hercules.Security;
+using Hercules.Slo;
 using Hercules.Simulation;
 using Hercules.Reflection;
 using Hercules.Skills;
@@ -476,6 +478,28 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<DegradationObservability>();
     services.AddSingleton<OperatorNotificationService>();
     services.AddSingleton<DegradationManager>(); // BackgroundService
+
+    // task_063: Backup & Recovery — encrypted backup archives, scheduled backups, restore
+    services.AddSingleton(appConfig.Backup);
+    services.AddSingleton<EncryptionService>();
+    services.AddSingleton<IBackupService>(sp =>
+        new BackupService(
+            sp.GetRequiredService<BackupConfig>(),
+            sp.GetRequiredService<EncryptionService>(),
+            sp.GetRequiredService<ILogger<BackupService>>(),
+            sp.GetRequiredService<StorageConfig>().DataRoot));
+    services.AddHostedService<BackupScheduler>();
+
+    // task_064: Operational SLOs — availability, response-time, data-loss, recovery-time, cost targets
+    services.AddSingleton(appConfig.Slos);
+    services.AddSingleton<ISloService>(sp =>
+        new SloService(
+            sp.GetRequiredService<SlosConfig>(),
+            sp.GetRequiredService<IAuditService>(),
+            sp.GetRequiredService<Hercules.Mesh.Observability.IMeshObservabilityService>(),
+            sp.GetService<Hercules.Offline.IOutboxStore>(),
+            sp.GetService<IBudgetService>(),
+            sp.GetRequiredService<ILogger<SloService>>()));
 
     // Агент
     services.AddSingleton<SkillManager>();

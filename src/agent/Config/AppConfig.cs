@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json.Serialization;
 using Hercules.Cache;
 using Hercules.Mesh.Auth;
@@ -155,6 +155,14 @@ public sealed class AppConfig
     // task_061: Local-first degradation — fallback strategies, operator notifications, observability
     /// <summary>Local-first degradation config (task_061): health checks, fallback strategies, notifications.</summary>
     public Degradation.DegradationConfig Degradation { get; set; } = new();
+
+    // task_063: Backup & Recovery
+    /// <summary>Backup config (task_063): encryption, retention, scheduling.</summary>
+    public Backup.BackupConfig Backup { get; set; } = new();
+
+    // task_064: Operational SLOs
+    /// <summary>SLO config (task_064): SLO definitions directory, alert thresholds.</summary>
+    public SlosConfig Slos { get; set; } = new();
 }
 
 /// <summary>
@@ -1388,4 +1396,72 @@ public sealed class MeshCentralizedObservabilityConfig
 
     /// <summary>Максимальная длина строки в tag value (больше обрезается). Default: 512.</summary>
     public int MaxTagValueLength { get; set; } = 512;
+}
+/// <summary>
+///     Конфигурация operational SLOs (task_064).
+///     Per-vertical availability, response-time, data-loss, recovery-time, cost targets,
+///     alert thresholds and severity levels.
+/// </summary>
+public sealed class SlosConfig
+{
+    /// <summary>Включить SLO tracking. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+///     Директория с SLO definition JSON-файлами.
+///     Файлы: {vertical}.slo.json, например: greenhouse.slo.json, cold-chain.slo.json.
+///     Default: "docs/slos".
+/// </summary>
+    public string SlosDir { get; set; } = "docs/slos";
+
+    /// <summary>Интервал evaluation SLO в секундах. Default: 60.</summary>
+    public int EvaluationIntervalSeconds { get; set; } = 60;
+
+    /// <summary>
+///     Дефолтные alert thresholds (переопределяются per-vertical в .slo.json).
+///     Пороги для warning и critical уровней.
+/// </summary>
+    public SlosDefaultThresholds DefaultThresholds { get; set; } = new();
+
+    /// <summary>Включить alerting при SLO breach. Default: true.</summary>
+    public bool EnableAlerting { get; set; } = true;
+
+    /// <summary>Включить SLO status endpoint. Default: true.</summary>
+    public bool EnableStatusEndpoint { get; set; } = true;
+}
+
+/// <summary>
+///     Дефолтные alert thresholds для всех verticals (переопределяемые per-vertical).
+/// </summary>
+public sealed class SlosDefaultThresholds
+{
+    /// <summary>Дефолтный warning threshold для availability (% от целевого). Default: 95.</summary>
+    public double AvailabilityWarningPct { get; set; } = 95.0;
+
+    /// <summary>Дефолтный critical threshold для availability (% от целевого). Default: 90.</summary>
+    public double AvailabilityCriticalPct { get; set; } = 90.0;
+
+    /// <summary>Дефолтный warning threshold для response time (ms, 95th percentile). Default: 2000.</summary>
+    public double ResponseTimeWarningMs { get; set; } = 2000.0;
+
+    /// <summary>Дефолтный critical threshold для response time (ms, 95th percentile). Default: 5000.</summary>
+    public double ResponseTimeCriticalMs { get; set; } = 5000.0;
+
+    /// <summary>Дефолтный warning threshold для data loss (events/day). Default: 10.</summary>
+    public int DataLossWarningPerDay { get; set; } = 10;
+
+    /// <summary>Дефолтный critical threshold для data loss (events/day). Default: 100.</summary>
+    public int DataLossCriticalPerDay { get; set; } = 100;
+
+    /// <summary>Дефолтный warning threshold для recovery time (minutes). Default: 15.</summary>
+    public int RecoveryTimeWarningMinutes { get; set; } = 15;
+
+    /// <summary>Дефолтный critical threshold для recovery time (minutes). Default: 30.</summary>
+    public int RecoveryTimeCriticalMinutes { get; set; } = 30;
+
+    /// <summary>Дефолтный warning threshold для cost (% от дневного budget). Default: 80.</summary>
+    public double CostWarningPct { get; set; } = 80.0;
+
+    /// <summary>Дефолтный critical threshold для cost (% от дневного budget). Default: 95.</summary>
+    public double CostCriticalPct { get; set; } = 95.0;
 }
