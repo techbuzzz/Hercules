@@ -58,7 +58,7 @@ function saveConnections(): void {
 
 // --- API key storage via safeStorage ---
 
-function encryptKey(connectionId: string, key: string, role: "contribute" | "system"): void {
+export function encryptKey(connectionId: string, key: string, role: "contribute" | "system"): void {
   if (!safeStorage.isEncryptionAvailable()) {
     // Fallback: store in plaintext file (dev only, warn in console)
     console.warn("[safeStorage] Encryption not available, storing key in plaintext (dev mode)");
@@ -83,7 +83,7 @@ function encryptKey(connectionId: string, key: string, role: "contribute" | "sys
   writeFileSync(keysPath, JSON.stringify(store, null, 2), "utf-8");
 }
 
-function decryptKey(connectionId: string, role: "contribute" | "system"): string | null {
+export function decryptKey(connectionId: string, role: "contribute" | "system"): string | null {
   const tryPath = existsSync(keysPath) ? keysPath : `${keysPath}.plain`;
   if (!existsSync(tryPath)) return null;
   const raw = readFileSync(tryPath, "utf-8");
@@ -152,21 +152,17 @@ export function updateConnection(id: string, patch: Partial<Connection>): Connec
 }
 
 export async function healthCheck(id: string): Promise<HealthStatus> {
-  const conn = connections.find((c) => c.id === id);
-  if (!conn) {
+  const idx = connections.findIndex((c) => c.id === id);
+  if (idx === -1) {
     return { online: false, agentId: null, displayName: null, latencyMs: null, error: "Connection not found" };
   }
+  const conn = connections[idx];
   const key = decryptKey(id, "contribute");
   const health = await probeHealth(conn.baseUrl, key ?? "");
-  connections[idx_of(id)].status = health.online ? "online" : "offline";
-  connections[idx_of(id)].lastSeen = new Date().toISOString();
+  connections[idx].status = health.online ? "online" : "offline";
+  connections[idx].lastSeen = new Date().toISOString();
   saveConnections();
   return health;
-}
-
-function idx_of(id: string): number {
-  const i = connections.findIndex((c) => c.id === id);
-  return i === -1 ? 0 : i;
 }
 
 export function setActive(id: string): void {

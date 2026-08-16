@@ -154,6 +154,7 @@ export interface IpcApi {
     getSystemKey(connectionId: string): Promise<string | null>;
     setSystemKey(connectionId: string, key: string): Promise<void>;
     removeSystemKey(connectionId: string): Promise<void>;
+    getContributeKey(connectionId: string): Promise<string | null>;
   };
   // App info
   app: {
@@ -196,6 +197,7 @@ export const IpcChannels = {
   KEYS_GET_SYSTEM: "keys:getSystem",
   KEYS_SET_SYSTEM: "keys:setSystem",
   KEYS_REMOVE_SYSTEM: "keys:removeSystem",
+  KEYS_GET_CONTRIBUTE: "keys:getContributeKey",
 
   APP_VERSION: "app:version",
   APP_DATA_PATH: "app:dataPath",

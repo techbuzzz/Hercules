@@ -1,4 +1,3 @@
-import { net } from "electron";
 import { execSync } from "node:child_process";
 import type { DiscoveredAgent, ScanProgress } from "@shared/protocol";
 import { getSettings } from "./settings";

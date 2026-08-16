@@ -1,0 +1,92 @@
+name: Hercules Studio CI
+
+on:
+  push:
+    branches: [main, feat/*]
+    paths:
+      - "src/hercules-studio/**"
+      - ".github/workflows/studio-ci.yml"
+  pull_request:
+    paths:
+      - "src/hercules-studio/**"
+
+jobs:
+  build-test-package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.12"
+          cache: "npm"
+          cache-dependency-path: src/hercules-studio/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/hercules-studio
+        run: npm install
+
+      - name: Lint (Biome)
+        working-directory: src/hercules-studio
+        run: npm run lint:check
+
+      - name: Typecheck
+        working-directory: src/hercules-studio
+        run: npm run typecheck
+
+      - name: Unit tests (Vitest)
+        working-directory: src/hercules-studio
+        run: npm run test
+
+      - name: Build (electron-vite)
+        working-directory: src/hercules-studio
+        run: npm run build
+
+      - name: Package (electron-builder)
+        working-directory: src/hercules-studio
+        run: npm run package:win
+        continue-on-error: true # Packaging may fail in CI without code signing
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hercules-studio-build
+          path: |
+            src/hercules-studio/out/
+            src/hercules-studio/release/*.exe
+          retention-days: 7
+
+  release:
+    needs: build-test-package
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/studio-v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.12"
+
+      - name: Install dependencies
+        working-directory: src/hercules-studio
+        run: npm install
+
+      - name: Build + Package
+        working-directory: src/hercules-studio
+        run: npm run package:win
+
+      - name: Release to GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src/hercules-studio/release/*.exe
+            src/hercules-studio/release/latest.yml
+          draft: true
+          generate_release_notes: true

@@ -1,20 +1,16 @@
-import { ipcMain, app, shell, Notification } from "electron";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import { spawn, ChildProcess } from "node:child_process";
-import Database from "better-sqlite3";
+import { ipcMain, app, shell, Notification, BrowserWindow } from "electron";
+import { readFileSync, writeFileSync } from "node:fs";
+import { spawn, type ChildProcess } from "node:child_process";
 import {
   IpcChannels,
-  type IpcApi,
   type NewConnection,
   type Connection,
-  type ScanSettings,
   type StudioSettings,
   type LicenseConsent,
   type TrayMenu,
 } from "@shared/protocol";
-import { getDb, initSqlite } from "./sqlite";
-import { getConsent, acceptConsent, initLicense } from "./license";
+import { getDb } from "./sqlite";
+import { getConsent, acceptConsent } from "./license";
 import {
   listConnections,
   addConnection,
@@ -22,10 +18,12 @@ import {
   updateConnection,
   healthCheck,
   setActive,
-  initConnections,
+  getApiKey,
+  encryptKey,
+  decryptKey,
 } from "./connections";
-import { scanAgents, initScanner } from "./scanner";
-import { getSettings, updateSettings, initSettings } from "./settings";
+import { scanAgents } from "./scanner";
+import { getSettings, updateSettings } from "./settings";
 
 const terminalProcesses = new Map<number, ChildProcess>();
 
@@ -43,9 +41,12 @@ export function registerIpcHandlers(): void {
     return removeConnection(id);
   });
 
-  ipcMain.handle(IpcChannels.CONNECTIONS_UPDATE, async (_e, id: string, patch: Partial<Connection>): Promise<Connection> => {
-    return updateConnection(id, patch);
-  });
+  ipcMain.handle(
+    IpcChannels.CONNECTIONS_UPDATE,
+    async (_e, id: string, patch: Partial<Connection>): Promise<Connection> => {
+      return updateConnection(id, patch);
+    },
+  );
 
   ipcMain.handle(IpcChannels.CONNECTIONS_HEALTH, async (_e, id: string) => {
     return healthCheck(id);
@@ -73,22 +74,46 @@ export function registerIpcHandlers(): void {
     await shell.openExternal(url);
   });
 
-  ipcMain.handle(IpcChannels.NATIVE_NOTIFICATION, async (_e, title: string, body: string): Promise<void> => {
-    if (Notification.isSupported()) {
-      new Notification({ title, body }).show();
-    }
-  });
+  ipcMain.handle(
+    IpcChannels.NATIVE_NOTIFICATION,
+    async (_e, title: string, body: string): Promise<void> => {
+      if (Notification.isSupported()) {
+        new Notification({ title, body }).show();
+      }
+    },
+  );
 
   ipcMain.handle(IpcChannels.NATIVE_TRAY, async (_e, _icon: string, _menu: TrayMenu): Promise<void> => {
     // TODO: implement tray in Stage 9
   });
 
-  ipcMain.handle(IpcChannels.NATIVE_SPAWN, async (_e, cmd: string, args: string[], cwd?: string): Promise<number> => {
-    const proc = spawn(cmd, args, { cwd, shell: true });
-    terminalProcesses.set(proc.pid ?? 0, proc);
-    // Output forwarding is handled via webContents.send
-    return proc.pid ?? 0;
-  });
+  ipcMain.handle(
+    IpcChannels.NATIVE_SPAWN,
+    async (_e, cmd: string, args: string[], cwd?: string): Promise<number> => {
+      const proc = spawn(cmd, args, { cwd, shell: true });
+      const pid = proc.pid ?? 0;
+      terminalProcesses.set(pid, proc);
+
+      // Forward stdout/stderr to renderer via IPC
+      const win = BrowserWindow.getFocusedWindow();
+      proc.stdout?.on("data", (data: Buffer) => {
+        win?.webContents.send(IpcChannels.NATIVE_TERMINAL_OUTPUT, pid, data.toString());
+      });
+      proc.stderr?.on("data", (data: Buffer) => {
+        win?.webContents.send(IpcChannels.NATIVE_TERMINAL_OUTPUT, pid, data.toString());
+      });
+      proc.on("exit", (code) => {
+        win?.webContents.send(
+          IpcChannels.NATIVE_TERMINAL_OUTPUT,
+          pid,
+          `\n[process exited with code ${code}]\n`,
+        );
+        terminalProcesses.delete(pid);
+      });
+
+      return pid;
+    },
+  );
 
   ipcMain.handle(IpcChannels.NATIVE_KILL, async (_e, pid: number): Promise<void> => {
     const proc = terminalProcesses.get(pid);
@@ -115,31 +140,43 @@ export function registerIpcHandlers(): void {
     return getConsent();
   });
 
-  ipcMain.handle(IpcChannels.LICENSE_ACCEPT, async (_e, type: "nonprofit" | "commercial", key?: string): Promise<void> => {
-    await acceptConsent(type, key);
-  });
+  ipcMain.handle(
+    IpcChannels.LICENSE_ACCEPT,
+    async (_e, type: "nonprofit" | "commercial", key?: string): Promise<void> => {
+      acceptConsent(type, key);
+    },
+  );
 
   // ---- Settings ----
   ipcMain.handle(IpcChannels.SETTINGS_GET, async (): Promise<StudioSettings> => {
     return getSettings();
   });
 
-  ipcMain.handle(IpcChannels.SETTINGS_UPDATE, async (_e, patch: Partial<StudioSettings>): Promise<StudioSettings> => {
-    return updateSettings(patch);
-  });
+  ipcMain.handle(
+    IpcChannels.SETTINGS_UPDATE,
+    async (_e, patch: Partial<StudioSettings>): Promise<StudioSettings> => {
+      return updateSettings(patch);
+    },
+  );
 
   // ---- Keys ----
-  ipcMain.handle(IpcChannels.KEYS_GET_SYSTEM, async (_e, _connectionId: string): Promise<string | null> => {
-    // TODO: implement safeStorage in connections.ts
-    return null;
+  ipcMain.handle(IpcChannels.KEYS_GET_SYSTEM, async (_e, connectionId: string): Promise<string | null> => {
+    return decryptKey(connectionId, "system");
   });
 
-  ipcMain.handle(IpcChannels.KEYS_SET_SYSTEM, async (_e, _connectionId: string, _key: string): Promise<void> => {
-    // TODO: implement safeStorage in connections.ts
-  });
+  ipcMain.handle(
+    IpcChannels.KEYS_SET_SYSTEM,
+    async (_e, connectionId: string, key: string): Promise<void> => {
+      encryptKey(connectionId, key, "system");
+    },
+  );
 
   ipcMain.handle(IpcChannels.KEYS_REMOVE_SYSTEM, async (_e, _connectionId: string): Promise<void> => {
-    // TODO: implement safeStorage in connections.ts
+    // TODO: implement key removal from safeStorage store
+  });
+
+  ipcMain.handle(IpcChannels.KEYS_GET_CONTRIBUTE, async (_e, connectionId: string): Promise<string | null> => {
+    return getApiKey(connectionId, "contribute");
   });
 
   // ---- App info ----

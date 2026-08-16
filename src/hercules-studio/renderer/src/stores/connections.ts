@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import type { Connection, NewConnection, DiscoveredAgent, ScanProgress } from "@shared/protocol";
+import type { Connection, NewConnection, DiscoveredAgent } from "@shared/protocol";
+import { HerculesClient } from "../sdk/client";
 
 export const useConnectionsStore = defineStore("connections", () => {
   const list = ref<Connection[]>([]);
@@ -8,6 +9,7 @@ export const useConnectionsStore = defineStore("connections", () => {
   const discovered = ref<DiscoveredAgent[]>([]);
   const scanning = ref(false);
   const showAddForm = ref(false);
+  const client = ref<HerculesClient | null>(null);
 
   const active = computed(() => list.value.find((c) => c.id === activeId.value) ?? null);
   const onlineCount = computed(() => list.value.filter((c) => c.status === "online").length);
@@ -20,7 +22,7 @@ export const useConnectionsStore = defineStore("connections", () => {
     const newConn = await window.studioAPI.connections.add(conn);
     list.value.push(newConn);
     if (!activeId.value) {
-      activeId.value = newConn.id;
+      await setActive(newConn.id);
     }
     showAddForm.value = false;
   }
@@ -29,13 +31,25 @@ export const useConnectionsStore = defineStore("connections", () => {
     await window.studioAPI.connections.remove(id);
     list.value = list.value.filter((c) => c.id !== id);
     if (activeId.value === id) {
-      activeId.value = list.value[0]?.id ?? null;
+      activeId.value = null;
+      client.value = null;
+      if (list.value.length > 0) {
+        await setActive(list.value[0].id);
+      }
     }
   }
 
   async function setActive(id: string) {
     activeId.value = id;
     await window.studioAPI.connections.setActive(id);
+    // Build HerculesClient with contribute key from safeStorage
+    const conn = list.value.find((c) => c.id === id);
+    if (conn) {
+      const key = await window.studioAPI.keys.getContributeKey(id);
+      if (key) {
+        client.value = new HerculesClient(conn.baseUrl, key);
+      }
+    }
   }
 
   async function healthCheck(id: string) {
@@ -65,6 +79,7 @@ export const useConnectionsStore = defineStore("connections", () => {
     scanning,
     showAddForm,
     onlineCount,
+    client,
     load,
     add,
     remove,

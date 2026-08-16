@@ -424,6 +424,13 @@ FodyWeavers.xsd
 # Astro / web build output
 src/hercules-web/dist/
 
+# Hercules Studio (Electron + Vue)
+src/hercules-studio/node_modules/
+src/hercules-studio/dist/
+src/hercules-studio/out/
+src/hercules-studio/release/
+src/hercules-studio/.vite/
+
 # Windows Installer files from build outputs
 *.cab
 *.msi

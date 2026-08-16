@@ -14,7 +14,7 @@ import {
 
 const { t } = useI18n();
 
-defineEmits<{ select: [view: string] }>();
+const emit = defineEmits<{ select: [view: string] }>();
 
 const active = ref("agents");
 
@@ -31,8 +31,7 @@ const items = [
 
 function onSelect(id: string) {
   active.value = id;
-  // emit
-  (defineEmits as unknown as { select: (v: string) => void }).select(id);
+  emit("select", id);
 }
 </script>
 

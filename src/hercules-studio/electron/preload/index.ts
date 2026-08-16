@@ -49,6 +49,7 @@ const api: IpcApi = {
     getSystemKey: (connectionId) => ipcRenderer.invoke(IpcChannels.KEYS_GET_SYSTEM, connectionId),
     setSystemKey: (connectionId, key) => ipcRenderer.invoke(IpcChannels.KEYS_SET_SYSTEM, connectionId, key),
     removeSystemKey: (connectionId) => ipcRenderer.invoke(IpcChannels.KEYS_REMOVE_SYSTEM, connectionId),
+    getContributeKey: (connectionId) => ipcRenderer.invoke(IpcChannels.KEYS_GET_CONTRIBUTE, connectionId),
   },
   app: {
     getVersion: () => ipcRenderer.invoke(IpcChannels.APP_VERSION),
