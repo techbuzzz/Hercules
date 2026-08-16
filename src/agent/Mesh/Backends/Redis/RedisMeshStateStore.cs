@@ -145,42 +145,80 @@ public sealed class RedisMeshStateStore : IMeshStateStore
                 return true;
             }
 
-            // Optimistic locking: WATCH current version, then MULTI/EXEC
-            var tran = db.CreateTransaction();
-            var watchedKey = prefixedKey;
-
-            // Get current version under watch
-            var currentHash = await db.HashGetAllAsync(watchedKey).WaitAsync(ct).ConfigureAwait(false);
-            if (currentHash.Length == 0)
-                return false; // Key doesn't exist
-
-            var current = ReadStoredValue(currentHash);
-            if (current.Version != expectedVersion)
-                return false; // Version mismatch
-
-            // Re-read createdAt
-            var createdAt = current.CreatedAt;
-            var updatedValue = value with { Version = version, CreatedAt = createdAt, UpdatedAt = now, ExpiresAt = expiresAt };
-            var entries = BuildHashEntries(updatedValue);
-
-            var setTask = tran.HashSetAsync(watchedKey, entries);
-            if (expiresAt.HasValue)
-                _ = tran.KeyExpireAsync(watchedKey, expiresAt.Value - now);
-
-            var committed = await tran.ExecuteAsync().WaitAsync(ct).ConfigureAwait(false);
-            if (committed)
+            // Optimistic locking via Redis WATCH/MULTI/EXEC. The Condition below
+            // adds an internal WATCH on the `version` hash field; if the field
+            // changes between WATCH and EXEC the transaction aborts and
+            // ExecuteAsync returns null. We loop with bounded retries to give
+            // the caller a fair chance against concurrent writers without
+            // risking livelock.
+            for (var attempt = 0; attempt < MaxCasAttempts; attempt++)
             {
-                NotifyWatchers(key, updatedValue);
-                return true;
+                var currentHash = await db.HashGetAllAsync(prefixedKey).WaitAsync(ct).ConfigureAwait(false);
+                if (currentHash.Length == 0)
+                    return false; // Key doesn't exist — CAS cannot match
+
+                var current = ReadStoredValue(currentHash);
+                if (!string.Equals(current.Version, expectedVersion, StringComparison.Ordinal))
+                {
+                    // Fast path: version mismatch known up front, no need to
+                    // open a transaction. Concurrent writers may still race
+                    // against us; the WATCH on the transaction (next block)
+                    // will catch any change between our read and the EXEC.
+                    return false;
+                }
+
+                var tran = db.CreateTransaction();
+                tran.AddCondition(Condition.HashEqual(prefixedKey, "version", expectedVersion));
+
+                var updatedValue = value with
+                {
+                    Version = version,
+                    CreatedAt = current.CreatedAt,
+                    UpdatedAt = now,
+                    ExpiresAt = expiresAt
+                };
+                var entries = BuildHashEntries(updatedValue);
+
+                _ = tran.HashSetAsync(prefixedKey, entries);
+                if (expiresAt.HasValue)
+                    _ = tran.KeyExpireAsync(prefixedKey, expiresAt.Value - now);
+
+                var committed = await tran.ExecuteAsync().WaitAsync(ct).ConfigureAwait(false);
+                if (committed)
+                {
+                    NotifyWatchers(key, updatedValue);
+                    return true;
+                }
+
+                // CAS lost: someone else mutated the version between our
+                // read and EXEC. Back off briefly and retry. The jittered
+                // delay prevents a tight retry loop under contention.
+                try
+                {
+                    await Task.Delay(CasRetryDelay(attempt), ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
             }
 
-            return false; // CAS failed due to concurrent modification
+            return false; // All retries exhausted
         }
         catch (RedisConnectionException ex)
         {
             _log.LogWarning(ex, "[RedisStateStore] Redis unavailable for CompareAndSetAsync({Key})", key);
             throw;
         }
+    }
+
+    private const int MaxCasAttempts = 5;
+
+    private static TimeSpan CasRetryDelay(int attempt)
+    {
+        // 1ms, 3ms, 7ms, 15ms, 31ms — capped and lightly randomised.
+        var ms = Math.Min(31, (1 << attempt) - 1 + Random.Shared.Next(2));
+        return TimeSpan.FromMilliseconds(ms);
     }
 
     /// <inheritdoc />

@@ -76,14 +76,19 @@ public sealed class RouterHealthTracker
 
 /// <summary>
 ///     Rolling health record for a single peer.
+///     Thread-safe: all mutations of the rolling window, success count,
+///     and latency aggregates happen under a single per-record lock so that
+///     concurrent <see cref="RecordSuccess"/> / <see cref="RecordFailure"/>
+///     calls cannot tear the counters or write into the same window slot.
 /// </summary>
 internal sealed class PeerHealthRecord
 {
     private readonly int[] _window; // 1 = success, 0 = failure
+    private readonly int[] _latencies;
+    private readonly object _lock = new();
     private int _index;
     private int _count;
     private int _successes;
-    private readonly int[] _latencies;
     private int _latencyIndex;
     private int _latencyCount;
     private long _latencySum;
@@ -98,12 +103,15 @@ internal sealed class PeerHealthRecord
     {
         get
         {
-            if (_count == 0)
+            lock (_lock)
             {
-                return 1.0;
-            }
+                if (_count == 0)
+                {
+                    return 1.0;
+                }
 
-            return Math.Round((double)_successes / _count, 4);
+                return Math.Round((double)_successes / _count, 4);
+            }
         }
     }
 
@@ -111,30 +119,39 @@ internal sealed class PeerHealthRecord
     {
         get
         {
-            return _latencyCount == 0 ? 0 : (int)(_latencySum / _latencyCount);
+            lock (_lock)
+            {
+                return _latencyCount == 0 ? 0 : (int)(_latencySum / _latencyCount);
+            }
         }
     }
 
     public void RecordSuccess(int latencyMs = 0)
     {
-        _window[_index % _window.Length] = 1;
-        _index++;
-        _count = Math.Min(_count + 1, _window.Length);
-        _successes++;
-
-        if (latencyMs > 0)
+        lock (_lock)
         {
-            _latencies[_latencyIndex % _latencies.Length] = latencyMs;
-            _latencyIndex++;
-            _latencyCount = Math.Min(_latencyCount + 1, _latencies.Length);
-            _latencySum += latencyMs;
+            _window[_index % _window.Length] = 1;
+            _index++;
+            _count = Math.Min(_count + 1, _window.Length);
+            _successes++;
+
+            if (latencyMs > 0)
+            {
+                _latencies[_latencyIndex % _latencies.Length] = latencyMs;
+                _latencyIndex++;
+                _latencyCount = Math.Min(_latencyCount + 1, _latencies.Length);
+                _latencySum += latencyMs;
+            }
         }
     }
 
     public void RecordFailure()
     {
-        _window[_index % _window.Length] = 0;
-        _index++;
-        _count = Math.Min(_count + 1, _window.Length);
+        lock (_lock)
+        {
+            _window[_index % _window.Length] = 0;
+            _index++;
+            _count = Math.Min(_count + 1, _window.Length);
+        }
     }
 }
