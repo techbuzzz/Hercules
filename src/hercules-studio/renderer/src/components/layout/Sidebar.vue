@@ -2,14 +2,23 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useConnectionsStore } from "../../stores/connections";
+import type { Connection } from "@shared/protocol";
 
 const { t } = useI18n();
 const connections = useConnectionsStore();
 
 defineProps<{ activeView: string }>();
 
-const onlineConnections = computed(() => connections.list.filter((c) => c.status === "online"));
-const offlineConnections = computed(() => connections.list.filter((c) => c.status !== "online"));
+const onlineConnections = computed(() =>
+  connections.list.filter((c) => c.status === "online"),
+);
+const offlineConnections = computed(() =>
+  connections.list.filter((c) => c.status !== "online"),
+);
+
+function selectAgent(conn: Connection): void {
+  connections.setActive(conn.id);
+}
 </script>
 
 <template>
@@ -29,12 +38,12 @@ const offlineConnections = computed(() => connections.list.filter((c) => c.statu
         <button
           v-for="conn in onlineConnections"
           :key="conn.id"
-          class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-tertiary"
+          class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-tertiary"
           :class="conn.id === connections.activeId ? 'bg-tertiary text-app' : 'text-secondary'"
-          @click="connections.setActive(conn.id)"
+          @click="selectAgent(conn)"
         >
-          <span class="h-2 w-2 rounded-full bg-green-500" />
-          {{ conn.displayName }}
+          <span class="h-2 w-2 shrink-0 rounded-full bg-green-500" />
+          <span class="truncate">{{ conn.displayName }}</span>
         </button>
       </div>
       <div v-if="offlineConnections.length > 0">
@@ -44,12 +53,12 @@ const offlineConnections = computed(() => connections.list.filter((c) => c.statu
         <button
           v-for="conn in offlineConnections"
           :key="conn.id"
-          class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-tertiary"
+          class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-tertiary"
           :class="conn.id === connections.activeId ? 'bg-tertiary text-app' : 'text-secondary'"
-          @click="connections.setActive(conn.id)"
+          @click="selectAgent(conn)"
         >
-          <span class="h-2 w-2 rounded-full bg-zinc-500" />
-          {{ conn.displayName }}
+          <span class="h-2 w-2 shrink-0 rounded-full bg-zinc-500" />
+          <span class="truncate">{{ conn.displayName }}</span>
         </button>
       </div>
     </template>
@@ -59,7 +68,9 @@ const offlineConnections = computed(() => connections.list.filter((c) => c.statu
       <div class="px-3 py-2 text-xs font-medium uppercase text-secondary">
         {{ t(`activity.${activeView}`) }}
       </div>
-      <div class="px-3 py-2 text-sm text-secondary">Coming soon...</div>
+      <div class="px-3 py-2 text-sm text-secondary">
+        {{ connections.active ? t("status.checkedIn") : t("status.noAgent") }}
+      </div>
     </template>
   </div>
 </template>
