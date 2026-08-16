@@ -171,6 +171,106 @@ public class InProcessTaskQueueTests : IDisposable
         Assert.True(await _queue.IsHealthyAsync());
     }
 
+    /// <summary>
+    ///     [task_086] Visibility-timeout re-enqueue: a dequeued task that is
+    ///     never ack'd must re-appear in the queue after the timeout elapses.
+    /// </summary>
+    [Fact]
+    public async Task VisibilityTimeout_ReEnqueuesTask_WhenNotAcked()
+    {
+        var task = new MeshTask
+        {
+            QueueName = "vis-q",
+            Intent = "vis-test",
+            MaxRetries = 0
+        };
+        await _queue.EnqueueAsync(task);
+
+        var first = await _queue.DequeueAsync("vis-q", TimeSpan.FromMilliseconds(300));
+        Assert.NotNull(first);
+        Assert.Equal("vis-test", first!.Task.Intent);
+
+        // Immediately after dequeue the queue is empty.
+        var immediate = await _queue.DequeueAsync("vis-q", TimeSpan.FromMilliseconds(20));
+        Assert.Null(immediate);
+
+        // Wait for the visibility timer to fire and re-enqueue.
+        await Task.Delay(900);
+
+        var redelivered = await _queue.DequeueAsync("vis-q", TimeSpan.FromMilliseconds(200));
+        Assert.NotNull(redelivered);
+        Assert.Equal("vis-test", redelivered!.Task.Intent);
+        // DeliveryCount should be bumped because the visibility timer re-enqueued.
+        Assert.True(redelivered.DeliveryCount >= 2,
+            $"Expected DeliveryCount >= 2 after redelivery, got {redelivered.DeliveryCount}");
+    }
+
+    /// <summary>
+    ///     [task_086] Ack-before-timeout must cancel the re-enqueue so the
+    ///     task does not appear in the queue again.
+    /// </summary>
+    [Fact]
+    public async Task AckAsync_BeforeVisibilityTimeout_PreventsReenqueue()
+    {
+        var task = new MeshTask { QueueName = "ack-no-redeliver", Intent = "no-redeliver" };
+        await _queue.EnqueueAsync(task);
+
+        var dequeued = await _queue.DequeueAsync("ack-no-redeliver", TimeSpan.FromMilliseconds(200));
+        Assert.NotNull(dequeued);
+
+        await _queue.AckAsync(dequeued!.Task.Id);
+
+        // Wait past the visibility timeout window.
+        await Task.Delay(600);
+
+        var another = await _queue.DequeueAsync("ack-no-redeliver", TimeSpan.FromMilliseconds(50));
+        Assert.Null(another);
+    }
+
+    /// <summary>
+    ///     [task_086] RequeueDeadLetterAsync must remove the item from the DLQ
+    ///     AND make it appear at the head of the main queue (not leave the old
+    ///     DLQ entry dangling in <c>_dlqs</c>).
+    /// </summary>
+    [Fact]
+    public async Task RequeueDeadLetterAsync_RemovesItemFromDlqAndEnqueuesMainQueue()
+    {
+        var task = new MeshTask
+        {
+            QueueName = "rq-dlq",
+            Intent = "rq-intent",
+            MaxRetries = 1
+        };
+        var enqueued = await _queue.EnqueueAsync(task);
+
+        // Dequeue and fail beyond MaxRetries so it lands in the DLQ.
+        await _queue.DequeueAsync("rq-dlq", TimeSpan.FromSeconds(5));
+        await _queue.FailAsync(enqueued.Id, "boom", retry: 1);
+
+        var dlqBefore = await _queue.GetDeadLetterQueueAsync("rq-dlq");
+        Assert.Single(dlqBefore);
+
+        await _queue.RequeueDeadLetterAsync(enqueued.Id);
+
+        var dlqAfter = await _queue.GetDeadLetterQueueAsync("rq-dlq");
+        Assert.Empty(dlqAfter);
+
+        var redelivered = await _queue.DequeueAsync("rq-dlq", TimeSpan.FromMilliseconds(200));
+        Assert.NotNull(redelivered);
+        Assert.Equal("rq-intent", redelivered!.Task.Intent);
+    }
+
+    /// <summary>
+    ///     [task_086] RequeueDeadLetterAsync on a non-existent id must be a
+    ///     no-op (no throw, no spurious enqueue).
+    /// </summary>
+    [Fact]
+    public async Task RequeueDeadLetterAsync_UnknownId_IsNoop()
+    {
+        await _queue.RequeueDeadLetterAsync("does-not-exist");
+        // No throw = pass.
+    }
+
     [Fact]
     public void Dispose_CanBeCalledMultipleTimes()
     {

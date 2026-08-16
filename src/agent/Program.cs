@@ -330,7 +330,11 @@ builder.ConfigureServices((context, services) =>
     // HerculesBus (v3.1)
     services.AddSingleton<IChannelStore, InMemoryChannelStore>();
     services.AddSingleton<IAgentRegistry, InMemoryAgentRegistry>();
-    services.AddSingleton<IEventBus, InMemoryEventBus>();
+    // task_086: pass BusConfig so the bus uses bounded channels with the
+    // configured backpressure / drop policy.
+    services.AddSingleton<IEventBus>(sp => new InMemoryEventBus(
+        sp.GetRequiredService<ILogger<InMemoryEventBus>>(),
+        appConfig.Bus));
     services.AddSingleton<Bus>();
 
     // Phase 3: Inter-agent mesh

@@ -174,6 +174,87 @@ public class InProcessMeshBusTests : IDisposable
             () => bus2.PublishAsync("t", new IntentEnvelope { RequestId = "r", Intent = "t" }));
     }
 
+    /// <summary>
+    ///     [task_086] Default constructor exposes the configured concurrency
+    ///     limit; bus honors it under saturation.
+    /// </summary>
+    [Fact]
+    public void MaxConcurrentHandlers_DefaultsToBackpressureConfig()
+    {
+        var cfg = new Hercules.Config.MeshBackpressureConfig { MaxConcurrentHandlers = 3 };
+        var bus = new InProcessMeshBus(cfg, null);
+        Assert.Equal(3, bus.MaxConcurrentHandlers);
+        bus.Dispose();
+    }
+
+    /// <summary>
+    ///     [task_086] With MaxConcurrentHandlers=2 only two handlers run at a
+    ///     time even when many messages are published concurrently.
+    /// </summary>
+    [Fact]
+    public async Task PublishAsync_HandlerConcurrency_IsBoundedBySemaphore()
+    {
+        const int MaxConcurrent = 2;
+        var cfg = new Hercules.Config.MeshBackpressureConfig
+        {
+            MaxConcurrentHandlers = MaxConcurrent,
+            HandlerAcquireTimeoutMs = 5000 // Generous so the gate acquisition itself never drops.
+        };
+        var bus = new InProcessMeshBus(cfg, null);
+
+        var current = 0;
+        var peak = 0;
+        var completed = 0;
+        const int N = 6;
+
+        await bus.SubscribeAsync("bounded", async (_, ct) =>
+        {
+            var now = Interlocked.Increment(ref current);
+            InterlockedMax(ref peak, now);
+            try
+            {
+                await Task.Delay(80, ct);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref current);
+                Interlocked.Increment(ref completed);
+            }
+        });
+
+        var publishTasks = Enumerable.Range(0, N)
+            .Select(i => bus.PublishAsync("bounded", new IntentEnvelope
+            {
+                RequestId = "r-" + i,
+                Intent = "bounded"
+            }))
+            .ToArray();
+        await Task.WhenAll(publishTasks);
+
+        // Give the last handler time to drain.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+        while (Volatile.Read(ref completed) < N && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.Equal(N, Volatile.Read(ref completed));
+        Assert.True(peak <= MaxConcurrent, $"Peak concurrent handlers {peak} exceeded limit {MaxConcurrent}");
+        Assert.True(peak >= 2, $"Expected at least 2 concurrent handlers with limit 2, observed {peak}");
+        bus.Dispose();
+    }
+
+    private static void InterlockedMax(ref int location, int value)
+    {
+        int initial, newMax;
+        do
+        {
+            initial = Volatile.Read(ref location);
+            newMax = Math.Max(initial, value);
+            if (newMax == initial) return;
+        } while (Interlocked.CompareExchange(ref location, newMax, initial) != initial);
+    }
+
     public void Dispose()
     {
         _bus.Dispose();

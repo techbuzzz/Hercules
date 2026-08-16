@@ -358,7 +358,11 @@ builder.Services.AddSingleton<ITool, WasmToolAdapter>();
 // HerculesBus (v3.1) — мессенджер для ИИ агентов (in-memory pub/sub + registry + channel store).
 builder.Services.AddSingleton<IChannelStore, InMemoryChannelStore>();
 builder.Services.AddSingleton<IAgentRegistry, InMemoryAgentRegistry>();
-builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
+// task_086: pass BusConfig so the bus uses bounded channels with the
+// configured backpressure / drop policy.
+builder.Services.AddSingleton<IEventBus>(sp => new InMemoryEventBus(
+    sp.GetRequiredService<ILogger<InMemoryEventBus>>(),
+    appConfig.Bus));
 builder.Services.AddSingleton<Bus>();
 
 // Phase 3: Inter-agent mesh (manifest, capability registry, intent routing, transport)

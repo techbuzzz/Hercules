@@ -558,8 +558,15 @@ public static class MeshServiceCollectionExtensions
         else
         {
             // Default: in-process implementations
-            services.AddSingleton<IMeshBus, InProcessMeshBus>();
-            services.AddSingleton<ITaskQueue, InProcessTaskQueue>();
+            // task_086: pass MeshBackpressureConfig to bound concurrent handlers
+            // and surface MeshBackpressure to the task queue.
+            var backpressure = appConfig.Mesh.Backpressure;
+            services.AddSingleton<IMeshBus>(sp => new InProcessMeshBus(
+                backpressure,
+                sp.GetService<ILogger<InProcessMeshBus>>()));
+            services.AddSingleton<ITaskQueue>(sp => new InProcessTaskQueue(
+                backpressure,
+                sp.GetService<ILogger<InProcessTaskQueue>>()));
             services.AddSingleton<IMeshStateStore, InProcessMeshStateStore>();
         }
     }

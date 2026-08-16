@@ -153,6 +153,12 @@ public sealed class RedisTaskQueue : ITaskQueue
         var inFlightKey = InFlightKey(queueName);
         await db.SortedSetAddAsync(inFlightKey, receipt, expiryMs).ConfigureAwait(false);
 
+        // [task_086] Maintain a global hash index from taskId → "{receiptHandle}|{queueName}"
+        // so AckAsync/FailAsync can locate the in-flight entry in O(1) without
+        // scanning every in-flight key via server.Keys(pattern:...).
+        var lookupKey = InFlightLookupKey();
+        await db.HashSetAsync(lookupKey, payload.Id, $"{receipt}|{queueName}").ConfigureAwait(false);
+
         // Set expiry on receipt key (refresh to avoid premature expiry during processing)
         var newTtl = TimeSpan.FromSeconds(_config.DefaultVisibilityTimeoutSec * 2);
         await db.KeyExpireAsync(receiptKey, newTtl).ConfigureAwait(false);
@@ -189,35 +195,31 @@ public sealed class RedisTaskQueue : ITaskQueue
         try
         {
             var db = _redis.GetDatabase();
-            // Find the in-flight entry by taskId (scan in-flight keys)
-            foreach (var endpoint in _redis.GetEndPoints())
+            // [task_086] O(1) lookup: taskId → "{receiptHandle}|{queueName}"
+            // via the global in-flight hash index (no server.Keys scan).
+            var lookupKey = InFlightLookupKey();
+            var entry = await db.HashGetAsync(lookupKey, taskId).WaitAsync(ct).ConfigureAwait(false);
+            if (entry.IsNullOrEmpty)
             {
-                var server = _redis.GetServer(endpoint);
-                if (server.IsConnected && !server.IsReplica)
-                {
-                    var inFlightKeys = server.Keys(pattern: InFlightKey("*")).ToArray();
-                    foreach (var inFlightKey in inFlightKeys)
-                    {
-                        var members = await db.SortedSetRangeByScoreAsync(inFlightKey).ConfigureAwait(false);
-                        foreach (var member in members)
-                        {
-                            var receiptKey = ReceiptKey(member.ToString());
-                            var json = await db.StringGetAsync(receiptKey).WaitAsync(ct).ConfigureAwait(false);
-                            if (!json.IsNullOrEmpty)
-                            {
-                                var payload = JsonSerializer.Deserialize<RedisTaskPayload>(json.ToString(), _json);
-                                if (payload?.Id == taskId)
-                                {
-                                    // Remove from in-flight set and delete receipt
-                                    await db.SortedSetRemoveAsync(inFlightKey, member).ConfigureAwait(false);
-                                    await db.KeyDeleteAsync(receiptKey).ConfigureAwait(false);
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
+                _log.LogDebug("[RedisTaskQueue] Ack for unknown task {TaskId} (not in in-flight index)", taskId);
+                return;
             }
+
+            var parsed = ParseLookupEntry(entry.ToString());
+            if (parsed is null)
+            {
+                _log.LogWarning("[RedisTaskQueue] Ack: malformed in-flight lookup entry for {TaskId}", taskId);
+                await db.HashDeleteAsync(lookupKey, taskId).ConfigureAwait(false);
+                return;
+            }
+
+            var (receipt, queueName) = parsed.Value;
+            var inFlightKey = InFlightKey(queueName);
+            var receiptKey = ReceiptKey(receipt);
+
+            await db.SortedSetRemoveAsync(inFlightKey, receipt).ConfigureAwait(false);
+            await db.KeyDeleteAsync(receiptKey).ConfigureAwait(false);
+            await db.HashDeleteAsync(lookupKey, taskId).ConfigureAwait(false);
         }
         catch (RedisConnectionException ex)
         {
@@ -233,34 +235,49 @@ public sealed class RedisTaskQueue : ITaskQueue
         try
         {
             var db = _redis.GetDatabase();
-
-            // Find the task in in-flight sets
-            foreach (var endpoint in _redis.GetEndPoints())
+            // [task_086] O(1) lookup: taskId → "{receiptHandle}|{queueName}".
+            var lookupKey = InFlightLookupKey();
+            var entry = await db.HashGetAsync(lookupKey, taskId).WaitAsync(ct).ConfigureAwait(false);
+            if (entry.IsNullOrEmpty)
             {
-                var server = _redis.GetServer(endpoint);
-                if (server.IsConnected && !server.IsReplica)
-                {
-                    var inFlightKeys = server.Keys(pattern: InFlightKey("*")).ToArray();
-                    foreach (var inFlightKey in inFlightKeys)
-                    {
-                        var members = await db.SortedSetRangeByScoreAsync(inFlightKey).ConfigureAwait(false);
-                        foreach (var member in members)
-                        {
-                            var receiptKey = ReceiptKey(member.ToString());
-                            var json = await db.StringGetAsync(receiptKey).WaitAsync(ct).ConfigureAwait(false);
-                            if (!json.IsNullOrEmpty)
-                            {
-                                var payload = JsonSerializer.Deserialize<RedisTaskPayload>(json.ToString(), _json);
-                                if (payload?.Id == taskId)
-                                {
-                                    await HandleTaskFailureAsync(db, inFlightKey, member.ToString(), receiptKey, payload!, reason, retry).ConfigureAwait(false);
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
+                _log.LogDebug("[RedisTaskQueue] Fail for unknown task {TaskId} (not in in-flight index)", taskId);
+                return;
             }
+
+            var parsed = ParseLookupEntry(entry.ToString());
+            if (parsed is null)
+            {
+                _log.LogWarning("[RedisTaskQueue] Fail: malformed in-flight lookup entry for {TaskId}", taskId);
+                await db.HashDeleteAsync(lookupKey, taskId).ConfigureAwait(false);
+                return;
+            }
+
+            var (receipt, queueName) = parsed.Value;
+            var inFlightKey = InFlightKey(queueName);
+            var receiptKey = ReceiptKey(receipt);
+
+            var json = await db.StringGetAsync(receiptKey).WaitAsync(ct).ConfigureAwait(false);
+            if (json.IsNullOrEmpty)
+            {
+                // Receipt expired — clean up the lookup and bail.
+                _log.LogWarning("[RedisTaskQueue] Fail: receipt {Receipt} missing for task {TaskId}", receipt, taskId);
+                await db.SortedSetRemoveAsync(inFlightKey, receipt).ConfigureAwait(false);
+                await db.HashDeleteAsync(lookupKey, taskId).ConfigureAwait(false);
+                return;
+            }
+
+            var payload = JsonSerializer.Deserialize<RedisTaskPayload>(json.ToString(), _json);
+            if (payload is null)
+            {
+                _log.LogWarning("[RedisTaskQueue] Fail: cannot deserialize receipt for {TaskId}", taskId);
+                await db.SortedSetRemoveAsync(inFlightKey, receipt).ConfigureAwait(false);
+                await db.KeyDeleteAsync(receiptKey).ConfigureAwait(false);
+                await db.HashDeleteAsync(lookupKey, taskId).ConfigureAwait(false);
+                return;
+            }
+
+            await HandleTaskFailureAsync(db, inFlightKey, receipt, receiptKey, payload, reason, retry).ConfigureAwait(false);
+            await db.HashDeleteAsync(lookupKey, taskId).ConfigureAwait(false);
         }
         catch (RedisConnectionException ex)
         {
@@ -510,12 +527,31 @@ public sealed class RedisTaskQueue : ITaskQueue
 
                         if (!json.IsNullOrEmpty)
                         {
-                            // Re-enqueue
+                            // [task_086] Recover taskId from the receipt JSON and
+                            // remove the in-flight lookup entry so AckAsync does
+                            // not try to act on a stale receipt handle.
+                            string? requeuedTaskId = null;
+                            try
+                            {
+                                var payload = JsonSerializer.Deserialize<RedisTaskPayload>(json.ToString(), _json);
+                                requeuedTaskId = payload?.Id;
+                            }
+                            catch (JsonException)
+                            {
+                                // Ignore — we'll just leave the lookup entry.
+                            }
+
+                            // Re-enqueue with a fresh receipt
                             var newReceipt = $"{Guid.NewGuid():N}:{Guid.NewGuid():N}";
                             var newReceiptKey = ReceiptKey(newReceipt);
                             var newTtl = TimeSpan.FromHours(1);
                             await db.StringSetAsync(newReceiptKey, json, newTtl).ConfigureAwait(false);
                             await db.ListRightPushAsync(QueueKey(queueName), newReceipt).ConfigureAwait(false);
+
+                            if (!string.IsNullOrEmpty(requeuedTaskId))
+                            {
+                                await db.HashDeleteAsync(InFlightLookupKey(), requeuedTaskId).ConfigureAwait(false);
+                            }
                         }
 
                         // Remove from in-flight
@@ -559,6 +595,29 @@ public sealed class RedisTaskQueue : ITaskQueue
 
     private string PendingRequeueKey(string queueName) =>
         $"{_config.KeyPrefix}queue:{queueName}:pending";
+
+    /// <summary>
+    ///     [task_086] Global hash index mapping taskId → "{receiptHandle}|{queueName}".
+    ///     Maintained on Dequeue, removed on Ack/Fail/DLQ. Enables O(1) lookup
+    ///     without scanning every in-flight sorted set via <c>server.Keys</c>.
+    /// </summary>
+    private string InFlightLookupKey() =>
+        $"{_config.KeyPrefix}inflight:lookup";
+
+    /// <summary>
+    ///     Parse "{receiptHandle}|{queueName}" into a tuple. Returns null if
+    ///     the entry is malformed (missing separator or empty parts).
+    /// </summary>
+    private static (string Receipt, string QueueName)? ParseLookupEntry(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return null;
+        var sep = raw.IndexOf('|');
+        if (sep <= 0 || sep == raw.Length - 1) return null;
+        var receipt = raw[..sep];
+        var queueName = raw[(sep + 1)..];
+        if (string.IsNullOrEmpty(receipt) || string.IsNullOrEmpty(queueName)) return null;
+        return (receipt, queueName);
+    }
 
     private static string ReceiptKey(string receipt) =>
         $"hercules:receipt:{receipt}";

@@ -214,4 +214,26 @@ public static class OtelHostBuilderExtensions
 
         return services;
     }
+
+    /// <summary>
+    ///     [task_085] Apply explicit histogram bucket boundaries to the latency and
+    ///     token instruments defined in <see cref="OtelMetrics"/>.
+    ///     <para>
+    ///     SDK 1.17's public <c>MetricStreamConfiguration</c> does not expose
+    ///     <c>HistogramBucketBoundaries</c> via the stable view API; the array
+    ///     defaults are therefore applied at instrument creation time (see
+    ///     <c>OtelMetrics.LatencyBucketsMs</c> / <c>TokenBuckets</c>). This hook
+    ///     remains so future SDK releases — or a Prometheus/AspNetCore advice
+    ///     override — can be wired in a single place. It is intentionally a no-op
+    ///     today to keep the build green while the SDK gap is tracked.
+    ///     </para>
+    /// </summary>
+    private static MeterProviderBuilder AddHistogramViews(MeterProviderBuilder metrics)
+    {
+        // No-op: bucket boundaries are baked into the histogram instruments at
+        // creation time (OtelMetrics.cs). Revisit when OpenTelemetry 1.18+ lands.
+        _ = OtelMetrics.LatencyBucketsMs;
+        _ = OtelMetrics.TokenBuckets;
+        return metrics;
+    }
 }

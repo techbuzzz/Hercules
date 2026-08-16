@@ -92,6 +92,14 @@ public sealed class AppConfig
     public Phase2Config Phase2 { get; set; } = new();
     public MarketplaceConfig Marketplace { get; set; } = new();
     public MeshConfig Mesh { get; set; } = new();
+
+    // task_086: bounded in-memory event bus + backpressure tuning
+    /// <summary>
+    ///     Настройки backpressure для in-memory event bus (task_086):
+    ///     емкость bounded-каналов, timeout ожидания освобождения и политика
+    ///     переполнения (drop vs backpressure).
+    /// </summary>
+    public BusConfig Bus { get; set; } = new();
     public ToolPolicyConfig ToolPolicy { get; set; } = new();
     public ToolRegistryConfig ToolRegistry { get; set; } = new();
     public ApprovalConfig Approval { get; set; } = new();
@@ -323,6 +331,63 @@ public sealed class QuotasConfig
     ///     Default: 60s.
     /// </summary>
     public int CleanupIntervalSeconds { get; set; } = 60;
+}
+
+/// <summary>
+///     Настройки backpressure для in-memory event bus (task_086).
+///     Включают ограничение ёмкости bounded-каналов и политику переполнения
+///     (drop vs ожидание). Полная замена unbounded-каналов устраняет риск OOM
+///     под нагрузкой, но требует явного решения о поведении publisher'а при full.
+/// </summary>
+public sealed class BusConfig
+{
+    /// <summary>
+    ///     Ёмкость bounded-каналов в <c>InMemoryEventBus</c> на одну подписку.
+    ///     Должна быть &gt;= 1. Default: 1024.
+    /// </summary>
+    public int MaxChannelCapacity { get; set; } = 1024;
+
+    /// <summary>
+    ///     Сколько миллисекунд publisher ждёт освобождения места в full-канале
+    ///     перед тем, как применить <see cref="DropOnBackpressure"/>.
+    ///     Default: 100 ms.
+    /// </summary>
+    public int BackpressureTimeoutMs { get; set; } = 100;
+
+    /// <summary>
+    ///     Если true — сообщения сбрасываются (с инкрементом
+    ///     <c>BusChannelDropCounter</c>) сразу при переполнении.
+    ///     Если false — publisher блокируется до <see cref="BackpressureTimeoutMs"/>,
+    ///     затем также сбрасывает. Default: false (backpressure-first).
+    /// </summary>
+    public bool DropOnBackpressure { get; set; } = false;
+}
+
+/// <summary>
+///     Настройки backpressure для in-process mesh-бэкендов (task_086).
+///     Контролирует максимум concurrent handler'ов и default visibility timeout
+///     для <c>InProcessTaskQueue</c>.
+/// </summary>
+public sealed class MeshBackpressureConfig
+{
+    /// <summary>
+    ///     Максимум одновременно исполняемых handler'ов на топик в
+    ///     <c>InProcessMeshBus</c>. Default: 16.
+    /// </summary>
+    public int MaxConcurrentHandlers { get; set; } = 16;
+
+    /// <summary>
+    ///     Default visibility timeout для <c>InProcessTaskQueue</c> в секундах.
+    ///     Используется, когда вызывающий не передал явный timeout.
+    ///     Default: 30 s.
+    /// </summary>
+    public int InProcessTaskQueueVisibilityTimeoutSec { get; set; } = 30;
+
+    /// <summary>
+    ///     Сколько миллисекунд publisher ждёт слот семафора перед drop'ом.
+    ///     Default: 100 ms.
+    /// </summary>
+    public int HandlerAcquireTimeoutMs { get; set; } = 100;
 }
 
 /// <summary>
@@ -754,6 +819,14 @@ public sealed class MeshConfig
     public double LocalConfidenceThreshold { get; set; } = 0.5;
     public List<MeshPeerConfig> Peers { get; set; } = new();
     public List<ManifestCapabilityConfig>? Capabilities { get; set; }
+
+    // task_086: backpressure for in-process mesh bus & task queue
+    /// <summary>
+    ///     Настройки backpressure для in-process mesh-бэкендов (task_086):
+    ///     максимум concurrent handler'ов в <c>InProcessMeshBus</c> и
+    ///     visibility timeout по умолчанию для <c>InProcessTaskQueue</c>.
+    /// </summary>
+    public MeshBackpressureConfig Backpressure { get; set; } = new();
 
     /// <summary>Версии протокола, поддерживаемые агентом (для публикации в манифесте).</summary>
     public List<string> SupportedProtocolVersions { get; set; } = new() { "1.0" };

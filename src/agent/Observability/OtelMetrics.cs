@@ -69,6 +69,26 @@ public static class OtelMetrics
             unit: "{retry}",
             description: "Total number of LLM retry attempts (per-provider/per-attempt)");
 
+    /// <summary>
+    ///     Total number of messages dropped because a bounded in-memory event bus
+    ///     channel was full and backpressure timed out (task_086).
+    /// </summary>
+    public static readonly Counter<long> BusChannelDropCounter =
+        OtelSetup.Meter.CreateCounter<long>(
+            "hercules.bus.channel.drop.count",
+            unit: "{message}",
+            description: "Number of bus messages dropped due to bounded channel overflow");
+
+    /// <summary>
+    ///     Total number of mesh handler invocations dropped because the
+    ///     in-process mesh bus handler semaphore was exhausted (task_086).
+    /// </summary>
+    public static readonly Counter<long> MeshHandlerDropCounter =
+        OtelSetup.Meter.CreateCounter<long>(
+            "hercules.mesh.handler.drop.count",
+            unit: "{message}",
+            description: "Number of mesh envelopes dropped because handler concurrency limit was reached");
+
     // ── Histograms ───────────────────────────────────────────────────────────
 
     /// <summary>Duration of HandleAsync in milliseconds.</summary>
