@@ -182,6 +182,15 @@ public sealed class OfflineSyncService : BackgroundService
         // Subscribe to network events
         _network.OnReconnected += async (_, _) =>
         {
+            // task_080: don't kick off a flush if shutdown has already started.
+            // The handler captures the stoppingToken in its closure, so an event
+            // that fires after the host begins stopping must be a no-op rather
+            // than a half-completed flush that races with disposal.
+            if (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+
             _log.LogInformation("OfflineSync: network reconnected, triggering flush");
             try { await FlushAsync(combinedCts.Token); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

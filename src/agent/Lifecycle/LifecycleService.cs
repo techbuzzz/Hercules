@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Hercules.Agent;
+using Hercules.Config;
 using Hercules.Mesh;
 using Hercules.Mesh.Transport;
 using Hercules.Skills;
@@ -10,7 +11,7 @@ namespace Hercules.Lifecycle;
 /// <summary>
 ///     In-process lifecycle management for agents and skill packages.
 ///     Provides fleet-wide inventory, health checks, drain, canary deploy, and rollback.
-///     Specification: task_057.
+///     Specification: task_057 (lifecycle actions), task_080 (graceful drain).
 /// </summary>
 public sealed class LifecycleService : ILifecycleService
 {
@@ -19,11 +20,22 @@ public sealed class LifecycleService : ILifecycleService
     private readonly CapabilityRegistry _registry;
     private readonly ITransport _transport;
     private readonly ILogger<LifecycleService> _logger;
+    private readonly IAgentLifecycleState _state;
+    private readonly IInFlightTracker _inFlight;
+    private readonly ShutdownConfig _shutdown;
 
-    // Local agent state (simplified — agent runs in-process)
-    private AgentLifecycleState _localState = AgentLifecycleState.Running;
+    // Local agent metadata (simplified — agent runs in-process)
     private DateTimeOffset? _startedAt = DateTimeOffset.UtcNow;
     private DateTimeOffset? _drainStartedAt;
+
+    /// <summary>Shared lifecycle state holder. Exposed for tests and the WebApi middleware.</summary>
+    public IAgentLifecycleState State => _state;
+
+    /// <summary>Shared in-flight tracker. Exposed for tests and the WebApi middleware.</summary>
+    public IInFlightTracker InFlight => _inFlight;
+
+    /// <summary>Adapter that lets existing code keep reading <c>_localState</c> while the source of truth is the shared <see cref="IAgentLifecycleState" />.</summary>
+    private AgentLifecycleState _localState => _state.State;
 
     // Skill package deployment state (packageId -> state)
     private readonly Dictionary<string, SkillPackageLifecycleState> _skillPackageStates = new();
@@ -34,13 +46,19 @@ public sealed class LifecycleService : ILifecycleService
         SkillManager skillManager,
         CapabilityRegistry registry,
         ITransport transport,
-        ILogger<LifecycleService> logger)
+        ILogger<LifecycleService> logger,
+        IAgentLifecycleState state,
+        IInFlightTracker inFlight,
+        ShutdownConfig? shutdown = null)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _skillManager = skillManager ?? throw new ArgumentNullException(nameof(skillManager));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _state = state ?? throw new ArgumentNullException(nameof(state));
+        _inFlight = inFlight ?? throw new ArgumentNullException(nameof(inFlight));
+        _shutdown = shutdown ?? new ShutdownConfig();
     }
 
     // ══════════════════════════════════════════════════════════════════════════════
@@ -110,7 +128,7 @@ public sealed class LifecycleService : ILifecycleService
 
         if (_localState == AgentLifecycleState.Stopped || _localState == AgentLifecycleState.Decommissioned)
         {
-            _localState = AgentLifecycleState.Running;
+            _state.SetState(AgentLifecycleState.Running);
             _startedAt = DateTimeOffset.UtcNow;
             _logger.LogInformation("[Lifecycle] Agent started");
             return Task.FromResult(new LifecycleActionResult
@@ -142,7 +160,7 @@ public sealed class LifecycleService : ILifecycleService
 
         if (_localState == AgentLifecycleState.Draining)
         {
-            _localState = AgentLifecycleState.Stopped;
+            _state.SetState(AgentLifecycleState.Stopped);
             _logger.LogInformation("[Lifecycle] Agent stopped (was draining)");
             return Task.FromResult(new LifecycleActionResult
             {
@@ -157,7 +175,7 @@ public sealed class LifecycleService : ILifecycleService
 
         if (_localState == AgentLifecycleState.Running)
         {
-            _localState = AgentLifecycleState.Stopped;
+            _state.SetState(AgentLifecycleState.Stopped);
             _logger.LogInformation("[Lifecycle] Agent stopped");
             return Task.FromResult(new LifecycleActionResult
             {
@@ -182,43 +200,70 @@ public sealed class LifecycleService : ILifecycleService
     }
 
     /// <inheritdoc />
-    public Task<LifecycleActionResult> DrainAgentAsync(string agentId, CancellationToken ct = default)
+    public async Task<LifecycleActionResult> DrainAgentAsync(string agentId, CancellationToken ct = default)
     {
         if (_localState != AgentLifecycleState.Running)
         {
-            return Task.FromResult(new LifecycleActionResult
+            return new LifecycleActionResult
             {
                 Action = LifecycleAction.Drain.ToString(),
                 TargetId = agentId,
                 Success = false,
                 Message = $"Cannot drain agent in state '{_localState}'"
-            });
+            };
         }
 
-        _localState = AgentLifecycleState.Draining;
+        _state.SetState(AgentLifecycleState.Draining);
         _drainStartedAt = DateTimeOffset.UtcNow;
-        _logger.LogInformation("[Lifecycle] Agent draining — stopping new requests");
+        _logger.LogInformation(
+            "[Lifecycle] Agent draining — no new requests; waiting up to {TimeoutSec}s for in-flight to complete",
+            _shutdown.DrainTimeoutSec);
 
-        return Task.FromResult(new LifecycleActionResult
+        var timeout = TimeSpan.FromSeconds(Math.Max(1, _shutdown.DrainTimeoutSec));
+        var drained = await _inFlight.WaitForEmptyAsync(timeout, ct).ConfigureAwait(false);
+
+        if (!drained)
+        {
+            _logger.LogWarning(
+                "[Lifecycle] Drain timeout reached after {TimeoutSec}s with {InFlight} request(s) still running",
+                _shutdown.DrainTimeoutSec,
+                _inFlight.InFlightCount);
+        }
+        else
+        {
+            _logger.LogInformation("[Lifecycle] All in-flight requests completed");
+        }
+
+        // Final state transition. Whether drained cleanly or timed out, the local
+        // agent is no longer accepting work — we mark it Stopped so subsequent
+        // reads see a terminal state and health checks report Unhealthy.
+        _state.SetState(AgentLifecycleState.Stopped);
+        _logger.LogInformation("[Lifecycle] Agent stopped");
+
+        return new LifecycleActionResult
         {
             Action = LifecycleAction.Drain.ToString(),
             TargetId = agentId,
             Success = true,
             PreviousState = AgentLifecycleState.Running.ToString(),
             NewState = _localState.ToString(),
-            Message = "Agent draining — no new requests accepted, in-flight work continues",
+            Message = drained
+                ? "Agent drained — in-flight requests completed and process is now stopped"
+                : $"Agent drained with timeout — {_inFlight.InFlightCount} request(s) were still in-flight; transitions to Stopped",
             Metadata = new Dictionary<string, string>
             {
-                ["drainStartedAt"] = _drainStartedAt.Value.ToString("O")
+                ["drainStartedAt"] = (_drainStartedAt ?? DateTimeOffset.UtcNow).ToString("O"),
+                ["drainedCleanly"] = drained.ToString().ToLowerInvariant(),
+                ["remainingInFlight"] = _inFlight.InFlightCount.ToString()
             }
-        });
+        };
     }
 
     /// <inheritdoc />
     public Task<LifecycleActionResult> DecommissionAgentAsync(string agentId, CancellationToken ct = default)
     {
         var previousState = _localState.ToString();
-        _localState = AgentLifecycleState.Decommissioned;
+        _state.SetState(AgentLifecycleState.Decommissioned);
         _logger.LogWarning("[Lifecycle] Agent decommissioned");
 
         return Task.FromResult(new LifecycleActionResult
@@ -582,15 +627,6 @@ public sealed class LifecycleService : ILifecycleService
             _ => "Unknown"
         };
     }
-}
-
-/// <summary>Local agent lifecycle state.</summary>
-internal enum AgentLifecycleState
-{
-    Running,
-    Draining,
-    Stopped,
-    Decommissioned
 }
 
 /// <summary>Skill package deployment state.</summary>

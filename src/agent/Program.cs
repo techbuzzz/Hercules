@@ -684,6 +684,11 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<ReflectionEngine>();
     services.AddSingleton<AgentCore>();
 
+    // task_080: shutdown & drain primitives
+    services.AddSingleton(appConfig.Shutdown);
+    services.AddSingleton<IAgentLifecycleState, AgentLifecycleStateHolder>();
+    services.AddSingleton<IInFlightTracker>(sp => new InFlightTracker(sp.GetService<ILogger<InFlightTracker>>()));
+
     // task_057: Lifecycle management
     services.AddSingleton<ILifecycleService>(sp =>
         new LifecycleService(
@@ -691,7 +696,13 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<SkillManager>(),
             sp.GetRequiredService<CapabilityRegistry>(),
             sp.GetRequiredService<ITransport>(),
-            sp.GetRequiredService<ILogger<LifecycleService>>()));
+            sp.GetRequiredService<ILogger<LifecycleService>>(),
+            sp.GetRequiredService<IAgentLifecycleState>(),
+            sp.GetRequiredService<IInFlightTracker>(),
+            sp.GetRequiredService<ShutdownConfig>()));
+
+    // task_080: graceful drain — runs on host shutdown, awaits in-flight requests
+    services.AddHostedService<DrainHostedService>();
 
     // Интерфейсы
     services.AddSingleton<ConsoleUI>();
@@ -777,10 +788,16 @@ catch (Exception ex)
 
 // --- Выбор режима запуска ---
 using var cts = new CancellationTokenSource();
+var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 Console.CancelKeyPress += (_, e) =>
 {
     e.Cancel = true;
+    // task_080: route shutdown through IHostApplicationLifetime so the
+    // DrainHostedService gets a chance to wait for in-flight work before
+    // the process exits. We still cancel the local CTS so the active run
+    // loop (ConsoleUI / Telegram) can stop accepting new input.
     cts.Cancel();
+    lifetime.StopApplication();
 };
 
 var telegramMode = args.Contains("--telegram") || (appConfig.Telegram.Enabled && args.Contains("--bot"));

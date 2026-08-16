@@ -43,6 +43,7 @@ using Hercules.WasmSandbox.Compilation;
 using Hercules.WebApi.Auth;
 using Hercules.WebApi.Config;
 using Hercules.WebApi.Controllers;
+using Hercules.WebApi.Middleware;
 using Hercules.Health;
 using HerculesBus;
 using HerculesBus.Core;
@@ -582,6 +583,11 @@ builder.Services.AddSingleton<IConfigReload>(sp => sp.GetRequiredService<SkillMa
 // Адаптер Web API
 builder.Services.AddSingleton<WebApiAdapter>();
 
+// task_080: shutdown & drain primitives
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Shutdown);
+builder.Services.AddSingleton<IAgentLifecycleState, AgentLifecycleStateHolder>();
+builder.Services.AddSingleton<IInFlightTracker>(sp => new InFlightTracker(sp.GetService<ILogger<InFlightTracker>>()));
+
 // task_057: Lifecycle management
 builder.Services.AddSingleton<ILifecycleService>(sp =>
     new LifecycleService(
@@ -589,7 +595,13 @@ builder.Services.AddSingleton<ILifecycleService>(sp =>
         sp.GetRequiredService<SkillManager>(),
         sp.GetRequiredService<CapabilityRegistry>(),
         sp.GetRequiredService<ITransport>(),
-        sp.GetRequiredService<ILogger<LifecycleService>>()));
+        sp.GetRequiredService<ILogger<LifecycleService>>(),
+        sp.GetRequiredService<IAgentLifecycleState>(),
+        sp.GetRequiredService<IInFlightTracker>(),
+        sp.GetRequiredService<ShutdownConfig>()));
+
+// task_080: graceful drain — runs on host shutdown, awaits in-flight requests
+builder.Services.AddHostedService<DrainHostedService>();
 
 // task_058: Config & policy rollout — staged signed bundles with expiry and LKG fallback
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ConfigRollout);
@@ -640,6 +652,9 @@ var app = builder.Build();
 
 // --- Middleware ---
 app.UseCors(corsPolicy);
+// task_080: drain check runs as early as possible so even a request that would be
+// rejected by another middleware (e.g. CORS, ApiKey) still gets a clean 503.
+app.UseMiddleware<DrainMiddleware>();
 app.UseMiddleware<RequestBodyLimitMiddleware>();
 app.UseMiddleware<ApiKeyMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();

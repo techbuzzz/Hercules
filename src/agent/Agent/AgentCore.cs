@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hercules.Agent.Loop;
+using Hercules.Lifecycle;
 using Hercules.Context;
 using Hercules.Audit;
 using Hercules.Budget;
@@ -102,6 +103,8 @@ public sealed class AgentCore : IConfigReload
     private readonly IQuotaService? _quotaService;
     private readonly QuotaGuard? _quotaGuard;
     private readonly ISessionStateStore _sessionStates;
+    private readonly IAgentLifecycleState? _lifecycleState;
+    private readonly IInFlightTracker? _inFlight;
 
     private AgentConfig _cfg;
     private Activity? _currentHandleActivity;
@@ -129,7 +132,9 @@ public sealed class AgentCore : IConfigReload
         IVerificationPipeline? verificationPipeline = null,
         Hercules.Mesh.Escalation.IEscalationService? escalationService = null,
         IQuotaService? quotaService = null,
-        QuotaGuard? quotaGuard = null)
+        QuotaGuard? quotaGuard = null,
+        IAgentLifecycleState? lifecycleState = null,
+        IInFlightTracker? inFlight = null)
     {
         _llm = llm;
         _router = router;
@@ -153,6 +158,10 @@ public sealed class AgentCore : IConfigReload
         _escalationService = escalationService;
         _quotaService = quotaService;
         _quotaGuard = quotaGuard;
+        // task_080: optional shutdown wiring. Backward-compat: existing unit tests
+        // and CLI entry points that build AgentCore without DI work unchanged.
+        _lifecycleState = lifecycleState;
+        _inFlight = inFlight;
         // task_075 H7 fix: per-session state is externalised. When the caller
         // doesn't supply a store, we lazily build a process-wide default — keeps
         // existing single-tenant callers / unit tests working without churn.
@@ -254,6 +263,23 @@ public sealed class AgentCore : IConfigReload
         CancellationToken externalCt,
         Stopwatch handleSw)
     {
+        // [task_080] Graceful shutdown: refuse new work as soon as the agent enters
+        // Draining / Stopped / Decommissioned. The WebApi middleware checks the same
+        // state at the HTTP layer (returns 503 + Retry-After); this is defense in depth
+        // for callers that bypass HTTP (CLI, in-process tests, future in-proc mesh peers).
+        if (_lifecycleState is { IsShuttingDown: true })
+        {
+            _logger.LogInformation(
+                "[AgentCore] Rejecting request: agent is {State}, session={SessionId}",
+                _lifecycleState.State, sessionId);
+            throw new LifecycleDrainingException(_lifecycleState.State);
+        }
+
+        // [task_080] In-flight tracker: every request holds a slot for its lifetime so
+        // LifecycleService.DrainAgentAsync can wait for completion. The `using` ensures
+        // the slot is released on any exit path (success, exception, cancellation).
+        using var _inFlightScope = _inFlight?.Begin();
+
         state.CommandCount++;
         state.ClearToolTrace();
 

@@ -108,6 +108,10 @@ public sealed class AppConfig
     public CacheConfig Cache { get; set; } = new();
     public SkillQualityConfig SkillQuality { get; set; } = new();
 
+    // task_080: Graceful shutdown & drain
+    /// <summary>Shutdown config (task_080): drain timeout, in-flight cancellation, hard-stop after drain.</summary>
+    public ShutdownConfig Shutdown { get; set; } = new();
+
     // Extended config properties (task_044-055)
     /// <summary>Fan-out / fan-in orchestrator config (task_045): concurrency, budget, schema validation, selection strategy.</summary>
     public FanOutOptions FanOut { get; set; } = new();
@@ -179,6 +183,30 @@ public sealed class AppConfig
     // task_069: PostgreSQL shared state backend
     /// <summary>PostgreSQL backend config (task_069): connection string, schema, TTL, visibility timeout, LISTEN/NOTIFY options.</summary>
     public Hercules.Mesh.Backends.Postgres.PostgresMeshConfig Postgres { get; set; } = new();
+}
+
+/// <summary>
+///     Конфигурация graceful shutdown &amp; drain (task_080). Управляет временем ожидания
+///     in-flight запросов при остановке агента и тем, нужно ли принудительно прерывать
+///     «зависшие» запросы после истечения таймаута.
+/// </summary>
+public sealed class ShutdownConfig
+{
+    /// <summary>Включить graceful shutdown &amp; drain. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Максимальное время ожидания завершения in-flight запросов при drain. Default: 30s.</summary>
+    public int DrainTimeoutSec { get; set; } = 30;
+
+    /// <summary>Принудительно отменить оставшиеся in-flight запросы по истечении DrainTimeoutSec. Default: true.</summary>
+    public bool CancelInFlightAfterDrain { get; set; } = true;
+
+    /// <summary>
+    ///     Дополнительное время (в секундах) после Stopped, которое middleware всё ещё отвечает
+    ///     503 с Retry-After. Защищает от race между финальным HTTP-ответом и реальной остановкой.
+    ///     Default: 0 (нет буфера).
+    /// </summary>
+    public int PostStopRetryAfterSec { get; set; } = 0;
 }
 
 /// <summary>

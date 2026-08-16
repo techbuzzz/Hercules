@@ -113,7 +113,7 @@
 | 77 | 46 | [Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController](tasks/task_077.md) | `sync-over-async-sweep` | done |
 | 78 | 46 | [IHttpClientFactory adoption and standard resilience handlers](tasks/task_078.md) | `httpclient-factory-adoption` | done |
 | 79 | 46 | [Real health checks infrastructure](tasks/task_079.md) | `health-checks-infrastructure` | done |
-| 80 | 46 | [Graceful shutdown and drain](tasks/task_080.md) | `graceful-shutdown-drain` | pending |
+| 80 | 46 | [Graceful shutdown and drain](tasks/task_080.md) | `graceful-shutdown-drain` | done |
 | 81 | 46 | [Kestrel tuning, framework rate limiter, compression, output cache](tasks/task_081.md) | `kestrel-rate-limiter-compression` | pending |
 | 82 | 46 | [RouterHealthTracker, Redis CAS, Postgres reconnect, BuildServiceProvider](tasks/task_082.md) | `router-redis-postgres-di-fixes` | pending |
 | 83 | 47 | [CacheService stampede, eviction, and sliding expiration](tasks/task_083.md) | `cache-stampede-eviction` | pending |
