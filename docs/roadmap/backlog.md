@@ -114,9 +114,9 @@
 | 78 | 46 | [IHttpClientFactory adoption and standard resilience handlers](tasks/task_078.md) | `httpclient-factory-adoption` | done |
 | 79 | 46 | [Real health checks infrastructure](tasks/task_079.md) | `health-checks-infrastructure` | done |
 | 80 | 46 | [Graceful shutdown and drain](tasks/task_080.md) | `graceful-shutdown-drain` | done |
-| 81 | 46 | [Kestrel tuning, framework rate limiter, compression, output cache](tasks/task_081.md) | `kestrel-rate-limiter-compression` | pending |
-| 82 | 46 | [RouterHealthTracker, Redis CAS, Postgres reconnect, BuildServiceProvider](tasks/task_082.md) | `router-redis-postgres-di-fixes` | pending |
-| 83 | 47 | [CacheService stampede, eviction, and sliding expiration](tasks/task_083.md) | `cache-stampede-eviction` | pending |
+| 81 | 46 | [Kestrel tuning, framework rate limiter, compression, output cache](tasks/task_081.md) | `kestrel-rate-limiter-compression` | done |
+| 82 | 46 | [RouterHealthTracker, Redis CAS, Postgres reconnect, BuildServiceProvider](tasks/task_082.md) | `router-redis-postgres-di-fixes` | done |
+| 83 | 47 | [CacheService stampede, eviction, and sliding expiration](tasks/task_083.md) | `cache-stampede-eviction` | done |
 | 84 | 47 | [ProposalStore caching, async I/O, and hot-path allocations](tasks/task_084.md) | `proposal-store-hotpath-alloc` | pending |
 | 85 | 47 | [OpenTelemetry polish: console gating, process instrumentation, histogram buckets, async logging](tasks/task_085.md) | `otel-logging-polish` | pending |
 | 86 | 47 | [Backpressure, bounded channels, and DLQ/requeue fixes](tasks/task_086.md) | `backpressure-bounded-channels-dlq` | pending |
