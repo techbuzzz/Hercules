@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Encodings.Web;
+using System.Threading.RateLimiting;
 using Hercules.Agent;
 using Hercules.Audit;
 using Hercules.Budget;
@@ -40,6 +41,7 @@ using Hercules.Tools.Policy;
 using Hercules.Tools.Registry;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
+using Hercules.WebApi;
 using Hercules.WebApi.Auth;
 using Hercules.WebApi.Config;
 using Hercules.WebApi.Controllers;
@@ -49,6 +51,8 @@ using HerculesBus;
 using HerculesBus.Core;
 using HerculesBus.InMemory;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Http.Resilience;
 
@@ -611,23 +615,130 @@ builder.Services.AddSingleton<IRolloutManager, RolloutManager>();
 builder.Services.AddHostedService<RolloutExpiryChecker>();
 
 // --- CORS: разрешаем localhost-источники фронтенда ---
+// task_081: заменили "AllowAnyOrigin" по умолчанию на dev whitelist (localhost).
+// Для production укажите AllowedCorsOrigins в appsettings.json.
 const string corsPolicy = "frontend";
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(corsPolicy, policy =>
     {
-        switch (webCfg.AllowedCorsOrigins.Count)
+        if (webCfg.AllowAnyOrigin)
         {
-            case > 0:
-                policy.WithOrigins(webCfg.AllowedCorsOrigins.ToArray())
-                    .AllowAnyHeader()
-                    .AllowAnyMethod();
-                break;
-            default:
-                policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-                break;
+            // Явный opt-in для dev/edge — НЕ рекомендуется для production.
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+            return;
         }
+
+        if (webCfg.AllowedCorsOrigins.Count > 0)
+        {
+            policy.WithOrigins(webCfg.AllowedCorsOrigins.ToArray())
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+            return;
+        }
+
+        // Dev fallback: разрешаем только localhost-источники.
+        string[] devOrigins =
+        {
+            "http://localhost:3000",
+            "http://localhost:4321",
+            "http://localhost:5000",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:4321",
+            "http://127.0.0.1:5000"
+        };
+        policy.WithOrigins(devOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
     });
+});
+
+// --- Kestrel server tuning (task_081) ---
+// Поднимаем лимиты до production-grade значений и ограничиваем request body.
+builder.WebHost.ConfigureKestrel((ctx, opts) =>
+{
+    var k = webCfg.Kestrel;
+    opts.Limits.MaxConcurrentConnections = k.MaxConcurrentConnections;
+    opts.Limits.MaxConcurrentUpgradedConnections = k.MaxConcurrentUpgradedConnections;
+    opts.Limits.MaxRequestBodySize = k.MaxRequestBodySize;
+    opts.Limits.KeepAliveTimeout = TimeSpan.FromSeconds(k.KeepAliveTimeoutSeconds);
+    opts.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(k.RequestHeadersTimeoutSeconds);
+});
+
+// --- Framework rate limiter (task_081) ---
+// Заменяет кастомный RateLimitMiddleware: fixed window per-IP для /api/chat и
+// concurrency limiter для дорогих эндпоинтов (reflection, eval, SLO).
+builder.Services.AddRateLimiter(o =>
+{
+    // Rejection handler сохраняет X-RateLimit-* headers + Retry-After.
+    o.OnRejected = async (context, ct) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            var seconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
+            context.HttpContext.Response.Headers["Retry-After"] = seconds.ToString();
+            context.HttpContext.Response.Headers["X-RateLimit-Reset"] = seconds.ToString();
+        }
+
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsync(
+            "{\"error\":\"Rate limit exceeded. Try again later.\"}", ct);
+    };
+
+    // /api/chat — fixed window per IP (30/min по умолчанию).
+    o.AddPolicy(RateLimitPolicies.Chat, httpContext =>
+    {
+        var key = RateLimitPolicies.GetClientKey(httpContext);
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = Math.Max(1, webCfg.RateLimiting.ChatPerMinute),
+            Window = TimeSpan.FromSeconds(Math.Max(1, webCfg.RateLimiting.ChatWindowSeconds)),
+            QueueLimit = Math.Max(0, webCfg.RateLimiting.ChatQueueLimit),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            AutoReplenishment = true
+        });
+    });
+
+    // Expensive endpoints (reflection, eval, SLO) — глобальный concurrency cap.
+    o.AddPolicy(RateLimitPolicies.Expensive, _ =>
+        RateLimitPartition.GetConcurrencyLimiter("expensive", _ => new ConcurrencyLimiterOptions
+        {
+            PermitLimit = Math.Max(1, webCfg.RateLimiting.ExpensiveConcurrency),
+            QueueLimit = 0,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+        }));
+});
+
+// --- Response compression (task_081) ---
+// Brotli + Gzip для application/json, text/plain и SSE (text/event-stream).
+builder.Services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.Providers.Add<BrotliCompressionProvider>();
+    o.Providers.Add<GzipCompressionProvider>();
+    o.MimeTypes =
+    [
+        "application/json",
+        "text/plain",
+        "text/event-stream",
+        "application/xml",
+        "text/html"
+    ];
+});
+
+// --- Output cache (task_081) ---
+// Кэшируем read-only GET-эндпоинты на короткий TTL.
+builder.Services.AddOutputCache(o =>
+{
+    o.AddBasePolicy(b => b.Expire(TimeSpan.FromSeconds(30)));
+    o.AddPolicy(OutputCachePolicies.Skills, b => b
+        .Expire(TimeSpan.FromMinutes(5))
+        .Tag("skills")
+        .SetVaryByQuery("skillId", "includeDeprecated"));
+    o.AddPolicy(OutputCachePolicies.Config, b => b
+        .Expire(TimeSpan.FromSeconds(30))
+        .Tag("config"));
 });
 
 // JSON: не экранировать кириллицу в ответах
@@ -651,13 +762,19 @@ else if (builder.Environment.IsDevelopment())
 var app = builder.Build();
 
 // --- Middleware ---
+// task_081: response compression first so downstream responses are emitted
+// compressed (RateLimiter, ApiKey, Drain, OutputCache все пишут в поток).
+app.UseResponseCompression();
 app.UseCors(corsPolicy);
 // task_080: drain check runs as early as possible so even a request that would be
 // rejected by another middleware (e.g. CORS, ApiKey) still gets a clean 503.
 app.UseMiddleware<DrainMiddleware>();
 app.UseMiddleware<RequestBodyLimitMiddleware>();
 app.UseMiddleware<ApiKeyMiddleware>();
-app.UseMiddleware<RateLimitMiddleware>();
+// task_081: framework rate limiter replaces legacy RateLimitMiddleware.
+app.UseRateLimiter();
+// task_081: output cache (должен быть после ApiKey/Auth, чтобы не кэшировать 401/429).
+app.UseOutputCache();
 // task_039: peer auth middleware for /api/mesh/* endpoints
 app.UseMiddleware<PeerAuthMiddleware>();
 
@@ -818,7 +935,6 @@ app.MapSelfImprovement();
 app.MapSkillManifest();
 app.MapTasks();
 app.MapContext();
-app.MapCache();
 app.MapCache();
 app.MapToolRegistry();
 app.MapMcpEndpoints();

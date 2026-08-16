@@ -13,9 +13,11 @@ public static class SkillsController
     public static void MapSkills(this IEndpointRouteBuilder app)
     {
         // GET /api/skills — список навыков
+        // task_081: short-TTL output cache (5 min) для read-only skill listings.
         app.MapGet("/api/skills", (WebApiAdapter adapter) =>
                 Results.Ok(adapter.ListSkills()))
-            .WithName("ListSkills");
+            .WithName("ListSkills")
+            .CacheOutput(OutputCachePolicies.Skills);
 
         // GET /api/skills/{id} — получить навык
         app.MapGet("/api/skills/{id}", (string id, WebApiAdapter adapter) =>
@@ -24,7 +26,8 @@ public static class SkillsController
             return s is null
                 ? Results.NotFound(new { error = "Навык не найден." })
                 : Results.Ok(s);
-        }).WithName("GetSkill");
+        }).WithName("GetSkill")
+          .CacheOutput(OutputCachePolicies.Skills);
 
         // POST /api/skills — создать навык.
         // По умолчанию создаётся вручную (trigger + prompt).

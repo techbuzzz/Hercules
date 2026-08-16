@@ -21,7 +21,8 @@ public static class ConfigController
     public static void MapConfig(this IEndpointRouteBuilder app)
     {
         // GET /api/config — текущая "живая" конфигурация
-        app.MapGet("/api/config", (RuntimeConfigStore store) => Results.Ok(new { config = store.Current, source = "runtime" })).WithName("GetConfig");
+        // task_081: short-TTL output cache (30s) для read-only config endpoint.
+        app.MapGet("/api/config", (RuntimeConfigStore store) => Results.Ok(new { config = store.Current, source = "runtime" })).WithName("GetConfig").CacheOutput(OutputCachePolicies.Config);
 
         // PUT /api/config — полная замена конфигурации
         app.MapPut("/api/config", (JsonElement body, RuntimeConfigStore store) =>

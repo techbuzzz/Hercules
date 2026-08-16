@@ -18,7 +18,8 @@ public static class StatsController
         // GET /api/reflect — запустить рефлексию вручную
         app.MapGet("/api/reflect", async (WebApiAdapter adapter, CancellationToken ct) =>
                 Results.Ok(await adapter.ReflectAsync(ct)))
-            .WithName("Reflect");
+            .WithName("Reflect")
+            .RequireRateLimiting(RateLimitPolicies.Expensive);
 
         // GET /api/health/detailed — SQLite health check
         app.MapGet("/api/health/detailed", (SqliteSessionStore sessions) =>

@@ -27,7 +27,7 @@ public static class SkillHarnessController
                         detail: ex.Message,
                         statusCode: 500);
                 }
-            }).WithName("RunSkillHarness");
+            }).WithName("RunSkillHarness").RequireRateLimiting(RateLimitPolicies.Expensive);
 
         // POST /api/skills/{id}/eval/baseline — записать baseline
         app.MapPost("/api/skills/{id}/eval/baseline",
@@ -67,7 +67,7 @@ public static class SkillHarnessController
                         detail: ex.Message,
                         statusCode: 500);
                 }
-            }).WithName("RecordSkillBaseline");
+            }).WithName("RecordSkillBaseline").RequireRateLimiting(RateLimitPolicies.Expensive);
 
         // GET /api/skills/{id}/eval/baseline — получить baseline
         app.MapGet("/api/skills/{id}/eval/baseline",

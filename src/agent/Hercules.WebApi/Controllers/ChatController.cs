@@ -7,6 +7,7 @@ namespace Hercules.WebApi.Controllers;
 ///     Поддерживает optional <c>X-Session-Id</c> header для multi-tenant режима (task_075 H7).
 ///     Когда header отсутствует или пуст — используется process-default sessionId,
 ///     сохранён обратно-совместимый single-tenant путь.
+///     task_081: per-IP fixed-window rate limit (<see cref="RateLimitPolicies.Chat"/>).
 /// </summary>
 public static class ChatController
 {
@@ -37,7 +38,8 @@ public static class ChatController
                 return Results.Ok(resp);
             })
             .WithName("Chat")
-            .WithSummary("Отправить сообщение агенту и получить ответ");
+            .WithSummary("Отправить сообщение агенту и получить ответ")
+            .RequireRateLimiting(RateLimitPolicies.Chat);
     }
 
     private static string ResolveSessionId(HttpRequest http, WebApiAdapter adapter)

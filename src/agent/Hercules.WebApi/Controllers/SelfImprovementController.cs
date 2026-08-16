@@ -4,6 +4,7 @@ namespace Hercules.WebApi.Controllers;
 
 /// <summary>
 ///     Self-improvement endpoints (task_017): maintenance workflow, proposals, approve/reject.
+///     task_081: heavy LLM-driven operations are guarded by the concurrency rate limiter.
 /// </summary>
 public static class SelfImprovementController
 {
@@ -29,7 +30,7 @@ public static class SelfImprovementController
                 }
 
                 return Results.Created($"/api/maintenance/proposals/{proposal.Id}", proposal);
-            }).WithName("RunMaintenance");
+            }).WithName("RunMaintenance").RequireRateLimiting(RateLimitPolicies.Expensive);
 
         // POST /api/maintenance/run-all — запустить для всех навыков
         app.MapPost("/api/maintenance/run-all",
@@ -37,7 +38,7 @@ public static class SelfImprovementController
             {
                 var proposals = await service.RunMaintenanceAllAsync(req?.TriggeredBy ?? "user", ct);
                 return Results.Ok(new { count = proposals.Count, proposals });
-            }).WithName("RunMaintenanceAll");
+            }).WithName("RunMaintenanceAll").RequireRateLimiting(RateLimitPolicies.Expensive);
 
         // GET /api/maintenance/proposals — список proposals
         app.MapGet("/api/maintenance/proposals",
@@ -89,7 +90,7 @@ public static class SelfImprovementController
                     scoreGain = result.ScoreGain,
                     evalResult = result.EvalResult
                 });
-            }).WithName("ApproveProposal");
+            }).WithName("ApproveProposal").RequireRateLimiting(RateLimitPolicies.Expensive);
 
         // POST /api/maintenance/proposals/{id}/reject — отклонить proposal
         app.MapPost("/api/maintenance/proposals/{id}/reject",
