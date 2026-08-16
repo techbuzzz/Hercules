@@ -39,6 +39,9 @@
     <!-- Парсинг метаданных навыков (YAML front-matter) -->
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
 
+    <!-- Object pooling for hot-path StringBuilder (task_084) -->
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.11" />
+
     <!-- Улучшенный CLI-интерфейс -->
     <PackageReference Include="Spectre.Console" Version="0.57.2" />
 

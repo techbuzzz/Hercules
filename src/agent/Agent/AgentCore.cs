@@ -20,6 +20,7 @@ using Hercules.Tools;
 using Hercules.Tools.Approval;
 using Hercules.Tools.Policy;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
 
 namespace Hercules.Agent;
 
@@ -68,6 +69,10 @@ public sealed record AgentResponse
 /// </summary>
 public sealed class AgentCore : IConfigReload
 {
+    // task_084: pooled StringBuilder for the BuildSystemPrompt hot path.
+    private static readonly ObjectPool<StringBuilder> SbPool =
+        new DefaultObjectPoolProvider().CreateStringBuilderPool();
+
     private static readonly Regex ConfidenceRx =
         new(@"\[confidence:\s*(high|medium|low)\s*\]", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -1073,27 +1078,35 @@ public sealed class AgentCore : IConfigReload
 
     private string BuildSystemPrompt(Skill? skill, string contextBlock)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine(_cfg.SystemPrompt);
-        sb.AppendLine();
-        sb.AppendLine(contextBlock);
-        if (skill is not null)
+        // task_084: pooled StringBuilder.
+        var sb = SbPool.Get();
+        try
         {
+            sb.AppendLine(_cfg.SystemPrompt);
             sb.AppendLine();
-            sb.AppendLine($"=== АКТИВНЫЙ НАВЫК: {skill.Meta.Name} ===");
-            sb.AppendLine(skill.Prompt);
-        }
+            sb.AppendLine(contextBlock);
+            if (skill is not null)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"=== АКТИВНЫЙ НАВЫК: {skill.Meta.Name} ===");
+                sb.AppendLine(skill.Prompt);
+            }
 
-        // Stage 4: tool ecosystem injection
-        if (_tools is not null && _tools.Names.Count > 0)
+            // Stage 4: tool ecosystem injection
+            if (_tools is not null && _tools.Names.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine(_tools.ListForLLM());
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("В КОНЦЕ ответа добавь на отдельной строке маркер уверенности в формате: [confidence: high|medium|low]");
+            return sb.ToString();
+        }
+        finally
         {
-            sb.AppendLine();
-            sb.AppendLine(_tools.ListForLLM());
+            SbPool.Return(sb);
         }
-
-        sb.AppendLine();
-        sb.AppendLine("В КОНЦЕ ответа добавь на отдельной строке маркер уверенности в формате: [confidence: high|medium|low]");
-        return sb.ToString();
     }
 
     private List<ChatTurn> BuildMessages(string systemPrompt, string input, SessionState state)

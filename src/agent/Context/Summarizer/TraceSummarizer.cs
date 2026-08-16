@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Extensions.ObjectPool;
 
 namespace Hercules.Context.Summarizer;
 
@@ -7,50 +8,66 @@ namespace Hercules.Context.Summarizer;
 ///     Groups by tool, aggregates results, produces a compact summary.
 ///
 ///     Task 027 — Context Assembly.
+///     <para>
+///         task_084: per-instance <see cref="StringBuilder" /> pool to reduce
+///         allocations when summaries are produced after every multi-tool turn.
+///     </para>
 /// </summary>
 public sealed class TraceSummarizer : ITraceSummarizer
 {
+    // task_084: pooled StringBuilder for hot summarization path.
+    private static readonly ObjectPool<StringBuilder> SbPool =
+        new DefaultObjectPoolProvider().CreateStringBuilderPool();
+
     /// <inheritdoc />
     public string Summarize(IReadOnlyList<ToolTraceEntry> trace)
     {
         if (trace.Count == 0)
             return "[Empty trace] No tool calls recorded.";
 
-        var sb = new StringBuilder();
-        sb.Append($"[Tool trace summary] {trace.Count} tool call(s): ");
-
-        // Group by tool name
-        var groups = trace
-            .GroupBy(t => t.ToolName)
-            .OrderByDescending(g => g.Count())
-            .ToList();
-
-        var parts = new List<string>();
-        foreach (var group in groups)
+        // task_084: pool the StringBuilder.
+        var sb = SbPool.Get();
+        try
         {
-            var calls = group.ToList();
-            var successes = calls.Count(c => c.Success);
-            var failures = calls.Count - successes;
-            var totalMs = calls.Sum(c => c.DurationMs);
-            var avgMs = totalMs / calls.Count;
+            sb.Append($"[Tool trace summary] {trace.Count} tool call(s): ");
 
-            // Capture first non-empty output snippet (for single calls)
-            string outputSnippet = "";
-            if (calls.Count == 1 && !string.IsNullOrWhiteSpace(calls[0].Output))
+            // Group by tool name
+            var groups = trace
+                .GroupBy(t => t.ToolName)
+                .OrderByDescending(g => g.Count())
+                .ToList();
+
+            var parts = new List<string>();
+            foreach (var group in groups)
             {
-                outputSnippet = Truncate(calls[0].Output, 60);
+                var calls = group.ToList();
+                var successes = calls.Count(c => c.Success);
+                var failures = calls.Count - successes;
+                var totalMs = calls.Sum(c => c.DurationMs);
+                var avgMs = totalMs / calls.Count;
+
+                // Capture first non-empty output snippet (for single calls)
+                string outputSnippet = "";
+                if (calls.Count == 1 && !string.IsNullOrWhiteSpace(calls[0].Output))
+                {
+                    outputSnippet = Truncate(calls[0].Output, 60);
+                }
+
+                var callDesc = $"{group.Key} ({calls.Count}x, {avgMs}ms avg, {successes}ok/{failures}fail)";
+                if (!string.IsNullOrEmpty(outputSnippet))
+                    callDesc += $" → {outputSnippet}";
+                parts.Add(callDesc);
             }
 
-            var callDesc = $"{group.Key} ({calls.Count}x, {avgMs}ms avg, {successes}ok/{failures}fail)";
-            if (!string.IsNullOrEmpty(outputSnippet))
-                callDesc += $" → {outputSnippet}";
-            parts.Add(callDesc);
+            sb.Append(string.Join("; ", parts));
+            sb.Append('.');
+
+            return sb.ToString();
         }
-
-        sb.Append(string.Join("; ", parts));
-        sb.Append('.');
-
-        return sb.ToString();
+        finally
+        {
+            SbPool.Return(sb);
+        }
     }
 
     private static string Truncate(string text, int maxLength)

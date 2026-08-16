@@ -1,6 +1,7 @@
 using System.Text;
 using Hercules.Agent;
 using Hercules.LLM;
+using Microsoft.Extensions.ObjectPool;
 
 namespace Hercules.Memory.Layers;
 
@@ -16,6 +17,10 @@ namespace Hercules.Memory.Layers;
 /// </summary>
 public sealed class LayeredMemoryManager
 {
+    // task_084: pooled StringBuilder for context-block assembly.
+    private static readonly ObjectPool<StringBuilder> SbPool =
+        new DefaultObjectPoolProvider().CreateStringBuilderPool();
+
     private readonly IWorkingMemory? _legacyWorkingMemory;
     private readonly ISessionStateStore? _sessionStates;
     private readonly IDurableFactsStore _factsStore;
@@ -82,60 +87,67 @@ public sealed class LayeredMemoryManager
     /// </summary>
     public async Task<string> BuildContextBlockAsync(string? sessionId, CancellationToken ct = default)
     {
-        var sb = new StringBuilder();
-
-        // Durable facts (non-expired, non-redacted) — shared across sessions (intentional).
-        var facts = await _factsStore.SearchFactsAsync(includeExpired: false, ct: ct);
-        var redactedFacts = facts
-            .Where(f => !f.Entry.ShouldRedact(_config.SensitivityRedactionEnabled))
-            .ToList();
-
-        if (redactedFacts.Count > 0)
+        // task_084: pooled StringBuilder.
+        var sb = SbPool.Get();
+        try
         {
-            sb.AppendLine("=== УСТОЙЧИВЫЕ ФАКТЫ ===");
-            foreach (var (key, value, entry) in redactedFacts)
+            // Durable facts (non-expired, non-redacted) — shared across sessions (intentional).
+            var facts = await _factsStore.SearchFactsAsync(includeExpired: false, ct: ct);
+            var redactedFacts = facts
+                .Where(f => !f.Entry.ShouldRedact(_config.SensitivityRedactionEnabled))
+                .ToList();
+
+            if (redactedFacts.Count > 0)
             {
-                sb.AppendLine($"- [{entry.Confidence}] {key}: {value.Trim()}");
+                sb.AppendLine("=== УСТОЙЧИВЫЕ ФАКТЫ ===");
+                foreach (var (key, value, entry) in redactedFacts)
+                {
+                    sb.AppendLine($"- [{entry.Confidence}] {key}: {value.Trim()}");
+                }
+
+                sb.AppendLine();
             }
 
-            sb.AppendLine();
-        }
-
-        // Recent episodes — shared across sessions.
-        var episodes = await _episodicStore.GetRecentEpisodesAsync(_config.MaxEpisodesInContext, ct);
-        if (episodes.Count > 0)
-        {
-            sb.AppendLine("=== КОНТЕКСТ ПРОШЛЫХ СЕССИЙ ===");
-            foreach (var ep in episodes)
+            // Recent episodes — shared across sessions.
+            var episodes = await _episodicStore.GetRecentEpisodesAsync(_config.MaxEpisodesInContext, ct);
+            if (episodes.Count > 0)
             {
-                var prefix = !ep.Entry.ShouldRedact(_config.SensitivityRedactionEnabled)
-                    ? $"[{ep.CreatedAt:yyyy-MM-dd}]"
-                    : "[КОНФИДЕНЦИАЛЬНО]";
-                sb.AppendLine($"{prefix} {ep.Summary.Trim()}");
+                sb.AppendLine("=== КОНТЕКСТ ПРОШЛЫХ СЕССИЙ ===");
+                foreach (var ep in episodes)
+                {
+                    var prefix = !ep.Entry.ShouldRedact(_config.SensitivityRedactionEnabled)
+                        ? $"[{ep.CreatedAt:yyyy-MM-dd}]"
+                        : "[КОНФИДЕНЦИАЛЬНО]";
+                    sb.AppendLine($"{prefix} {ep.Summary.Trim()}");
+                }
+
+                sb.AppendLine();
             }
 
-            sb.AppendLine();
-        }
+            // Working memory — task_075 H6 fix: per-session view.
+            var workingMemory = ResolveWorkingMemory(sessionId);
+            var working = workingMemory.GetAll();
+            var redactedWorking = working
+                .Where(kvp => !kvp.Value.Entry.ShouldRedact(_config.SensitivityRedactionEnabled))
+                .ToList();
 
-        // Working memory — task_075 H6 fix: per-session view.
-        var workingMemory = ResolveWorkingMemory(sessionId);
-        var working = workingMemory.GetAll();
-        var redactedWorking = working
-            .Where(kvp => !kvp.Value.Entry.ShouldRedact(_config.SensitivityRedactionEnabled))
-            .ToList();
-
-        if (redactedWorking.Count > 0)
-        {
-            sb.AppendLine("=== РАБОЧАЯ ПАМЯТЬ ===");
-            foreach (var (key, (value, entry)) in redactedWorking)
+            if (redactedWorking.Count > 0)
             {
-                sb.AppendLine($"[{entry.Confidence}] {key}: {value.Trim()}");
+                sb.AppendLine("=== РАБОЧАЯ ПАМЯТЬ ===");
+                foreach (var (key, (value, entry)) in redactedWorking)
+                {
+                    sb.AppendLine($"[{entry.Confidence}] {key}: {value.Trim()}");
+                }
+
+                sb.AppendLine();
             }
 
-            sb.AppendLine();
+            return sb.ToString();
         }
-
-        return sb.ToString();
+        finally
+        {
+            SbPool.Return(sb);
+        }
     }
 
     /// <summary>Store a durable fact.</summary>

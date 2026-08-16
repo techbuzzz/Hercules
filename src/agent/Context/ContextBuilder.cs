@@ -5,6 +5,7 @@ using Hercules.Memory.Layers;
 using Hercules.Skills;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
 
 namespace Hercules.Context;
 
@@ -17,6 +18,10 @@ namespace Hercules.Context;
 /// </summary>
 public sealed class ContextBuilder : IContextBuilder
 {
+    // task_084: pooled StringBuilder for context assembly hot path.
+    private static readonly ObjectPool<StringBuilder> SbPool =
+        new DefaultObjectPoolProvider().CreateStringBuilderPool();
+
     private readonly LayeredMemoryManager? _memory;
     private readonly ITraceSummarizer? _traceSummarizer;
     private readonly ContextConfig _cfg;
@@ -89,50 +94,58 @@ public sealed class ContextBuilder : IContextBuilder
             .ToList();
 
         // 6. Assemble within token budget
-        var sb = new StringBuilder();
+        // task_084: pooled StringBuilder to avoid per-request allocation in the hot path.
+        var sb = SbPool.Get();
         var usedTokens = 0;
         var truncated = false;
         var factCount = 0;
 
-        foreach (var item in sorted)
+        try
         {
-            if (factCount >= _cfg.MaxFactsInContext && item.Type == ContextItemType.DurableFact)
+            foreach (var item in sorted)
             {
-                truncated = true;
-                continue;
+                if (factCount >= _cfg.MaxFactsInContext && item.Type == ContextItemType.DurableFact)
+                {
+                    truncated = true;
+                    continue;
+                }
+
+                if (usedTokens + item.TokenEstimate > availableTokens)
+                {
+                    truncated = true;
+                    continue;
+                }
+
+                var sectionHeader = SectionHeader(item.Type);
+                sb.Append(sectionHeader);
+                sb.AppendLine(item.Content.Trim());
+                sb.AppendLine();
+                usedTokens += item.TokenEstimate + EstimateTokens(sectionHeader);
+                factCount++;
+
+                if (factCount >= _cfg.MaxFactsInContext + _cfg.MaxEpisodesInContext + 5)
+                {
+                    truncated = true;
+                    break;
+                }
             }
 
-            if (usedTokens + item.TokenEstimate > availableTokens)
-            {
-                truncated = true;
-                continue;
-            }
+            var contextBlock = sb.ToString();
+            _currentBudget = new ContextBudget(
+                availableTokens,
+                usedTokens,
+                availableTokens - usedTokens);
 
-            var sectionHeader = SectionHeader(item.Type);
-            sb.Append(sectionHeader);
-            sb.AppendLine(item.Content.Trim());
-            sb.AppendLine();
-            usedTokens += item.TokenEstimate + EstimateTokens(sectionHeader);
-            factCount++;
-
-            if (factCount >= _cfg.MaxFactsInContext + _cfg.MaxEpisodesInContext + 5)
-            {
-                truncated = true;
-                break;
-            }
+            return new ContextAssembly(
+                contextBlock,
+                _currentBudget,
+                factCount,
+                truncated);
         }
-
-        var contextBlock = sb.ToString();
-        _currentBudget = new ContextBudget(
-            availableTokens,
-            usedTokens,
-            availableTokens - usedTokens);
-
-        return new ContextAssembly(
-            contextBlock,
-            _currentBudget,
-            factCount,
-            truncated);
+        finally
+        {
+            SbPool.Return(sb);
+        }
     }
 
     public async Task<bool> CompressTraceAsync(
