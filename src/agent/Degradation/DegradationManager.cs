@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
+using Hercules.Config;
 using Hercules.LLM;
+using Hercules.Mesh.Abstractions;
 using Hercules.Offline;
+using Hercules.Storage;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -11,6 +14,7 @@ namespace Hercules.Degradation;
 ///     Monitors service health, transitions between degradation modes,
 ///     and coordinates fallback strategies.
 ///     Task 061: Local-first degradation.
+///     Task 079: real probes (LLM provider, mesh bus, skill registry) replace stubs.
 /// </summary>
 public sealed class DegradationManager : BackgroundService
 {
@@ -19,6 +23,10 @@ public sealed class DegradationManager : BackgroundService
     private readonly OperatorNotificationService _notificationService;
     private readonly ILLMClient? _llmClient;
     private readonly INetworkMonitor? _networkMonitor;
+    private readonly ProviderHealthChecker? _llmHealthChecker;
+    private readonly LlmConfig? _llmConfig;
+    private readonly IMeshBus? _meshBus;
+    private readonly FileSkillRepository? _skillRepository;
     private readonly ILogger<DegradationManager> _log;
 
     private readonly ConcurrentDictionary<string, ServiceHealthState> _serviceStates = new();
@@ -34,11 +42,34 @@ public sealed class DegradationManager : BackgroundService
         ILLMClient? llmClient,
         INetworkMonitor? networkMonitor,
         ILogger<DegradationManager> log)
+        : this(config, notificationService, llmClient, networkMonitor, llmHealthChecker: null, llmConfig: null, meshBus: null, skillRepository: null, log)
+    {
+    }
+
+    /// <summary>
+    /// task_079: extended DI constructor that also receives the LLM provider health
+    /// checker, mesh bus, and skill repository so the background checks can probe
+    /// real state instead of static stubs.
+    /// </summary>
+    public DegradationManager(
+        DegradationConfig config,
+        OperatorNotificationService notificationService,
+        ILLMClient? llmClient,
+        INetworkMonitor? networkMonitor,
+        ProviderHealthChecker? llmHealthChecker,
+        LlmConfig? llmConfig,
+        IMeshBus? meshBus,
+        FileSkillRepository? skillRepository,
+        ILogger<DegradationManager> log)
     {
         _config = config;
         _notificationService = notificationService;
         _llmClient = llmClient;
         _networkMonitor = networkMonitor;
+        _llmHealthChecker = llmHealthChecker;
+        _llmConfig = llmConfig;
+        _meshBus = meshBus;
+        _skillRepository = skillRepository;
         _log = log;
         _fallbackEngine = new DeterministicFallbackEngine(config, llmClient, log as ILogger<DeterministicFallbackEngine> ?? null!);
 
@@ -171,12 +202,31 @@ public sealed class DegradationManager : BackgroundService
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(_config.HealthCheck.TimeoutSeconds));
 
-            // Simple health check: try to get model info
-            if (_llmClient != null)
+            // task_079: real probe via ProviderHealthChecker when available.
+            // Fall back to "client present" check when the checker is not registered
+            // (legacy CLI deployments without DI).
+            if (_llmHealthChecker is not null && _llmConfig is not null && !string.IsNullOrWhiteSpace(_llmConfig.Provider))
             {
-                // For now, assume LLM is healthy if client exists
-                // In production, add actual health check call
-                state.RecordCheck(ServiceHealth.Healthy, "LLM client available");
+                var result = await _llmHealthChecker.CheckAsync(_llmConfig.Provider, cts.Token).ConfigureAwait(false);
+                if (result.Healthy)
+                {
+                    state.RecordCheck(ServiceHealth.Healthy, $"LLM provider '{_llmConfig.Provider}' responded in {result.LatencyMs} ms");
+                }
+                else if (_llmConfig.Fallback is { Count: > 0 })
+                {
+                    state.RecordCheck(ServiceHealth.Degraded,
+                        $"Primary '{_llmConfig.Provider}' unhealthy; fallback chain available ({_llmConfig.Fallback.Count} providers)");
+                }
+                else
+                {
+                    state.RecordCheck(ServiceHealth.Unhealthy,
+                        $"LLM provider '{_llmConfig.Provider}' unhealthy: {result.Error ?? result.Status}");
+                }
+            }
+            else if (_llmClient != null)
+            {
+                // No health checker wired; assume Healthy just because the client is present.
+                state.RecordCheck(ServiceHealth.Healthy, "LLM client available (no live probe)");
             }
             else
             {
@@ -229,18 +279,56 @@ public sealed class DegradationManager : BackgroundService
     {
         var state = _serviceStates.GetOrAdd("mesh-bus", _ => new ServiceHealthState());
 
-        // Mesh bus health check - for now, assume healthy
-        // In production, add actual mesh bus health check
-        state.RecordCheck(ServiceHealth.Healthy, "Mesh bus available");
-        await Task.CompletedTask;
+        // task_079: real probe via IMeshBus.IsHealthyAsync (in-process is always true;
+        // Redis/Postgres/NATS backends perform real connectivity checks).
+        if (_meshBus is null)
+        {
+            state.RecordCheck(ServiceHealth.Healthy, "Mesh bus not registered; treated as healthy");
+            return;
+        }
+
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(_config.HealthCheck.TimeoutSeconds));
+            var ok = await _meshBus.IsHealthyAsync(cts.Token).ConfigureAwait(false);
+            state.RecordCheck(
+                ok ? ServiceHealth.Healthy : ServiceHealth.Unhealthy,
+                ok
+                    ? $"Mesh bus '{_meshBus.BackendKind}' is reachable"
+                    : $"Mesh bus '{_meshBus.BackendKind}' ping returned false");
+        }
+        catch (Exception ex)
+        {
+            state.RecordCheck(ServiceHealth.Unhealthy, ex.Message);
+        }
     }
 
     private async Task CheckSkillRegistryHealthAsync(CancellationToken ct)
     {
         var state = _serviceStates.GetOrAdd("skill-registry", _ => new ServiceHealthState());
 
-        // Skill registry health check - assume healthy
-        state.RecordCheck(ServiceHealth.Healthy, "Skill registry available");
+        // task_079: real probe via FileSkillRepository.LoadAll() to confirm the
+        // Skills directory is enumerable and the meta-JSON parses. Returns the
+        // count so degradation telemetry can track registry drift over time.
+        if (_skillRepository is null)
+        {
+            state.RecordCheck(ServiceHealth.Healthy, "Skill registry not registered; treated as healthy");
+            return;
+        }
+
+        try
+        {
+            var skills = _skillRepository.LoadAll();
+            state.RecordCheck(
+                ServiceHealth.Healthy,
+                $"Skill registry available ({skills.Count} skills)");
+        }
+        catch (Exception ex)
+        {
+            state.RecordCheck(ServiceHealth.Unhealthy, ex.Message);
+        }
+
         await Task.CompletedTask;
     }
 

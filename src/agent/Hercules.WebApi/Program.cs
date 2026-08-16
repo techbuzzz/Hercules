@@ -43,9 +43,12 @@ using Hercules.WasmSandbox.Compilation;
 using Hercules.WebApi.Auth;
 using Hercules.WebApi.Config;
 using Hercules.WebApi.Controllers;
+using Hercules.Health;
 using HerculesBus;
 using HerculesBus.Core;
 using HerculesBus.InMemory;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Http.Resilience;
 
 // ============================================================================
@@ -64,6 +67,8 @@ builder.Configuration.AddEnvironmentVariables("HERCULES_");
 
 var appConfig = builder.Configuration.Get<AppConfig>() ?? new AppConfig();
 var webCfg = builder.Configuration.GetSection("WebApi").Get<WebApiConfig>() ?? new WebApiConfig();
+// task_079: health checks configuration (liveness, readiness, LLM ping timeout, disk/outbox thresholds)
+var healthCfg = builder.Configuration.GetSection("HealthChecks").Get<HealthChecksConfig>() ?? new HealthChecksConfig();
 
 // Делаем хранилище общим с CLI-приложением: проект Hercules лежит на уровень выше.
 var sharedData = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "data"));
@@ -103,6 +108,10 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Eval);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SelfImprovement);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Tasks);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.OfflineSync);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Degradation);
+// task_079: health check thresholds (LLM ping timeout, disk/outbox limits)
+builder.Services.AddSingleton(healthCfg);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Phase2);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SkillQuality);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.LeastPrivilege);
@@ -114,6 +123,16 @@ builder.Services.AddSingleton(webCfg);
 
 // task_078: IHttpClientFactory + named clients with standard resilience handlers
 builder.Services.AddHttpClient();
+
+// task_079: real health checks (liveness + readiness) replacing the static /api/health stub
+builder.Services.AddSingleton<ILLMProviderProbe>(sp => new ProviderHealthCheckerAdapter(sp.GetRequiredService<ProviderHealthChecker>()));
+builder.Services.AddHealthChecks()
+    .AddCheck<SqliteHealthCheck>("sqlite", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
+    .AddCheck<LlmHealthCheck>("llm", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
+    .AddCheck<MeshBusHealthCheck>("mesh-bus", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
+    .AddCheck<DiskSpaceHealthCheck>("disk-space", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
+    .AddCheck<OutboxHealthCheck>("outbox", failureStatus: HealthStatus.Degraded, tags: new[] { "ready" })
+    .AddCheck<SkillRegistryHealthCheck>("skill-registry", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" });
 
 var httpResilience = appConfig.Http.Resilience ?? new HttpResilienceConfig();
 
@@ -327,6 +346,13 @@ builder.Services.AddSingleton<MemoryStore>(sp =>
         sp.GetRequiredService<SecretsConfig>(),
         sp.GetRequiredService<ISecretMaskingService>()));
 builder.Services.AddSingleton<SqliteSessionStore>();
+
+// task_079: Outbox store (optional, used by OutboxHealthCheck and DegradationManager)
+builder.Services.AddSingleton<IOutboxStore>(sp =>
+    new SqliteOutboxStore(
+        sp.GetRequiredService<SqliteSessionStore>(),
+        sp.GetRequiredService<OfflineSyncConfig>(),
+        sp.GetRequiredService<ILogger<SqliteOutboxStore>>()));
 
 // task_026: Least-privilege grants
 builder.Services.AddSingleton(sp =>
@@ -664,7 +690,26 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/tools/categories", "POST /api/tools/{name}/enable", "POST /api/tools/{name}/disable"
     ]
 }));
-app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", time = DateTime.UtcNow }));
+// task_079: real health endpoints replacing the static /api/health stub.
+//   /api/health        — liveness, returns 200 if the process is alive (no checks)
+//   /api/ready         — readiness, returns 200 only if all "ready"-tagged checks pass
+//   /api/health/detail — JSON per-check breakdown (auth-gated by ApiKeyMiddleware)
+app.MapHealthChecks("/api/health", new HealthCheckOptions
+{
+    Predicate = _ => false, // liveness: process-alive only
+    ResponseWriter = Hercules.WebApi.Health.HealthCheckResponseWriter.WriteLiveness
+});
+app.MapHealthChecks("/api/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = Hercules.WebApi.Health.HealthCheckResponseWriter.WriteReadiness
+});
+app.MapHealthChecks("/api/health/detail", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = Hercules.WebApi.Health.HealthCheckResponseWriter.WriteDetail,
+    AllowCachingResponses = false
+}).AllowAnonymous(); // ApiKeyMiddleware already guards /api/* — no extra attribute needed
 
 // A2A Agent Card — статический файл по спецификации (task_033)
 app.MapGet("/agent-card.json", () =>

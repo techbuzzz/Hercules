@@ -17,6 +17,7 @@ using Hercules.LLM.JsonRepair;
 using Hercules.LLM.Providers;
 using Hercules.Lifecycle;
 using Hercules.Mesh.Transport;
+using Hercules.Mesh.Abstractions;
 using Hercules.Mcp;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
@@ -626,7 +627,17 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<DegradationConfig>(),
             sp.GetRequiredService<ILogger<OperatorNotificationService>>(),
             sp.GetService<IHttpClientFactory>()!));
-    services.AddSingleton<DegradationManager>(); // BackgroundService
+    services.AddSingleton<DegradationManager>(sp =>
+        new DegradationManager(
+            sp.GetRequiredService<DegradationConfig>(),
+            sp.GetRequiredService<OperatorNotificationService>(),
+            sp.GetService<ILLMClient>(),
+            sp.GetService<INetworkMonitor>(),
+            sp.GetService<ProviderHealthChecker>(),
+            sp.GetService<LlmConfig>(),
+            sp.GetService<IMeshBus>(),
+            sp.GetService<FileSkillRepository>(),
+            sp.GetRequiredService<ILogger<DegradationManager>>())); // BackgroundService
 
     // task_063: Backup & Recovery — encrypted backup archives, scheduled backups, restore
     services.AddSingleton(appConfig.Backup);

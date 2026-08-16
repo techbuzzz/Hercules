@@ -109,10 +109,10 @@
 | 73 | 45 | [Outbox synced-state and bounded-queue prune fix](tasks/task_073.md) | `outbox-synced-fix` | done |
 | 74 | 45 | [NATS JetStream ack/fail implementation](tasks/task_074.md) | `nats-jetstream-ack` | done |
 | 75 | 46 | [DI lifetime fixes: captive dependency and AgentCore singleton](tasks/task_075.md) | `di-lifetime-fixes` | done |
-| 76 | 46 | [ResilientLLMClient per-call provider/model](tasks/task_076.md) | `resilient-llm-per-call-provider` | pending |
-| 77 | 46 | [Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController](tasks/task_077.md) | `sync-over-async-sweep` | pending |
+| 76 | 46 | [ResilientLLMClient per-call provider/model](tasks/task_076.md) | `resilient-llm-per-call-provider` | done |
+| 77 | 46 | [Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController](tasks/task_077.md) | `sync-over-async-sweep` | done |
 | 78 | 46 | [IHttpClientFactory adoption and standard resilience handlers](tasks/task_078.md) | `httpclient-factory-adoption` | done |
-| 79 | 46 | [Real health checks infrastructure](tasks/task_079.md) | `health-checks-infrastructure` | pending |
+| 79 | 46 | [Real health checks infrastructure](tasks/task_079.md) | `health-checks-infrastructure` | done |
 | 80 | 46 | [Graceful shutdown and drain](tasks/task_080.md) | `graceful-shutdown-drain` | pending |
 | 81 | 46 | [Kestrel tuning, framework rate limiter, compression, output cache](tasks/task_081.md) | `kestrel-rate-limiter-compression` | pending |
 | 82 | 46 | [RouterHealthTracker, Redis CAS, Postgres reconnect, BuildServiceProvider](tasks/task_082.md) | `router-redis-postgres-di-fixes` | pending |
