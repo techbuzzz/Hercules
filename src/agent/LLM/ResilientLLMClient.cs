@@ -21,6 +21,12 @@ public sealed class ResilientLLMClient : ILLMClient
     private volatile LlmConfig _cfg;
     private volatile List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
 
+    // [task_085] Sampled-warning counters. Logged 1-in-N (default 10).
+    // The corresponding OtelMetrics counter is incremented on every occurrence.
+    private long _retryLogCount;
+    private long _fallbackLogCount;
+    private int _logSampleRate = 10;
+
     public ResilientLLMClient(
         LlmConfig cfg,
         ILLMClientFactory factory,
@@ -110,6 +116,15 @@ public sealed class ResilientLLMClient : ILLMClient
         RebuildChain(cfg);
     }
 
+    /// <summary>
+    ///     [task_085] Update sampled-log rate for retry/fallback warnings.
+    ///     Set to 1 to log every event, 10 for one-in-ten, 0 to disable.
+    /// </summary>
+    public void SetLogSampleRate(int sampleRate)
+    {
+        _logSampleRate = sampleRate;
+    }
+
     private void RebuildChain(LlmConfig cfg)
     {
         var order = new List<string> { cfg.Provider };
@@ -177,13 +192,20 @@ public sealed class ResilientLLMClient : ILLMClient
                 catch (Exception ex)
                 {
                     last = ex;
+                    // [task_085] Always increment the metric, only sampled log.
+                    OtelMetrics.LlmRetryCounter.Add(1,
+                        new KeyValuePair<string, object?>("provider", name),
+                        new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
                     var canRetry = attempt < MaxRetryAttempts - 1 && IsRetryable(ex);
                     if (canRetry)
                     {
                         var delay = ComputeBackoff(attempt);
-                        _logger.LogWarning(
-                            "Provider '{Name}' attempt {Attempt}/{Max} failed ({Error}). Retrying in {Delay}ms...",
-                            name, attempt + 1, MaxRetryAttempts, ex.Message, delay);
+                        if (OtelMetrics.ShouldLogSampledWarning(ref _retryLogCount, _logSampleRate))
+                        {
+                            _logger.LogWarning(
+                                "Provider '{Name}' attempt {Attempt}/{Max} failed ({Error}). Retrying in {Delay}ms...",
+                                name, attempt + 1, MaxRetryAttempts, ex.Message, delay);
+                        }
                         try
                         {
                             await Task.Delay(delay, ct);
@@ -195,7 +217,10 @@ public sealed class ResilientLLMClient : ILLMClient
                     }
                     else
                     {
-                        _logger.LogWarning("Provider '{Name}' unavailable: {Message}. Trying next...", name, ex.Message);
+                        if (OtelMetrics.ShouldLogSampledWarning(ref _fallbackLogCount, _logSampleRate))
+                        {
+                            _logger.LogWarning("Provider '{Name}' unavailable: {Message}. Trying next...", name, ex.Message);
+                        }
                         break;
                     }
                 }
@@ -203,7 +228,10 @@ public sealed class ResilientLLMClient : ILLMClient
 
             if (last is not null)
             {
-                _logger.LogWarning("Provider '{Name}' exhausted retries. Trying next...", name);
+                if (OtelMetrics.ShouldLogSampledWarning(ref _fallbackLogCount, _logSampleRate))
+                {
+                    _logger.LogWarning("Provider '{Name}' exhausted retries. Trying next...", name);
+                }
             }
         }
 
@@ -225,8 +253,14 @@ public sealed class ResilientLLMClient : ILLMClient
         }
         catch (Exception ex)
         {
-            // Fallback: если роль-клиент упал — пробуем main-цепочку
-            _logger.LogWarning("Role '{Role}' ({Provider}) unavailable: {Message}. Falling back to main.", role, client.ProviderName, ex.Message);
+            // [task_085] Sampled warning for role-fallback path.
+            OtelMetrics.LlmRetryCounter.Add(1,
+                new KeyValuePair<string, object?>("role", role),
+                new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
+            if (OtelMetrics.ShouldLogSampledWarning(ref _fallbackLogCount, _logSampleRate))
+            {
+                _logger.LogWarning("Role '{Role}' ({Provider}) unavailable: {Message}. Falling back to main.", role, client.ProviderName, ex.Message);
+            }
             return await CompleteMainAsync(messages, ct);
         }
     }
@@ -254,7 +288,15 @@ public sealed class ResilientLLMClient : ILLMClient
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Provider '{Name}' unavailable (stream): {Message}. Trying next...", name, ex.Message);
+                // [task_085] Sampled warning for stream-start failures.
+                OtelMetrics.LlmRetryCounter.Add(1,
+                    new KeyValuePair<string, object?>("provider", name),
+                    new KeyValuePair<string, object?>("mode", "stream"),
+                    new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
+                if (OtelMetrics.ShouldLogSampledWarning(ref _fallbackLogCount, _logSampleRate))
+                {
+                    _logger.LogWarning("Provider '{Name}' unavailable (stream): {Message}. Trying next...", name, ex.Message);
+                }
                 if (enumerator is not null)
                 {
                     await enumerator.DisposeAsync();

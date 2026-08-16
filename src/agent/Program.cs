@@ -73,6 +73,25 @@ builder.ConfigureAppConfiguration(config =>
         .AddEnvironmentVariables("HERCULES_");
 });
 
+// [task_085] Async-friendly JSON console logger. Replaces the default SimpleConsole
+// logger so logs are line-buffered, non-blocking on the I/O path, and
+// machine-parseable. SingleConsoleFormatter drops the extra blank line that
+// default console output emits between records.
+builder.ConfigureLogging(logging =>
+{
+    logging.ClearProviders();
+    logging.AddJsonConsole(options =>
+    {
+        options.IncludeScopes = true;
+        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+        options.UseUtcTimestamp = true;
+        options.JsonWriterOptions = new System.Text.Json.JsonWriterOptions
+        {
+            Indented = false
+        };
+    });
+});
+
 builder.ConfigureServices((context, services) =>
 {
     var appConfig = context.Configuration.Get<AppConfig>() ?? new AppConfig();
@@ -205,11 +224,21 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<RoleRouter>();
     services.AddSingleton<IJsonRepairService, JsonRepairService>();
     services.AddSingleton<ResilientLLMClient>(sp =>
-        new ResilientLLMClient(
+    {
+        var client = new ResilientLLMClient(
             sp.GetRequiredService<LlmConfig>(),
             sp.GetRequiredService<LlmClientFactory>(),
             sp.GetRequiredService<RoleRouter>(),
-            sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
+            sp.GetRequiredService<ILogger<ResilientLLMClient>>());
+        // [task_085] Wire Otel.LoggingSampleRate into the LLM client so retry
+        // warnings are sampled at the same rate as the rest of the agent.
+        var otel = sp.GetService<OtelConfig>();
+        if (otel is not null)
+        {
+            client.SetLogSampleRate(otel.LoggingSampleRate);
+        }
+        return client;
+    });
     services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
     services.AddSingleton<ProviderHealthChecker>(sp =>
         new ProviderHealthChecker(
@@ -395,8 +424,17 @@ builder.ConfigureServices((context, services) =>
         return inner;
     });
     services.AddSingleton<QuotaGuard>(sp =>
-        new QuotaGuard(
-            sp.GetRequiredService<ILogger<QuotaGuard>>()));
+    {
+        var guard = new QuotaGuard(
+            sp.GetRequiredService<ILogger<QuotaGuard>>());
+        // [task_085] Wire Otel.LoggingSampleRate.
+        var otel = sp.GetService<OtelConfig>();
+        if (otel is not null)
+        {
+            guard.SetLogSampleRate(otel.LoggingSampleRate);
+        }
+        return guard;
+    });
     // Periodic sweep of rate-limit buckets so they don't accumulate between queries (task_072)
     services.AddHostedService<QuotaCleanupBackgroundService>();
 

@@ -1076,6 +1076,32 @@ public sealed class OtelConfig
     public string ServiceName { get; set; } = "hercules";
     public string? OtlpEndpoint { get; set; }
     public double SamplingRatio { get; set; } = 1.0;
+
+    /// <summary>
+    ///     Включить Console exporter для tracing/metrics.
+    ///     По умолчанию true, если OtlpEndpoint пустой (dev-режим).
+    ///     В production (OTLP настроен) рекомендуется отключить чтобы избежать двойного export.
+    ///     См. task_085.
+    /// </summary>
+    public bool? ConsoleExporterEnabled { get; set; }
+
+    /// <summary>
+    ///     Sample rate для repetitive warning logs (retry/quota/timeout).
+    ///     Логируется только каждый N-й event; метрики инкрементируются всегда.
+    ///     Значение 1 = логировать всё; 10 = каждый 10-й; 0 = полностью отключить warn-логи.
+    ///     См. task_085.
+    /// </summary>
+    public int LoggingSampleRate { get; set; } = 10;
+
+    /// <summary>
+    ///     Если true и OtlpEndpoint задан — также включить OTLP log exporter.
+    ///     См. task_085.
+    /// </summary>
+    public bool OtlpLogExporterEnabled { get; set; } = true;
+
+    /// <summary>Returns effective console exporter flag (auto if not explicitly set).</summary>
+    public bool GetEffectiveConsoleExporterEnabled() =>
+        ConsoleExporterEnabled ?? string.IsNullOrWhiteSpace(OtlpEndpoint);
 }
 
 /// <summary>

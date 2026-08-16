@@ -67,6 +67,21 @@ var builder = WebApplication.CreateBuilder(args);
 // --- Кодировка консоли для кириллицы ---
 Console.OutputEncoding = Encoding.UTF8;
 
+// [task_085] Async-friendly JSON console logger (Web API). Mirrors the
+// configuration in the console entry point so both surfaces emit
+// machine-parseable JSON with scopes and UTC timestamps.
+builder.Logging.ClearProviders();
+builder.Logging.AddJsonConsole(options =>
+{
+    options.IncludeScopes = true;
+    options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+    options.UseUtcTimestamp = true;
+    options.JsonWriterOptions = new System.Text.Json.JsonWriterOptions
+    {
+        Indented = false
+    };
+});
+
 // --- Конфигурация (наследует appsettings.json + переменные окружения HERCULES_) ---
 builder.Configuration.AddEnvironmentVariables("HERCULES_");
 
@@ -239,11 +254,20 @@ builder.Services.AddSingleton<LlmClientFactory>(sp =>
 builder.Services.AddSingleton<RoleRouter>();
 builder.Services.AddSingleton<IJsonRepairService, JsonRepairService>();
 builder.Services.AddSingleton<ResilientLLMClient>(sp =>
-    new ResilientLLMClient(
+{
+    var client = new ResilientLLMClient(
         sp.GetRequiredService<LlmConfig>(),
         sp.GetRequiredService<LlmClientFactory>(),
         sp.GetRequiredService<RoleRouter>(),
-        sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
+        sp.GetRequiredService<ILogger<ResilientLLMClient>>());
+    // [task_085] Wire Otel.LoggingSampleRate.
+    var otel = sp.GetService<OtelConfig>();
+    if (otel is not null)
+    {
+        client.SetLogSampleRate(otel.LoggingSampleRate);
+    }
+    return client;
+});
 builder.Services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
 builder.Services.AddSingleton<ProviderHealthChecker>(sp =>
     new ProviderHealthChecker(
@@ -396,8 +420,17 @@ builder.Services.AddSingleton<IQuotaService>(sp =>
         sp.GetRequiredService<QuotasConfig>(),
         sp.GetRequiredService<ILogger<QuotaService>>()));
 builder.Services.AddSingleton<QuotaGuard>(sp =>
-    new QuotaGuard(
-        sp.GetRequiredService<ILogger<QuotaGuard>>()));
+{
+    var guard = new QuotaGuard(
+        sp.GetRequiredService<ILogger<QuotaGuard>>());
+    // [task_085] Wire Otel.LoggingSampleRate.
+    var otel = sp.GetService<OtelConfig>();
+    if (otel is not null)
+    {
+        guard.SetLogSampleRate(otel.LoggingSampleRate);
+    }
+    return guard;
+});
 
 // Layered memory (task_011, task_075 H6)
 builder.Services.AddSingleton<IDurableFactsStore, DurableFactsService>();

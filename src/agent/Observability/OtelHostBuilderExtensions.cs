@@ -57,6 +57,12 @@ public static class OtelHostBuilderExtensions
             ? new AlwaysOnSampler()
             : new TraceIdRatioBasedSampler(samplingRatio);
 
+        // [task_085] Console exporter is gated: enabled by default only when no OTLP endpoint
+        // is configured. If both exporters run, traces/metrics are exported twice (duplicate cost
+        // and stdout blocking). Override via `Otel.ConsoleExporterEnabled`.
+        var consoleEnabled = config.GetEffectiveConsoleExporterEnabled();
+        var hasOtlp = !string.IsNullOrWhiteSpace(config.OtlpEndpoint);
+
         builder.Services.AddOpenTelemetry()
             .ConfigureResource(resource => resource
                 .AddService(
@@ -64,18 +70,21 @@ public static class OtelHostBuilderExtensions
                     serviceVersion: OtelSetup.ServiceVersion))
             .WithTracing(tracing =>
             {
-                tracing
-                    .SetSampler(sampler)
-                    .AddConsoleExporter(options =>
+                tracing.SetSampler(sampler);
+
+                if (consoleEnabled)
+                {
+                    tracing.AddConsoleExporter(options =>
                     {
                         options.Targets = ConsoleExporterOutputTargets.Console;
                     });
+                }
 
-                if (!string.IsNullOrWhiteSpace(config.OtlpEndpoint))
+                if (hasOtlp)
                 {
                     tracing.AddOtlpExporter(options =>
                     {
-                        options.Endpoint = new Uri(config.OtlpEndpoint);
+                        options.Endpoint = new Uri(config.OtlpEndpoint!);
                     });
                 }
 
@@ -94,16 +103,19 @@ public static class OtelHostBuilderExtensions
             })
             .WithMetrics(metrics =>
             {
-                metrics.AddConsoleExporter(options =>
+                if (consoleEnabled)
                 {
-                    options.Targets = ConsoleExporterOutputTargets.Console;
-                });
+                    metrics.AddConsoleExporter(options =>
+                    {
+                        options.Targets = ConsoleExporterOutputTargets.Console;
+                    });
+                }
 
-                if (!string.IsNullOrWhiteSpace(config.OtlpEndpoint))
+                if (hasOtlp)
                 {
                     metrics.AddOtlpExporter(options =>
                     {
-                        options.Endpoint = new Uri(config.OtlpEndpoint);
+                        options.Endpoint = new Uri(config.OtlpEndpoint!);
                     });
                 }
 
@@ -111,9 +123,29 @@ public static class OtelHostBuilderExtensions
                 metrics.AddHttpClientInstrumentation();
                 metrics.AddRuntimeInstrumentation();
 
+                // [task_085] Process instrumentation — CPU, memory, thread metrics.
+                // The package was already referenced in Hercules.csproj (line 75) but
+                // AddProcessInstrumentation() was never called, so process metrics
+                // were silently missing.
+                metrics.AddProcessInstrumentation();
+
+                // [task_085] Explicit bucket boundaries for SLO-relevant histograms.
+                // OpenTelemetry Views override the default bucket layout for matching
+                // instruments, giving dashboards much better resolution in the
+                // 50ms-5s (latency) and 100-32k (tokens) ranges.
+                AddHistogramViews(metrics);
+
                 // Register Hercules Meter (used by OtelMetrics)
                 metrics.AddMeter(OtelSetup.ServiceName);
             });
+
+        // [task_085] OTLP log exporter is OPT-IN via OtelConfig.OtlpLogExporterEnabled,
+        // but the OpenTelemetry.Extensions.Logging package is intentionally not
+        // referenced to keep the core dependency footprint small. Callers that
+        // want OTLP logs should add the package and wire it themselves (see
+        // Program.cs comment). We keep the flag in config so apps can flip it
+        // without code changes once the package is added.
+        _ = config.OtlpLogExporterEnabled;
 
         return builder;
     }
@@ -135,6 +167,8 @@ public static class OtelHostBuilderExtensions
         }
 
         var serviceName = string.IsNullOrWhiteSpace(config.ServiceName) ? "hercules" : config.ServiceName;
+        var consoleEnabled = config.GetEffectiveConsoleExporterEnabled();
+        var hasOtlp = !string.IsNullOrWhiteSpace(config.OtlpEndpoint);
 
         Sampler sampler = config.SamplingRatio >= 1.0
             ? new AlwaysOnSampler()
@@ -146,10 +180,13 @@ public static class OtelHostBuilderExtensions
             .WithTracing(tracing =>
             {
                 tracing.SetSampler(sampler);
-                tracing.AddConsoleExporter();
-                if (!string.IsNullOrWhiteSpace(config.OtlpEndpoint))
+                if (consoleEnabled)
                 {
-                    tracing.AddOtlpExporter(options => { options.Endpoint = new Uri(config.OtlpEndpoint); });
+                    tracing.AddConsoleExporter();
+                }
+                if (hasOtlp)
+                {
+                    tracing.AddOtlpExporter(options => { options.Endpoint = new Uri(config.OtlpEndpoint!); });
                 }
                 tracing.AddAspNetCoreInstrumentation(o => { o.RecordException = true; });
                 tracing.AddHttpClientInstrumentation(o => { o.RecordException = true; });
@@ -157,14 +194,21 @@ public static class OtelHostBuilderExtensions
             })
             .WithMetrics(metrics =>
             {
-                metrics.AddConsoleExporter();
-                if (!string.IsNullOrWhiteSpace(config.OtlpEndpoint))
+                if (consoleEnabled)
                 {
-                    metrics.AddOtlpExporter(options => { options.Endpoint = new Uri(config.OtlpEndpoint); });
+                    metrics.AddConsoleExporter();
+                }
+                if (hasOtlp)
+                {
+                    metrics.AddOtlpExporter(options => { options.Endpoint = new Uri(config.OtlpEndpoint!); });
                 }
                 metrics.AddAspNetCoreInstrumentation();
                 metrics.AddHttpClientInstrumentation();
                 metrics.AddRuntimeInstrumentation();
+                // [task_085] Process instrumentation (CPU/memory/threads).
+                metrics.AddProcessInstrumentation();
+                // [task_085] Explicit histogram bucket boundaries.
+                AddHistogramViews(metrics);
                 metrics.AddMeter(OtelSetup.ServiceName);
             });
 

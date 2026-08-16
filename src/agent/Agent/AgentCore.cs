@@ -114,6 +114,17 @@ public sealed class AgentCore : IConfigReload
     private AgentConfig _cfg;
     private Activity? _currentHandleActivity;
 
+    // [task_085] Sampled-warning counters. Logged 1-in-N (default 10) to avoid
+    // log flooding under sustained guardrail / quota / timeout pressure.
+    // The same call sites still increment OtelMetrics counters (e.g. HandleDurationHistogram)
+    // so dashboards see the real volume.
+    private long _guardrailWarnLogCount;
+    private long _quotaWarnLogCount;
+    private long _timeoutWarnLogCount;
+    private long _policyWarnLogCount;
+    private long _toolFailLogCount;
+    private int _logSampleRate = 10;
+
     public AgentCore(
         ILLMClient llm,
         SkillRouter router,
@@ -139,7 +150,8 @@ public sealed class AgentCore : IConfigReload
         IQuotaService? quotaService = null,
         QuotaGuard? quotaGuard = null,
         IAgentLifecycleState? lifecycleState = null,
-        IInFlightTracker? inFlight = null)
+        IInFlightTracker? inFlight = null,
+        OtelConfig? otelConfig = null)
     {
         _llm = llm;
         _router = router;
@@ -171,7 +183,18 @@ public sealed class AgentCore : IConfigReload
         // doesn't supply a store, we lazily build a process-wide default — keeps
         // existing single-tenant callers / unit tests working without churn.
         _sessionStates = sessionStates ?? new InMemorySessionStateStore();
+        // [task_085] Wire Otel.LoggingSampleRate when an OtelConfig is supplied.
+        if (otelConfig is not null)
+        {
+            _logSampleRate = otelConfig.LoggingSampleRate;
+        }
     }
+
+    /// <summary>
+    ///     [task_085] Update the sampled-log rate at runtime. Useful when config
+    ///     changes are pushed via <see cref="IConfigReload"/>.
+    /// </summary>
+    public void SetLogSampleRate(int sampleRate) => _logSampleRate = sampleRate;
 
     /// <summary>
     ///     Default session id used by CLI / single-tenant callers that don't pass a sessionId explicitly.
@@ -202,6 +225,8 @@ public sealed class AgentCore : IConfigReload
     {
         _cfg = config.Agent;
         _phase2Config = config.Phase2;
+        // [task_085] Refresh sampled-log rate alongside the agent's other config knobs.
+        _logSampleRate = config.Otel.LoggingSampleRate;
     }
 
     /// <summary>Инициализация default-сессии: создать запись и загрузить контекст памяти.</summary>
@@ -313,7 +338,11 @@ public sealed class AgentCore : IConfigReload
             var degradation = _budgetGuard.CheckAndGetDegradationMessage(preCheck);
             if (degradation is not null)
             {
-                _logger.LogWarning("[BudgetGuard] Hard-cap pre-check failed — returning degradation response");
+                // [task_085] Sampled warning; metric/activity still tagged unconditionally.
+                if (OtelMetrics.ShouldLogSampledWarning(ref _guardrailWarnLogCount, _logSampleRate))
+                {
+                    _logger.LogWarning("[BudgetGuard] Hard-cap pre-check failed — returning degradation response");
+                }
                 _otel?.SetErrorStatus(_currentHandleActivity, "guardrail_blocked");
                 handleSw.Stop();
                 OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
@@ -353,7 +382,11 @@ public sealed class AgentCore : IConfigReload
             var quotaDegradation = _quotaGuard.CheckAndGetDegradationMessage(quotaResult);
             if (quotaDegradation is not null)
             {
-                _logger.LogWarning("[QuotaGuard] Quota pre-check failed — returning degradation response");
+                // [task_085] Sampled warning.
+                if (OtelMetrics.ShouldLogSampledWarning(ref _quotaWarnLogCount, _logSampleRate))
+                {
+                    _logger.LogWarning("[QuotaGuard] Quota pre-check failed — returning degradation response");
+                }
                 _otel?.SetErrorStatus(_currentHandleActivity, "quota_blocked");
                 handleSw.Stop();
                 OtelMetrics.HandleDurationHistogram.Record(handleSw.ElapsedMilliseconds);
@@ -455,8 +488,12 @@ public sealed class AgentCore : IConfigReload
         }
         catch (OperationCanceledException) when (lcts.IsWallClockTimeout)
         {
-            _logger.LogWarning("[Loop] Wall-clock timeout reached after {Timeout}s — returning graceful degradation",
-                timeoutSeconds);
+            // [task_085] Sampled warning for repeated timeouts.
+            if (OtelMetrics.ShouldLogSampledWarning(ref _timeoutWarnLogCount, _logSampleRate))
+            {
+                _logger.LogWarning("[Loop] Wall-clock timeout reached after {Timeout}s — returning graceful degradation",
+                    timeoutSeconds);
+            }
             // [task_012] Record elapsed time for guardrails
             _guardrails?.RecordElapsedTime(sessionId, wallClockTimeout is not null ? (long)wallClockTimeout.Value.TotalMilliseconds : 0);
             _otel?.SetErrorStatus(_currentHandleActivity, "timeout");
@@ -600,9 +637,13 @@ public sealed class AgentCore : IConfigReload
 
                 if (verifyResult.Blocked)
                 {
-                    _logger.LogWarning(
-                        "[VerificationPipeline] Response BLOCKED (severity={Severity}, reason={Reason})",
-                        verifyResult.MaxSeverity, verifyResult.BlockingReason);
+                    // [task_085] Sampled warning.
+                    if (OtelMetrics.ShouldLogSampledWarning(ref _guardrailWarnLogCount, _logSampleRate))
+                    {
+                        _logger.LogWarning(
+                            "[VerificationPipeline] Response BLOCKED (severity={Severity}, reason={Reason})",
+                            verifyResult.MaxSeverity, verifyResult.BlockingReason);
+                    }
                     _otel?.SetTag(_currentHandleActivity, "hercules.verification_blocked", "true");
                     _otel?.SetTag(_currentHandleActivity, "hercules.verification_severity", verifyResult.MaxSeverity.ToString());
 
@@ -740,7 +781,11 @@ public sealed class AgentCore : IConfigReload
 
                 if (policyResult.IsDenied)
                 {
-                    _logger.LogWarning("[Policy] Tool '{Name}' BLOCKED — {Reason}", toolName, policyResult.DeniedReason);
+                    // [task_085] Sampled warning.
+                    if (OtelMetrics.ShouldLogSampledWarning(ref _policyWarnLogCount, _logSampleRate))
+                    {
+                        _logger.LogWarning("[Policy] Tool '{Name}' BLOCKED — {Reason}", toolName, policyResult.DeniedReason);
+                    }
                     messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
                     messages.Add(new ChatTurn(ChatRole.System,
                         $"[system] Tool '{toolName}' is blocked by policy: {policyResult.DeniedReason}. " +
@@ -789,7 +834,11 @@ public sealed class AgentCore : IConfigReload
             // Check policy cancellation before executing
             if (ctx.IsWallClockExpired)
             {
-                _logger.LogWarning("[Loop] {Step} — wall-clock timeout reached at iter={Iter}", LoopStep.ToolExecute, iter);
+                // [task_085] Sampled warning.
+                if (OtelMetrics.ShouldLogSampledWarning(ref _timeoutWarnLogCount, _logSampleRate))
+                {
+                    _logger.LogWarning("[Loop] {Step} — wall-clock timeout reached at iter={Iter}", LoopStep.ToolExecute, iter);
+                }
                 _otel?.SetErrorStatus(toolActivity, "wall_clock_timeout");
                 toolSw.Stop();
                 OtelMetrics.ToolCallDurationHistogram.Record(toolSw.ElapsedMilliseconds);
@@ -805,7 +854,11 @@ public sealed class AgentCore : IConfigReload
 
             if (ctx.CancellationRequested)
             {
-                _logger.LogWarning("[Loop] {Step} — cancelled by policy before execution", LoopStep.ToolExecute);
+                // [task_085] Sampled warning.
+                if (OtelMetrics.ShouldLogSampledWarning(ref _policyWarnLogCount, _logSampleRate))
+                {
+                    _logger.LogWarning("[Loop] {Step} — cancelled by policy before execution", LoopStep.ToolExecute);
+                }
                 _otel?.SetErrorStatus(toolActivity, "cancelled_by_policy");
                 toolSw.Stop();
                 OtelMetrics.ToolCallDurationHistogram.Record(toolSw.ElapsedMilliseconds);
@@ -865,7 +918,11 @@ public sealed class AgentCore : IConfigReload
             };
             var resultJson = JsonSerializer.Serialize(resultContract, ActionJsonOpts);
 
-            _logger.LogWarning("Tool '{ToolName}' → {Status} (output: {OutputLen} chars, error: {Error_len} chars)", toolName, toolResult.Success ? "ok" : "FAIL", toolResult.Output.Length, toolResult.Error?.Length ?? 0);
+            // [task_085] Sampled warning (1-in-N) for tool execution results.
+            if (OtelMetrics.ShouldLogSampledWarning(ref _toolFailLogCount, _logSampleRate))
+            {
+                _logger.LogWarning("Tool '{ToolName}' → {Status} (output: {OutputLen} chars, error: {Error_len} chars)", toolName, toolResult.Success ? "ok" : "FAIL", toolResult.Output.Length, toolResult.Error?.Length ?? 0);
+            }
 
             messages.Add(new ChatTurn(ChatRole.Assistant, last.Text));
             messages.Add(new ChatTurn(ChatRole.User,
@@ -878,8 +935,12 @@ public sealed class AgentCore : IConfigReload
             {
                 messages.Add(new ChatTurn(ChatRole.System,
                     "[system] Maximum tool iterations reached. Provide final answer now."));
-                _logger.LogWarning("[Loop] {Step} — max iterations ({Max}) reached, stopping tool loop",
-                    LoopStep.ToolExecute, maxIter);
+                // [task_085] Sampled warning.
+                if (OtelMetrics.ShouldLogSampledWarning(ref _policyWarnLogCount, _logSampleRate))
+                {
+                    _logger.LogWarning("[Loop] {Step} — max iterations ({Max}) reached, stopping tool loop",
+                        LoopStep.ToolExecute, maxIter);
+                }
             }
         }
 

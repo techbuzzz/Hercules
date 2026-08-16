@@ -10,6 +10,24 @@ namespace Hercules.Observability;
 /// </summary>
 public static class OtelMetrics
 {
+    // ── Explicit bucket boundaries (task_085) ────────────────────────────────
+    // Default OpenTelemetry histograms use a small set of generic buckets that
+    // produce poor resolution in the SLO-relevant ranges. The boundaries below
+    // are tuned for typical LLM/tool latencies and token counts we observe in
+    // production dashboards.
+
+    /// <summary>Latency (ms) buckets: 5ms … 10s. Tuned for LLM/tool/handler latency.</summary>
+    public static readonly double[] LatencyBucketsMs =
+    [
+        5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000
+    ];
+
+    /// <summary>Token count buckets: 10 … 32k. Tuned for prompt/completion sizing.</summary>
+    public static readonly double[] TokenBuckets =
+    [
+        10, 50, 100, 500, 1000, 2000, 4000, 8000, 16000, 32000
+    ];
+
     // ── Counters ────────────────────────────────────────────────────────────
 
     /// <summary>Total number of HandleAsync calls.</summary>
@@ -39,6 +57,17 @@ public static class OtelMetrics
             "hercules.skill.hit.count",
             unit: "{hit}",
             description: "Total number of skill routing matches");
+
+    /// <summary>
+    ///     Total number of LLM retry attempts (task_085).
+    ///     Incremented on every retryable failure — never sampled, unlike the
+    ///     structured warning log which is sampled 1-in-N to avoid log flooding.
+    /// </summary>
+    public static readonly Counter<long> LlmRetryCounter =
+        OtelSetup.Meter.CreateCounter<long>(
+            "hercules.llm.retry.count",
+            unit: "{retry}",
+            description: "Total number of LLM retry attempts (per-provider/per-attempt)");
 
     // ── Histograms ───────────────────────────────────────────────────────────
 
@@ -76,4 +105,33 @@ public static class OtelMetrics
             "hercules.llm.output_tokens",
             unit: "{token}",
             description: "Number of output tokens per LLM call");
+
+    // ── Sampled logging helper (task_085) ────────────────────────────────────
+
+    /// <summary>
+    ///     Returns true when the caller should emit a sampled warning log for
+    ///     a high-frequency event (retries, quota warnings, guardrail hits).
+    ///     Use <see cref="LlmRetryCounter"/> and similar counters to track the
+    ///     real volume.
+    /// </summary>
+    /// <param name="counter">Monotonic counter (Interlocked.Increment).</param>
+    /// <param name="sampleRate">
+    ///     1 = log every event. N = log every Nth event.
+    ///     Values &lt;=0 are treated as "never log".
+    /// </param>
+    /// <returns>
+    ///     True if the structured warning should be emitted for this occurrence.
+    /// </returns>
+    public static bool ShouldLogSampledWarning(ref long counter, int sampleRate)
+    {
+        if (sampleRate <= 0)
+        {
+            // Still bump the counter so volume metrics remain accurate.
+            Interlocked.Increment(ref counter);
+            return false;
+        }
+
+        var count = Interlocked.Increment(ref counter);
+        return sampleRate == 1 || (count % sampleRate) == 0;
+    }
 }

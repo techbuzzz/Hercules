@@ -98,6 +98,12 @@ public class QuotaGuardTests
     [Fact]
     public void LogSoftWarnings_WhenSoftWarnings_LogsWarnings()
     {
+        // [task_085] Quota soft warnings are now sampled 1-in-N. For this test
+        // we want every event to be logged, so we set the sample rate to 1
+        // (i.e. log all). The sampling logic itself is covered by
+        // OtelPolishTests.ShouldLogSampledWarning_*.
+        _guard.SetLogSampleRate(1);
+
         var violations = new List<QuotaViolation>
         {
             new(QuotaLimitType.TokensPerDayPerAgent, QuotaScope.Agent, "hercules",
@@ -149,5 +155,34 @@ public class QuotaGuardTests
 
         var result = _guard.CheckBeforeAction(QuotaScope.Agent, "hercules", status);
         Assert.Null(result);
+    }
+
+    // [task_085] Sampled warning behavior.
+
+    [Fact]
+    public void LogSoftWarnings_WithSampleRate10_LogsOnlyEveryTenth()
+    {
+        _guard.SetLogSampleRate(10);
+        var violations = new List<QuotaViolation>
+        {
+            new(QuotaLimitType.TokensPerDayPerAgent, QuotaScope.Agent, "hercules",
+                1000000, 1100000, "Tokens exceeded", "soft_warn")
+        };
+        var result = new QuotaCheckResult(violations, false, true);
+
+        // Trigger 30 invocations — sampled 1-in-10 → 3 log calls.
+        for (var i = 0; i < 30; i++)
+        {
+            _guard.LogSoftWarnings(result);
+        }
+
+        _loggerMock.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => true),
+                It.IsAny<Exception?>(),
+                It.Is<Func<It.IsAnyType, Exception?, string>>((v, t) => true)),
+            Times.Exactly(3));
     }
 }
