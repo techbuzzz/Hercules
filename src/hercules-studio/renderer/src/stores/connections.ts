@@ -21,6 +21,10 @@ export const useConnectionsStore = defineStore("connections", () => {
   async function add(conn: NewConnection) {
     const newConn = await window.studioAPI.connections.add(conn);
     list.value.push(newConn);
+    // Store contribute key for later use by HerculesClient (in browser mock)
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(`mock-key-${newConn.id}`, conn.apiKey);
+    }
     if (!activeId.value) {
       await setActive(newConn.id);
     }

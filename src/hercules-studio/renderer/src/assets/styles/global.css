@@ -1,4 +1,5 @@
-@import "tailwindcss";
+/* Tailwind CSS will be added when @tailwindcss/vite is installed.
+   For now, plain CSS with theme variables. */
 
 /* ---- Theme variables ---- */
 :root {

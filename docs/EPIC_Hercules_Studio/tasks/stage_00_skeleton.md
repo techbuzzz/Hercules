@@ -1,7 +1,7 @@
 # Stage 0 — Skeleton
 
 **Epic:** Hercules Studio
-**Status:** in_progress (boilerplate created)
+**Status:** in_progress (web preview working)
 **Estimate:** 1-2 недели
 **Dependencies (backend):** нет
 **Dependencies (Studio):** нет (стартовый)

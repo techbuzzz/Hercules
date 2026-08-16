@@ -45,9 +45,32 @@ npm --version     # should be 10+
 
 ## Quick start (development)
 
-### 1. Start a Hercules agent
+### Option A: Web preview (no Electron, no native deps)
 
-From the repository root:
+This mode runs the Vue renderer in a browser with a mock IPC API. Useful for UI development and quick preview without installing Electron or better-sqlite3.
+
+```powershell
+cd src\hercules-studio
+npm install vue pinia vue-i18n --save --ignore-scripts --no-audit --no-fund
+npm install --save-dev @vitejs/plugin-vue vite typescript vue-tsc --ignore-scripts --no-audit --no-fund
+npm run dev
+```
+
+Open `http://localhost:4322` in your browser. The app runs with a mock API that stores data in `localStorage`.
+
+### Option B: Full Electron dev mode
+
+Requires Electron + better-sqlite3 native addon (may take 5-10 minutes to install).
+
+```powershell
+cd src\hercules-studio
+npm install
+npm run dev:electron
+```
+
+### Option C: Start a Hercules agent and connect
+
+1. Start a Hercules agent:
 
 ```powershell
 cd src\agent
@@ -56,42 +79,9 @@ dotnet run --project Hercules.WebApi
 
 The agent starts on `http://localhost:8421` (after [task_096](../../docs/roadmap/tasks/task_096.md) port migration) or `http://localhost:5000` (current default).
 
-> **Note:** The agent prints its API keys to the console on first startup. Copy the `contribute` key — you'll need it to connect from Studio.
-
-### 2. Install Studio dependencies
-
-```powershell
-cd src\hercules-studio
-npm install
-```
-
-This will also run `electron-rebuild` for `better-sqlite3` native addon (postinstall script).
-
-> **If `electron-rebuild` fails**, run it manually:
-> ```powershell
-> npx electron-rebuild -f -w better-sqlite3
-> ```
-
-### 3. Run Studio in dev mode
-
-```powershell
-npm run dev
-```
-
-This launches `electron-vite dev` which:
-- Starts Vite dev server for the renderer (Vue 3 + HMR)
-- Builds main process and preload scripts in watch mode
-- Launches Electron with dev URL
-
-Studio window opens (1280×800). On first run, a **license dialog** appears — accept AGPL-3.0 (non-profit) or enter a commercial key.
-
-### 4. Connect to an agent
-
-1. Click **"Scan for agents"** — Studio scans ports 8421-8521 + 5000 (legacy)
-2. Found agents appear in the list — click **"Add"**
+2. In Studio, click **"Scan for agents"** — discovers agents on ports 8421-8521 + 5000 (legacy)
 3. Or click **"Add connection manually"** — enter URL + API key
 4. Click **"Test connection"** to verify, then **"Save"**
-5. The agent appears in the sidebar — click to set as active
 
 ---
 
@@ -131,20 +121,14 @@ Output goes to `release/`:
 
 | Script | Description |
 |---|---|
-| `npm run dev` | Dev mode: electron-vite dev (HMR + Electron) |
-| `npm run build` | Production build (main + preload + renderer) |
-| `npm run preview` | Preview production build in Electron |
-| `npm run package` | Build + package (NSIS + portable) |
-| `npm run package:win` | Build + package for Windows |
-| `npm run package:portable` | Build + portable zip only |
-| `npm run typecheck` | TypeScript check (node + web) |
-| `npm run typecheck:node` | TypeScript check (main/preload/shared) |
-| `npm run typecheck:web` | TypeScript check (renderer) |
-| `npm run lint` | Biome lint + auto-fix |
-| `npm run lint:check` | Biome lint (check only, no changes) |
-| `npm run test` | Vitest unit tests (run once) |
+| `npm run dev` | Web preview mode: Vite dev server (browser, mock API) |
+| `npm run dev:electron` | Full Electron dev mode (requires Electron install) |
+| `npm run build` | Production build (web: Vite build → dist/) |
+| `npm run build:electron` | Production build (Electron: electron-vite build → out/) |
+| `npm run preview` | Preview web build |
+| `npm run typecheck` | TypeScript check (vue-tsc) |
+| `npm run test` | Vitest unit tests |
 | `npm run test:watch` | Vitest in watch mode |
-| `npm run test:e2e` | Playwright E2E tests |
 
 ---
 
