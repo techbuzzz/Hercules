@@ -241,6 +241,9 @@ public static class MeshServiceCollectionExtensions
                 sp.GetService<IMeshObservabilityService>()));
 
         // Phase 3: TaskLifecycleProtocol — inter-agent task lifecycle (task_036)
+        // Phase 8: persistence via SqliteDelegatedTaskStore (task_106)
+        services.AddSingleton<IDelegatedTaskStore>(sp =>
+            new SqliteDelegatedTaskStore(sp.GetRequiredService<Hercules.Config.StorageConfig>()));
         services.AddSingleton<ITaskLifecycleProtocol>(sp =>
         {
             var transport = sp.GetRequiredService<ITransport>();
@@ -248,7 +251,8 @@ public static class MeshServiceCollectionExtensions
             var agentId = meshCfg.AgentId;
             var auditService = sp.GetService<MeshAuditService>();
             var observability = sp.GetService<IMeshObservabilityService>();
-            return new TaskLifecycleProtocol(transport, agentId, logger, auditService, observability);
+            var store = sp.GetRequiredService<IDelegatedTaskStore>();
+            return new TaskLifecycleProtocol(transport, agentId, logger, auditService, observability, store);
         });
 
         // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов (task_047)

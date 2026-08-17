@@ -9,11 +9,12 @@ namespace Hercules.Mesh.TaskLifecycle;
 
 /// <summary>
 ///     Реализация <see cref="ITaskLifecycleProtocol"/>.
-///     Хранит delegated задачи in-memory (ConcurrentDictionary) с возможностью
-///     привязки к локальному DurableTask.
-///     Persistence в SQLite добавляется как follow-up оптимизация.
+///     Хранит delegated задачи в SQLite-backed <see cref="IDelegatedTaskStore"/>
+///     (task_106) с in-memory cache для быстрого чтения на hot-path poll'а.
+///     State transitions пишут через store; long-poll <see cref="TaskCompletionSource"/>
+///     реестр остаётся in-memory (per-process) и пересоздаётся из store при старте.
 /// </summary>
-public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
+public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol, IDisposable, IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, DelegatedTask> _tasks = new();
     private readonly ConcurrentDictionary<string, List<TaskCompletionSource<DelegatedTask>>> _inputPollers = new();
@@ -22,20 +23,79 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
     private readonly ILogger<TaskLifecycleProtocol> _logger;
     private readonly MeshAuditService? _auditService;
     private readonly IMeshObservabilityService? _observability;
+    private readonly IDelegatedTaskStore? _store;
+    private readonly Timer? _expiryTimer;
+    private readonly TimeSpan _expiryScanInterval;
+    private int _disposed;
 
-    public TaskLifecycleProtocol(ITransport? transport, string localAgentId, ILogger<TaskLifecycleProtocol> logger, MeshAuditService? auditService = null, IMeshObservabilityService? observability = null)
+    /// <summary>
+    ///     Constructor with full DI surface (production).
+    ///     If <paramref name="store"/> is provided, the protocol write-throughs
+    ///     every state change and hydrates the in-memory cache from
+    ///     <see cref="IDelegatedTaskStore.ListPendingAsync"/> on startup.
+    ///     A background timer periodically scans for expired tasks.
+    /// </summary>
+    public TaskLifecycleProtocol(
+        ITransport? transport,
+        string localAgentId,
+        ILogger<TaskLifecycleProtocol> logger,
+        MeshAuditService? auditService = null,
+        IMeshObservabilityService? observability = null,
+        IDelegatedTaskStore? store = null,
+        TimeSpan? expiryScanInterval = null)
     {
         _transport = transport;
         _localAgentId = localAgentId;
         _logger = logger;
         _auditService = auditService;
         _observability = observability;
+        _store = store;
+        _expiryScanInterval = expiryScanInterval ?? TimeSpan.FromMinutes(5);
+
+        if (_store is not null)
+        {
+            // Hydrate cache from persisted state. Best-effort: if the store is
+            // unhealthy at startup we log and continue with an empty cache —
+            // the next state transition will surface a fresh error.
+            try
+            {
+                var pending = _store.ListPendingAsync().GetAwaiter().GetResult();
+                foreach (var t in pending)
+                    _tasks[t.TaskId] = t;
+                if (pending.Count > 0)
+                    _logger.LogInformation(
+                        "[TaskLifecycle] Recovered {Count} pending delegated task(s) from store at startup",
+                        pending.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[TaskLifecycle] Startup recovery from store failed; starting with empty cache");
+            }
+
+            _expiryTimer = new Timer(
+                _ => _ = ExpiryScanTickAsync(),
+                state: null,
+                dueTime: _expiryScanInterval,
+                period: _expiryScanInterval);
+        }
     }
 
-    /// <summary>Constructor without IntentTransport (for testing / no-callback mode).</summary>
+    /// <summary>Constructor without IntentTransport (for testing / no-callback mode, in-memory only).</summary>
     public TaskLifecycleProtocol(string localAgentId, ILogger<TaskLifecycleProtocol> logger)
-        : this(null, localAgentId, logger, null, null)
+        : this(null, localAgentId, logger, null, null, null, null)
     {
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _expiryTimer?.Dispose();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return ValueTask.CompletedTask;
     }
 
     public Task<DelegatedTask> AcceptAsync(
@@ -68,6 +128,7 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
             LocalTaskId: null);
 
         _tasks[taskId] = task;
+        PersistAsync(task, ct).GetAwaiter().GetResult();
         _logger.LogInformation(
             "[TaskLifecycle] Accepted delegated task {TaskId} (parent={ParentRequestId}, caller={CallerAgentId}, intent={Intent})",
             taskId, parentRequestId, callerAgentId, intent);
@@ -88,6 +149,7 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
 
         var updated = task with { State = newState, UpdatedAt = DateTimeOffset.UtcNow };
         _tasks[taskId] = updated;
+        PersistAsync(updated, ct).GetAwaiter().GetResult();
 
         _logger.LogInformation("[TaskLifecycle] Task {TaskId} state: {OldState} → {NewState}",
             taskId, task.State, newState);
@@ -125,6 +187,7 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
         };
 
         _tasks[taskId] = updated;
+        PersistAsync(updated, ct).GetAwaiter().GetResult();
         _logger.LogInformation("[TaskLifecycle] Task {TaskId} awaiting input (type={InputType})", taskId, inputType);
 
         return Task.FromResult(updated);
@@ -152,6 +215,7 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
         };
 
         _tasks[taskId] = updated;
+        PersistAsync(updated, ct).GetAwaiter().GetResult();
         _logger.LogInformation("[TaskLifecycle] Task {TaskId} completed", taskId);
 
         // Resolve waiting pollers
@@ -183,12 +247,13 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
         };
 
         _tasks[taskId] = updated;
+        PersistAsync(updated, ct).GetAwaiter().GetResult();
         _logger.LogWarning("[TaskLifecycle] Task {TaskId} failed: {Error}", taskId, error);
 
         ResolvePollers(taskId, updated);
 
-        var latencyMs = (updated.CompletedAt.HasValue && updated.CreatedAt != default)
-            ? (updated.CompletedAt.Value - updated.CreatedAt).TotalMilliseconds
+        var latencyMs = (updated.CompletedAt.HasValue && task.CreatedAt != default)
+            ? (updated.CompletedAt.Value - task.CreatedAt).TotalMilliseconds
             : (double?)null;
         _ = LogTaskStateChangeAsync(updated, fromState: task.State, toState: DelegatedTaskState.Failed,
             outcome: DelegationOutcome.Error, error: error, latencyMs, ct);
@@ -211,6 +276,7 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
         };
 
         _tasks[taskId] = updated;
+        PersistAsync(updated, ct).GetAwaiter().GetResult();
         _logger.LogInformation("[TaskLifecycle] Task {TaskId} cancelled: {Reason}", taskId, reason ?? "unknown");
 
         ResolvePollers(taskId, updated);
@@ -234,6 +300,7 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
                 UpdatedAt = DateTimeOffset.UtcNow
             };
             _tasks[taskId] = updated;
+            PersistAsync(updated, ct).GetAwaiter().GetResult();
             _logger.LogWarning("[TaskLifecycle] Task {TaskId} expired (deadline={Deadline})", taskId, task.ExpiresAt);
 
             ResolvePollers(taskId, updated);
@@ -264,6 +331,7 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
         };
 
         _tasks[taskId] = updated;
+        PersistAsync(updated, ct).GetAwaiter().GetResult();
         _logger.LogInformation("[TaskLifecycle] Task {TaskId} received input, resuming (Working)", taskId);
 
         ResolvePollers(taskId, updated);
@@ -278,6 +346,7 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
 
         var updated = task with { LocalTaskId = localTaskId };
         _tasks[taskId] = updated;
+        PersistAsync(updated, ct).GetAwaiter().GetResult();
 
         return Task.FromResult(updated);
     }
@@ -394,6 +463,78 @@ public sealed class TaskLifecycleProtocol : ITaskLifecycleProtocol
                     poller.TrySetResult(task);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    ///     Fire-and-forget persistence. Logs but does not throw — a transient
+    ///     store failure must not corrupt the in-memory state machine. The next
+    ///     state change will retry the write, and a periodic reconciler (or
+    ///     restart) can recover the cache from the store's last successful row.
+    /// </summary>
+    private async Task PersistAsync(DelegatedTask task, CancellationToken ct)
+    {
+        if (_store is null) return;
+        try
+        {
+            await _store.SaveAsync(task, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[TaskLifecycle] Persist failed for task {TaskId} (state={State})", task.TaskId, task.State);
+        }
+    }
+
+    /// <summary>
+    ///     Background tick that finds pending tasks past their deadline and
+    ///     transitions them to Expired. Errors are logged and swallowed.
+    /// </summary>
+    private async Task ExpiryScanTickAsync()
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var candidates = _tasks.Values
+                .Where(t => t.ExpiresAt.HasValue
+                            && t.ExpiresAt.Value <= now
+                            && t.State != DelegatedTaskState.Completed
+                            && t.State != DelegatedTaskState.Failed
+                            && t.State != DelegatedTaskState.Cancelled
+                            && t.State != DelegatedTaskState.Expired)
+                .Select(t => t.TaskId)
+                .ToList();
+
+            foreach (var id in candidates)
+            {
+                try { await CheckExpiredAsync(id).ConfigureAwait(false); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[TaskLifecycle] Expiry scan failed for task {TaskId}", id);
+                }
+            }
+
+            // Opportunistic prune of long-since-terminal rows to keep the table small.
+            if (_store is not null)
+            {
+                try
+                {
+                    // 1 hour grace after the deadline before the row is removed.
+                    var pruneCutoff = now.AddHours(-1);
+                    var removed = await _store.PruneExpiredAsync(pruneCutoff).ConfigureAwait(false);
+                    if (removed > 0)
+                        _logger.LogInformation("[TaskLifecycle] Pruned {Count} expired delegated task row(s)", removed);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[TaskLifecycle] Prune of expired rows failed");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[TaskLifecycle] Expiry scan tick failed");
         }
     }
 

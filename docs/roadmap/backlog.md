@@ -170,7 +170,7 @@
 | 103 | 6 | [PostgreSQL session store](tasks/task_103.md) | `postgres-session-store` | pending |
 | 104 | 8 | [hercules-workflow-server](tasks/task_104.md) | `workflow-server` | pending |
 | 105 | 8 | [Workflow graph model + executor](tasks/task_105.md) | `workflow-graph-executor` | pending |
-| 106 | 8 | [DelegatedTask persistence](tasks/task_106.md) | `delegated-task-persistence` | pending |
+| 106 | 8 | [DelegatedTask persistence](tasks/task_106.md) | `delegated-task-persistence` | done |
 | 107 | 8 | [Parent/child task relationships](tasks/task_107.md) | `parent-child-tasks` | pending |
 | 108 | 8 | [DurableTask checkpoint persistence](tasks/task_108.md) | `checkpoint-persistence` | pending |
 | 109 | 0 (pre-req) | [AddOpenApi() в Program.cs](tasks/task_109.md) | `add-openapi-producer` | pending |
