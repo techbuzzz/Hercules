@@ -146,13 +146,13 @@
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
 | 88 | 48 | [A2A Agent Card panel](tasks/completed/task_088.md) | `web-a2a-card-panel` | done |
-| 89 | 48 | [Capability registry panel](tasks/completed/task_089.md) | `web-capability-registry-panel` | pending |
+| 89 | 48 | [Capability registry panel](tasks/completed/task_089.md) | `web-capability-registry-panel` | done |
 | 90 | 48 | [Discovery panel](tasks/completed/task_090.md) | `web-discovery-panel` | done |
 | 91 | 48 | [Trust admission policy panel](tasks/completed/task_091.md) | `web-trust-admission-panel` | done |
-| 92 | 48 | [Mesh profiles & backend health](tasks/task_092.md) | `web-mesh-profiles-health` | pending |
+| 92 | 48 | [Mesh profiles & backend health](tasks/completed/task_092.md) | `web-mesh-profiles-health` | done |
 | 93 | 48 | [Mesh observability & centralized logs](tasks/completed/task_093.md) | `web-mesh-observability` | done |
-| 94 | 48 | [Backup & SLO panel](tasks/task_094.md) | `web-backup-slo-panel` | pending |
-| 95 | 48 | [Security, quotas & rollout panel](tasks/task_095.md) | `web-security-quotas-rollout` | done |
+| 94 | 48 | [Backup & SLO panel](tasks/completed/task_094.md) | `web-backup-slo-panel` | done |
+| 95 | 48 | [Security, quotas & rollout panel](tasks/completed/task_095.md) | `web-security-quotas-rollout` | done |
 
 ## Phase 8 — Hercules Studio backend prerequisites
 
@@ -161,12 +161,12 @@
 | # | Studio Stage | Task | Slug | Status |
 |---|---|------|------|--------|
 | 96 | 1 (pre-PR) | [Port migration 5000 → 8421](tasks/completed/task_096.md) | `port-migration-8421` | done |
-| 97 | 1 | [Dual API keys (contribute + system)](tasks/task_097.md) | `dual-api-keys` | pending |
-| 98 | 1 | [CheckIn/CheckOut protocol](tasks/task_098.md) | `checkin-checkout-protocol` | pending |
-| 99 | 6 | [System restart protocol](tasks/task_099.md) | `system-restart-protocol` | done |
-| 100 | 6 | [MCP hot-reload (IConfigReload)](tasks/task_100.md) | `mcp-hot-reload` | done |
-| 101 | 6 | [SkillSdk (Hercules.SkillSdk NuGet)](tasks/task_101.md) | `skill-sdk` | done |
-| 102 | 6 | [Context distillation](tasks/task_102.md) | `context-distillation` | pending |
+| 97 | 1 | [Dual API keys (contribute + system)](tasks/completed/task_097.md) | `dual-api-keys` | done |
+| 98 | 1 | [CheckIn/CheckOut protocol](tasks/completed/task_098.md) | `checkin-checkout-protocol` | done |
+| 99 | 6 | [System restart protocol](tasks/completed/task_099.md) | `system-restart-protocol` | done |
+| 100 | 6 | [MCP hot-reload (IConfigReload)](tasks/completed/task_100.md) | `mcp-hot-reload` | done |
+| 101 | 6 | [SkillSdk (Hercules.SkillSdk NuGet)](tasks/completed/task_101.md) | `skill-sdk` | done |
+| 102 | 6 | [Context distillation](tasks/completed/task_102.md) | `context-distillation` | done |
 | 103 | 6 | [PostgreSQL session store](tasks/task_103.md) | `postgres-session-store` | pending |
 | 104 | 8 | [hercules-workflow-server](tasks/task_104.md) | `workflow-server` | pending |
 | 105 | 8 | [Workflow graph model + executor](tasks/task_105.md) | `workflow-graph-executor` | pending |

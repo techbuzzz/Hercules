@@ -5,6 +5,31 @@
 
 ## [Unreleased]
 
+### Добавлено (Phase 8 — backend prerequisites для Hercules Studio)
+- **Дистилляция контекста (`task_102`)**: иерархическая компрессия
+  (`recent` raw + `older` summaries + `ancient` key-facts) для экономии токенов
+  в длинных сессиях.
+  - `ContextConfig.Distillation`: `Mode` (Off/Auto/Manual), `Strategy`
+    (hierarchical), `RecentRawCount`, `SummaryInterval`, `KeyFactsExtraction`,
+    `MaxAncientFacts`, `SummaryTokenBudget`, `KeyFactsTokenBudget`, плюс
+    `DistillationPreset` (Economy/Balanced/Full).
+  - `IDistillationStore` + `SqliteDistillationStore` для persistence
+    (таблицы `context_summaries`, `context_key_facts`, upsert по
+    `(session_id, fact_text)`).
+  - `ContextDistillationService` — детерминированная сводка (без LLM в hot
+    path: word-frequency topics + sentence scoring; n-gram frequency + dedup
+    для key-facts). `DistillAsync` и `GetSummaryAsync`.
+  - `ContextBuilder` интегрирует distilled блок additively при
+    `Distillation.Mode != Off` (legacy path facts+episodes+working сохранён).
+  - Новые эндпоинты: `POST /api/context/distill` (запуск по запросу или
+    per-session), `GET /api/context/summary?sessionId=…&maxTokens=…` (реальный
+    markdown-блок вместо заглушки). `WithName` для Orval codegen.
+  - `SqliteSessionStore.GetSessionInteractionsAsync(sessionId, limit, ct)` —
+    хронологический список `InteractionLog` для сервиса.
+  - 19 новых unit-тестов (`SqliteDistillationStoreTests` × 8,
+    `ContextDistillationServiceTests` × 11). Полный Context suite: 103/103.
+  - См. [task_102.md](docs/roadmap/tasks/task_102.md) — implementation notes.
+
 ### Изменено
 - **BREAKING: дефолтный порт агента 5000 → 8421** (`task_096`, ADR-0003).
   - `Hercules.WebApi` теперь слушает `http://localhost:8421` (Development) /

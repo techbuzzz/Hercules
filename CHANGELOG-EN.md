@@ -5,6 +5,31 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (Phase 8 — Hercules Studio backend prerequisites)
+- **Context distillation (task_102)**: hierarchical context compression
+  (`recent` raw + `older` summaries + `ancient` key-facts) to save tokens in
+  long sessions.
+  - `ContextConfig.Distillation` block: `Mode` (Off/Auto/Manual), `Strategy`
+    (hierarchical), `RecentRawCount`, `SummaryInterval`, `KeyFactsExtraction`,
+    `MaxAncientFacts`, `SummaryTokenBudget`, `KeyFactsTokenBudget`, plus
+    `DistillationPreset` (Economy/Balanced/Full).
+  - `IDistillationStore` + `SqliteDistillationStore` for persistence
+    (`context_summaries`, `context_key_facts` tables, upsert by
+    `(session_id, fact_text)`).
+  - `ContextDistillationService` — deterministic summarization (no LLM in the
+    hot path: word-frequency topics + sentence scoring; n-gram frequency +
+    dedup for key-facts). `DistillAsync` and `GetSummaryAsync`.
+  - `ContextBuilder` integrates the distilled block additively when
+    `Distillation.Mode != Off` (legacy facts+episodes+working path preserved).
+  - New endpoints: `POST /api/context/distill` (run on demand or per-session),
+    `GET /api/context/summary?sessionId=…&maxTokens=…` (returns real markdown
+    block instead of placeholder). `WithName` set for Orval codegen.
+  - `SqliteSessionStore.GetSessionInteractionsAsync(sessionId, limit, ct)` —
+    chronological list of `InteractionLog` for the service to consume.
+  - 19 new unit tests (`SqliteDistillationStoreTests` × 8,
+    `ContextDistillationServiceTests` × 11). Full Context suite: 103/103.
+  - See [task_102.md](docs/roadmap/tasks/task_102.md) for implementation notes.
+
 ### Changed
 - **BREAKING: Default agent port 5000 → 8421** (`task_096`, ADR-0003).
   - `Hercules.WebApi` now binds to `http://localhost:8421` (Development) /

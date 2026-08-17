@@ -483,6 +483,52 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return GetLowConfidenceAsync(sessionId).GetAwaiter().GetResult();
     }
 
+    /// <summary>
+    ///     Получить все взаимодействия сессии в хронологическом порядке (task_102).
+    ///     Используется для дистилляции контекста.
+    /// </summary>
+    /// <param name="sessionId">ID сессии.</param>
+    /// <param name="limit">Максимум записей (default 500).</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<List<InteractionLog>> GetSessionInteractionsAsync(
+        string sessionId, int limit = 500, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(sessionId))
+            throw new ArgumentException("sessionId is required", nameof(sessionId));
+        if (limit <= 0) limit = 500;
+
+        // task_071: serialise concurrent access to the shared connection.
+        await _connLock.WaitAsync(ct);
+        try
+        {
+            var list = new List<InteractionLog>(capacity: Math.Min(limit, 64));
+            using SqliteCommand cmd = _conn.CreateCommand();
+            cmd.CommandText = """
+                              SELECT session_id, input, output, confidence, mode, skill_id, provider, created_at
+                              FROM interactions
+                              WHERE session_id = $s
+                              ORDER BY id ASC
+                              LIMIT $l
+                              """;
+            cmd.Parameters.AddWithValue("$s", sessionId);
+            cmd.Parameters.AddWithValue("$l", limit);
+            using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                list.Add(new InteractionLog(
+                    r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3),
+                    r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5),
+                    r.IsDBNull(6) ? "" : r.GetString(6),
+                    DateTime.Parse(r.GetString(7))));
+            }
+            return list;
+        }
+        finally
+        {
+            _connLock.Release();
+        }
+    }
+
     /// <summary>Сводная статистика по режимам (skill vs direct) за сессию.</summary>
     public async Task<(int Skill, int Direct)> GetModeStatsAsync(string sessionId, CancellationToken ct = default)
     {

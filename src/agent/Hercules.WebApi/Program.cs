@@ -655,7 +655,15 @@ builder.Services.AddSingleton<IContextBuilder>(sp =>
         sp.GetRequiredService<LayeredMemoryManager>(),
         sp.GetRequiredService<ContextConfig>(),
         sp.GetRequiredService<ILogger<Hercules.Context.ContextBuilder>>(),
-        sp.GetRequiredService<ITraceSummarizer>()));
+        sp.GetRequiredService<ITraceSummarizer>(),
+        sp.GetService<Hercules.Context.Distillation.ContextDistillationService>(),
+        sp.GetRequiredService<Hercules.Storage.SqliteSessionStore>()));
+// task_102: context distillation store + service.
+builder.Services.AddSingleton<Hercules.Context.Distillation.IDistillationStore>(sp =>
+    new Hercules.Context.Distillation.SqliteDistillationStore(
+        sp.GetRequiredService<Hercules.Storage.SqliteSessionStore>(),
+        sp.GetRequiredService<ILogger<Hercules.Context.Distillation.SqliteDistillationStore>>()));
+builder.Services.AddSingleton<Hercules.Context.Distillation.ContextDistillationService>();
 
 // [task_028] Caching — unified cache service
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Cache);

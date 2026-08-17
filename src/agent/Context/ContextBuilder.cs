@@ -1,5 +1,6 @@
 using System.Text;
 using Hercules.Config;
+using Hercules.Context.Distillation;
 using Hercules.Context.Summarizer;
 using Hercules.Memory.Layers;
 using Hercules.Skills;
@@ -13,8 +14,11 @@ namespace Hercules.Context;
 ///     Контекстный билдер: собирает память, tool schemas, episodes в рамках token-бюджета.
 ///     Приоритизирует high-confidence facts, фильтрует sensitive данные,
 ///     сжимает tool traces в episodic memory.
-///
-///     Task 027 — Context Assembly.
+///     <para>
+///         Task 027 — Context Assembly.
+///         Task 102 — иерархическая дистилляция: при <c>Distillation.Mode != Off</c>
+///         ассемблирует (raw recent + summary older + key facts ancient) вместо legacy path.
+///     </para>
 /// </summary>
 public sealed class ContextBuilder : IContextBuilder
 {
@@ -24,6 +28,8 @@ public sealed class ContextBuilder : IContextBuilder
 
     private readonly LayeredMemoryManager? _memory;
     private readonly ITraceSummarizer? _traceSummarizer;
+    private readonly ContextDistillationService? _distillation;
+    private readonly SqliteSessionStore? _sessions;
     private readonly ContextConfig _cfg;
     private readonly ILogger<ContextBuilder> _logger;
 
@@ -34,10 +40,14 @@ public sealed class ContextBuilder : IContextBuilder
         LayeredMemoryManager? memory,
         ContextConfig cfg,
         ILogger<ContextBuilder> logger,
-        ITraceSummarizer? traceSummarizer = null)
+        ITraceSummarizer? traceSummarizer = null,
+        ContextDistillationService? distillation = null,
+        SqliteSessionStore? sessions = null)
     {
         _memory = memory;
         _traceSummarizer = traceSummarizer;
+        _distillation = distillation;
+        _sessions = sessions;
         _cfg = cfg;
         _logger = logger;
 
@@ -93,6 +103,38 @@ public sealed class ContextBuilder : IContextBuilder
             .ThenBy(i => i.TokenEstimate)
             .ToList();
 
+        // task_102: optionally include distilled summary block (raw recent +
+        // summary older + key facts ancient). Additive on top of the legacy
+        // facts/episodes/working path so backward compat is preserved.
+        ContextItem? distillationItem = null;
+        if (_cfg.Distillation.Mode != DistillationMode.Off
+            && _distillation is not null
+            && !string.IsNullOrEmpty(sessionId))
+        {
+            try
+            {
+                var summaryMarkdown = await _distillation.GetSummaryAsync(
+                    sessionId,
+                    _cfg.Distillation,
+                    Math.Max(100, _cfg.Distillation.SummaryTokenBudget + _cfg.Distillation.KeyFactsTokenBudget),
+                    ct);
+                if (!string.IsNullOrWhiteSpace(summaryMarkdown))
+                {
+                    distillationItem = new ContextItem(
+                        ContextItemType.WorkingMemory, // reuse WorkingMemory tier
+                        summaryMarkdown.Trim(),
+                        EstimateTokens(summaryMarkdown),
+                        ImportanceLevel.High,
+                        "distilled",
+                        new List<string> { "distillation" });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[ContextBuilder] Distillation summary fetch failed for session {SessionId}", sessionId);
+            }
+        }
+
         // 6. Assemble within token budget
         // task_084: pooled StringBuilder to avoid per-request allocation in the hot path.
         var sb = SbPool.Get();
@@ -102,6 +144,25 @@ public sealed class ContextBuilder : IContextBuilder
 
         try
         {
+            // 6a. Distilled block first (if enabled) — operator-visible structured summary.
+            if (distillationItem is not null)
+            {
+                var distHeader = "=== ДИСТИЛЛИРОВАННЫЙ КОНТЕКСТ ===\n";
+                int distTokens = distillationItem.TokenEstimate + EstimateTokens(distHeader);
+                if (usedTokens + distTokens <= availableTokens)
+                {
+                    sb.Append(distHeader);
+                    sb.AppendLine(distillationItem.Content.Trim());
+                    sb.AppendLine();
+                    usedTokens += distTokens;
+                    factCount++;
+                }
+                else
+                {
+                    truncated = true;
+                }
+            }
+
             foreach (var item in sorted)
             {
                 if (factCount >= _cfg.MaxFactsInContext && item.Type == ContextItemType.DurableFact)
