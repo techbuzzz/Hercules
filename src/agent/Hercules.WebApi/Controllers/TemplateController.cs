@@ -1,92 +1,86 @@
 using Hercules.Skills;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
-///     WebAPI контроллер шаблонов агентов (task_030).
+///     WebAPI маршруты шаблонов агентов (task_030, task_112).
 ///     Листает, показывает информацию и применяет готовые бандлы навыков+памяти+инструментов.
+///     Делегирует в <see cref="AgentTemplateManager"/>.
 /// </summary>
-[ApiController]
-[Route("api/templates")]
-public sealed class TemplateController : ControllerBase
+public static class TemplateController
 {
-    private readonly AgentTemplateManager _templates;
-
-    public TemplateController(AgentTemplateManager templates)
+    public static void MapTemplate(this IEndpointRouteBuilder app)
     {
-        _templates = templates ?? throw new ArgumentNullException(nameof(templates));
+        // GET /api/templates — список всех доступных шаблонов
+        app.MapGet("/api/templates", (AgentTemplateManager templates) =>
+        {
+            var entries = templates.List();
+            return Results.Ok(entries.Select(e => new TemplateEntryDto(
+                e.FileName,
+                e.Name,
+                e.Description,
+                e.Version,
+                e.SkillCount,
+                e.FilePath)).ToList());
+        }).WithName("ListTemplates");
+
+        // GET /api/templates/{fileName} — информация о конкретном шаблоне (манифест)
+        app.MapGet("/api/templates/{fileName}", (AgentTemplateManager templates, string fileName) =>
+        {
+            try
+            {
+                var manifest = ReadManifest(templates, fileName);
+                return Results.Ok(new TemplateManifestDto(
+                    manifest.Name,
+                    manifest.Description,
+                    manifest.Version,
+                    manifest.Scenario,
+                    manifest.Skills,
+                    manifest.MemoryFiles,
+                    manifest.ToolFiles));
+            }
+            catch (FileNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithName("GetTemplate");
+
+        // POST /api/templates/{fileName}/apply — применить шаблон (импортировать навыки, память, инструменты)
+        app.MapPost("/api/templates/{fileName}/apply", (
+            AgentTemplateManager templates,
+            string fileName,
+            ApplyTemplateRequest? body) =>
+        {
+            var resolution = body?.ConflictResolution ?? ConflictResolution.Rename;
+            try
+            {
+                var result = templates.Apply(fileName, resolution);
+                return Results.Ok(new ApplyTemplateResultDto(
+                    result.TemplateName,
+                    result.InstalledSkills,
+                    result.InstalledMemoryFiles,
+                    result.InstalledToolFiles,
+                    result.Errors,
+                    result.HasErrors));
+            }
+            catch (FileNotFoundException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        }).WithName("ApplyTemplate");
     }
 
-    /// <summary>Список всех доступных шаблонов.</summary>
-    [HttpGet]
-    public ActionResult<List<TemplateEntryDto>> List()
+    private static TemplateManifest ReadManifest(AgentTemplateManager templates, string fileName)
     {
-        var entries = _templates.List();
-        return Ok(entries.Select(e => new TemplateEntryDto(
-            e.FileName,
-            e.Name,
-            e.Description,
-            e.Version,
-            e.SkillCount,
-            e.FilePath)).ToList());
-    }
-
-    /// <summary>Информация о конкретном шаблоне (манифест).</summary>
-    [HttpGet("{fileName}")]
-    public ActionResult<TemplateManifestDto> Get(string fileName)
-    {
-        try
-        {
-            var manifest = ReadManifest(fileName);
-            return Ok(new TemplateManifestDto(
-                manifest.Name,
-                manifest.Description,
-                manifest.Version,
-                manifest.Scenario,
-                manifest.Skills,
-                manifest.MemoryFiles,
-                manifest.ToolFiles));
-        }
-        catch (FileNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
-
-    /// <summary>Применить шаблон: импортировать навыки, память, инструменты.</summary>
-    [HttpPost("{fileName}/apply")]
-    public ActionResult<ApplyTemplateResultDto> Apply(string fileName, [FromBody] ApplyTemplateRequest? body)
-    {
-        var resolution = body?.ConflictResolution ?? ConflictResolution.Rename;
-        try
-        {
-            var result = _templates.Apply(fileName, resolution);
-            return Ok(new ApplyTemplateResultDto(
-                result.TemplateName,
-                result.InstalledSkills,
-                result.InstalledMemoryFiles,
-                result.InstalledToolFiles,
-                result.Errors,
-                result.HasErrors));
-        }
-        catch (FileNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
-
-    private TemplateManifest ReadManifest(string fileName)
-    {
-        var path = Path.Combine(_templates.DirectoryPath, fileName);
+        var path = Path.Combine(templates.DirectoryPath, fileName);
         if (!System.IO.File.Exists(path))
         {
             throw new FileNotFoundException($"Шаблон '{fileName}' не найден.");

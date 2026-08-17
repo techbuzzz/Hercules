@@ -1,210 +1,212 @@
 using Hercules.Skills;
 using Hercules.Skills.Marketplace;
-using Hercules.Storage;
-using Microsoft.AspNetCore.Mvc;
 
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
-///     WebAPI контроллер маркетплейса навыков (task_021).
+///     WebAPI маршруты маркетплейса навыков (task_021, task_112).
 ///     CRUD для пакетов, верификация, импорт по URL.
+///     Делегирует в <see cref="SkillMarketplace"/> и <see cref="SkillPackager"/>.
 /// </summary>
-[ApiController]
-[Route("api/marketplace")]
-public sealed class MarketplaceController(SkillMarketplace marketplace, SkillPackager packager) : ControllerBase
+public static class MarketplaceController
 {
-    /// <summary>Список всех пакетов в маркетплейсе.</summary>
-    [HttpGet]
-    public ActionResult<List<MarketplaceEntry>> List()
+    public static void MapMarketplace(this IEndpointRouteBuilder app)
     {
-        return Ok(marketplace.List());
-    }
+        // GET /api/marketplace — список пакетов в маркетплейсе
+        app.MapGet("/api/marketplace", (SkillMarketplace marketplace) =>
+                Results.Ok(marketplace.List()))
+            .WithName("ListMarketplace");
 
-    /// <summary>Поиск пакетов по запросу.</summary>
-    [HttpGet("search")]
-    public ActionResult<List<MarketplaceEntry>> Search([FromQuery] string q)
-    {
-        return Ok(string.IsNullOrWhiteSpace(q)
-            ? marketplace.List()
-            : marketplace.Search(q));
-    }
+        // GET /api/marketplace/search — поиск пакетов по запросу
+        app.MapGet("/api/marketplace/search", (SkillMarketplace marketplace, string? q) =>
+        {
+            var list = string.IsNullOrWhiteSpace(q) ? marketplace.List() : marketplace.Search(q);
+            return Results.Ok(list);
+        }).WithName("SearchMarketplace");
 
-    /// <summary>Проверить integrity (hash + signature) пакета.</summary>
-    [HttpGet("{file}/verify")]
-    public ActionResult<PackageVerificationResult> Verify(string file)
-    {
-        var result = marketplace.VerifyPackage(file);
-        if (!result.IsValid && result.Error is not null)
+        // GET /api/marketplace/{file}/verify — проверить integrity (hash + signature) пакета
+        app.MapGet("/api/marketplace/{file}/verify", (SkillMarketplace marketplace, string file) =>
         {
-            return BadRequest(result);
-        }
-        return Ok(result);
-    }
+            var result = marketplace.VerifyPackage(file);
+            return !result.IsValid && result.Error is not null
+                ? Results.BadRequest(result)
+                : Results.Ok(result);
+        }).WithName("VerifyMarketplacePackage");
 
-    /// <summary>Получить зависимости пакета.</summary>
-    [HttpGet("{file}/deps")]
-    public ActionResult<List<DependencyInfo>> GetDeps(string file)
-    {
-        var deps = marketplace.GetDependencies(file);
-        return Ok(deps);
-    }
+        // GET /api/marketplace/{file}/deps — зависимости пакета
+        app.MapGet("/api/marketplace/{file}/deps", (SkillMarketplace marketplace, string file) =>
+                Results.Ok(marketplace.GetDependencies(file)))
+            .WithName("GetMarketplacePackageDeps");
 
-    /// <summary>Установить пакет из маркетплейса.</summary>
-    [HttpPost("install")]
-    public ActionResult<Skill> Install([FromBody] InstallRequest req)
-    {
-        if (string.IsNullOrWhiteSpace(req.FileName))
+        // POST /api/marketplace/install — установить пакет из маркетплейса
+        app.MapPost("/api/marketplace/install", (SkillMarketplace marketplace, InstallRequest req) =>
         {
-            return BadRequest("fileName is required.");
-        }
-
-        try
-        {
-            var skill = marketplace.Install(req.FileName, req.ConflictResolution);
-            return Ok(skill.Meta);
-        }
-        catch (FileNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-    }
-
-    /// <summary>Установить пакет со всеми зависимостями.</summary>
-    [HttpPost("install-with-deps")]
-    public ActionResult InstallWithDeps([FromBody] InstallRequest req)
-    {
-        if (string.IsNullOrWhiteSpace(req.FileName))
-        {
-            return BadRequest("fileName is required.");
-        }
-
-        try
-        {
-            var skills = marketplace.InstallWithDeps(req.FileName);
-            return Ok(skills.Select(s => s.Meta).ToList());
-        }
-        catch (FileNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-    }
-
-    /// <summary>Удалить пакет из маркетплейса.</summary>
-    [HttpDelete("{file}")]
-    public ActionResult Remove(string file)
-    {
-        var removed = marketplace.Remove(file);
-        if (!removed)
-        {
-            return NotFound($"Package '{file}' not found in marketplace.");
-        }
-        return NoContent();
-    }
-
-    /// <summary>Опубликовать .skillpkg в маркетплейс (multipart upload).</summary>
-    [HttpPost("publish")]
-    [RequestSizeLimit(52428800)] // 50 MB
-    public async Task<ActionResult> Publish(IFormFile? package, CancellationToken ct)
-    {
-        if (package is null || package.Length == 0)
-        {
-            return BadRequest("package is required.");
-        }
-
-        try
-        {
-            // Save to temp file, then publish
-            var tempPath = Path.Combine(Path.GetTempPath(), $"hercules-publish-{Guid.NewGuid():N}{Path.GetExtension(package.FileName)}");
-            await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+            if (string.IsNullOrWhiteSpace(req.FileName))
             {
-                await package.CopyToAsync(stream, ct);
+                return Results.BadRequest(new { error = "fileName is required." });
             }
 
             try
             {
-                var destPath = marketplace.Publish(tempPath);
-                return Ok(new { path = destPath, fileName = Path.GetFileName(destPath) });
+                var skill = marketplace.Install(req.FileName, req.ConflictResolution);
+                return Results.Ok(skill.Meta);
             }
-            finally
+            catch (FileNotFoundException ex)
             {
-                if (System.IO.File.Exists(tempPath))
-                {
-                    System.IO.File.Delete(tempPath);
-                }
+                return Results.NotFound(new { error = ex.Message });
             }
-        }
-        catch (FileNotFoundException ex)
-        {
-            return NotFound(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
+        }).WithName("InstallMarketplacePackage");
 
-    /// <summary>Импортировать .skillpkg в локальные навыки (multipart upload).</summary>
-    [HttpPost("import")]
-    [RequestSizeLimit(52428800)] // 50 MB
-    public async Task<ActionResult<SkillMeta>> Import(IFormFile? package, [FromQuery] string? conflict, CancellationToken ct)
-    {
-        if (package is null || package.Length == 0)
+        // POST /api/marketplace/install-with-deps — установить пакет со всеми зависимостями
+        app.MapPost("/api/marketplace/install-with-deps", (SkillMarketplace marketplace, InstallRequest req) =>
         {
-            return BadRequest("package is required.");
-        }
-
-        try
-        {
-            var tempPath = Path.Combine(Path.GetTempPath(), $"hercules-import-{Guid.NewGuid():N}{Path.GetExtension(package.FileName)}");
-            await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+            if (string.IsNullOrWhiteSpace(req.FileName))
             {
-                await package.CopyToAsync(stream, ct);
+                return Results.BadRequest(new { error = "fileName is required." });
             }
 
             try
             {
-                var resolution = Enum.TryParse<ConflictResolution>(conflict, ignoreCase: true, out var parsed)
-                    ? parsed
-                    : ConflictResolution.Rename;
-                var skill = packager.Import(tempPath, resolution);
-                return Ok(skill.Meta);
+                var skills = marketplace.InstallWithDeps(req.FileName);
+                return Results.Ok(skills.Select(s => s.Meta).ToList());
             }
-            finally
+            catch (FileNotFoundException ex)
             {
-                if (System.IO.File.Exists(tempPath))
-                {
-                    System.IO.File.Delete(tempPath);
-                }
+                return Results.NotFound(new { error = ex.Message });
             }
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
+        }).WithName("InstallMarketplacePackageWithDeps");
 
-    /// <summary>Импортировать пакет из HTTP URL.</summary>
-    [HttpPost("import-url")]
-    public async Task<ActionResult> ImportFromUrl([FromBody] ImportUrlRequest req, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(req.Url))
+        // DELETE /api/marketplace/{file} — удалить пакет из маркетплейса
+        app.MapDelete("/api/marketplace/{file}", (SkillMarketplace marketplace, string file) =>
         {
-            return BadRequest("url is required.");
-        }
+            var removed = marketplace.Remove(file);
+            return !removed
+                ? Results.NotFound(new { error = $"Package '{file}' not found in marketplace." })
+                : Results.NoContent();
+        }).WithName("DeleteMarketplacePackage");
 
-        try
-        {
-            var skill = await marketplace.ImportFromUrlAsync(req.Url, httpClient: null, ct);
-            return Ok(skill.Meta);
-        }
-        catch (HttpRequestException ex)
-        {
-            return BadRequest($"Failed to download package: {ex.Message}");
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        // POST /api/marketplace/publish — опубликовать .skillpkg в маркетплейс (multipart upload)
+        app.MapPost("/api/marketplace/publish", async (
+                HttpContext ctx,
+                SkillMarketplace marketplace,
+                CancellationToken ct) =>
+            {
+                var form = await ctx.Request.ReadFormAsync(ct);
+                var package = form.Files.GetFile("package");
+                if (package is null || package.Length == 0)
+                {
+                    return Results.BadRequest(new { error = "package is required." });
+                }
+
+                try
+                {
+                    var tempPath = Path.Combine(
+                        Path.GetTempPath(),
+                        $"hercules-publish-{Guid.NewGuid():N}{Path.GetExtension(package.FileName)}");
+                    await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+                    {
+                        await package.CopyToAsync(stream, ct);
+                    }
+
+                    try
+                    {
+                        var destPath = marketplace.Publish(tempPath);
+                        return Results.Ok(new { path = destPath, fileName = Path.GetFileName(destPath) });
+                    }
+                    finally
+                    {
+                        if (System.IO.File.Exists(tempPath))
+                        {
+                            System.IO.File.Delete(tempPath);
+                        }
+                    }
+                }
+                catch (FileNotFoundException ex)
+                {
+                    return Results.NotFound(new { error = ex.Message });
+                }
+                catch (Exception ex)
+                {
+                    return Results.BadRequest(new { error = ex.Message });
+                }
+            })
+            .WithName("PublishMarketplacePackage")
+            .DisableAntiforgery();
+
+        // POST /api/marketplace/import — импортировать .skillpkg в локальные навыки (multipart upload)
+        app.MapPost("/api/marketplace/import", async (
+                HttpContext ctx,
+                SkillPackager packager,
+                string? conflict,
+                CancellationToken ct) =>
+            {
+                var form = await ctx.Request.ReadFormAsync(ct);
+                var package = form.Files.GetFile("package");
+                if (package is null || package.Length == 0)
+                {
+                    return Results.BadRequest(new { error = "package is required." });
+                }
+
+                try
+                {
+                    var tempPath = Path.Combine(
+                        Path.GetTempPath(),
+                        $"hercules-import-{Guid.NewGuid():N}{Path.GetExtension(package.FileName)}");
+                    await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+                    {
+                        await package.CopyToAsync(stream, ct);
+                    }
+
+                    try
+                    {
+                        var resolution = Enum.TryParse<ConflictResolution>(conflict, ignoreCase: true, out var parsed)
+                            ? parsed
+                            : ConflictResolution.Rename;
+                        var skill = packager.Import(tempPath, resolution);
+                        return Results.Ok(skill.Meta);
+                    }
+                    finally
+                    {
+                        if (System.IO.File.Exists(tempPath))
+                        {
+                            System.IO.File.Delete(tempPath);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    return Results.BadRequest(new { error = ex.Message });
+                }
+            })
+            .WithName("ImportMarketplacePackage")
+            .DisableAntiforgery();
+
+        // POST /api/marketplace/import-url — импортировать пакет из HTTP URL
+        app.MapPost("/api/marketplace/import-url", async (
+                SkillMarketplace marketplace,
+                ImportUrlRequest req,
+                CancellationToken ct) =>
+            {
+                if (string.IsNullOrWhiteSpace(req.Url))
+                {
+                    return Results.BadRequest(new { error = "url is required." });
+                }
+
+                try
+                {
+                    var skill = await marketplace.ImportFromUrlAsync(req.Url, httpClient: null, ct);
+                    return Results.Ok(skill.Meta);
+                }
+                catch (HttpRequestException ex)
+                {
+                    return Results.BadRequest(new { error = $"Failed to download package: {ex.Message}" });
+                }
+                catch (InvalidOperationException ex)
+                {
+                    return Results.BadRequest(new { error = ex.Message });
+                }
+            })
+            .WithName("ImportMarketplacePackageFromUrl");
     }
 }
 

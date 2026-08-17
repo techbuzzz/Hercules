@@ -1221,6 +1221,8 @@ app.MapContext();
 app.MapCache();
 app.MapToolRegistry();
 app.MapMcpEndpoints();
+app.MapMarketplace();
+app.MapTemplate();
 
 log.LogInformation("Hercules Web API started on http://localhost:8421");
 if (webCfg.ApiKeys.Count > 0)
