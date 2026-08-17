@@ -754,6 +754,191 @@ export const api = {
     const res = await fetch(url, { method: "POST", headers: headers(false) });
     return handle<{ acknowledgedAll: boolean; vertical: string; by: string }>(res);
   },
+
+  // ---- Quotas (task_056 / Phase 7 task_095) ----
+
+  /**
+   * Quota status + counters for a given scope. Mirrors the anonymous
+   * payload of `GET /api/quotas` and `GET /api/quotas/{scope}/{scopeId}`.
+   * `scope` is one of: "Agent" | "Skill" | "User" | "Tenant". When
+   * `scopeId` is omitted, backend defaults it to "default".
+   */
+  async getQuotas(scope: string, scopeId?: string): Promise<QuotaStatusListDto> {
+    const url = scopeId
+      ? `${API_BASE}/api/quotas/${encodeURIComponent(scope)}/${encodeURIComponent(scopeId)}`
+      : `${API_BASE}/api/quotas?scope=${encodeURIComponent(scope)}${scopeId ? `&scopeId=${encodeURIComponent(scopeId)}` : ""}`;
+    const res = await fetch(url, { headers: headers(false) });
+    return handle<QuotaStatusListDto>(res);
+  },
+
+  /**
+   * Single quota status for `(scope, scopeId, type)` — mirrors
+   * `GET /api/quotas/{scope}/{scopeId}/{type}`.
+   */
+  async getQuotaForType(scope: string, scopeId: string, type: string): Promise<QuotaStatusDto> {
+    const res = await fetch(
+      `${API_BASE}/api/quotas/${encodeURIComponent(scope)}/${encodeURIComponent(scopeId)}/${encodeURIComponent(type)}`,
+      { headers: headers(false) },
+    );
+    return handle<QuotaStatusDto>(res);
+  },
+
+  /**
+   * Rate limit info for HTTP response headers — mirrors
+   * `GET /api/quotas/rate-limit?scope=&scopeId=&type=`.
+   */
+  async getRateLimit(scope: string, scopeId?: string, type?: string): Promise<RateLimitInfoDto> {
+    const params = new URLSearchParams({ scope });
+    if (scopeId) params.set("scopeId", scopeId);
+    if (type) params.set("type", type);
+    const res = await fetch(`${API_BASE}/api/quotas/rate-limit?${params.toString()}`, { headers: headers(false) });
+    return handle<RateLimitInfoDto>(res);
+  },
+
+  // ---- Rollouts (task_058 / Phase 7 task_095) ----
+
+  /**
+   * Current rollout state — mirrors `GET /api/rollout/state`. Returns
+   * the full `RolloutState` with current / pending / LKG / history.
+   */
+  async getRolloutState(): Promise<{ state: RolloutStateDto }> {
+    const res = await fetch(`${API_BASE}/api/rollout/state`, { headers: headers(false) });
+    return handle<{ state: RolloutStateDto }>(res);
+  },
+
+  /**
+   * Fetch a single bundle by ID — mirrors `GET /api/rollout/bundle/{id}`.
+   */
+  async getRolloutBundle(id: string): Promise<{ bundle: ConfigBundleDto }> {
+    const res = await fetch(
+      `${API_BASE}/api/rollout/bundle/${encodeURIComponent(id)}`,
+      { headers: headers(false) },
+    );
+    return handle<{ bundle: ConfigBundleDto }>(res);
+  },
+
+  /**
+   * Apply a new config/policy bundle. `bundle` is a partial `ConfigBundleDto`
+   * payload — backend uses defaults for the rest.
+   */
+  async applyRollout(bundle: Partial<ConfigBundleDto>): Promise<{ status: string; bundleId: string; stage: string }> {
+    const res = await fetch(`${API_BASE}/api/rollout/apply`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(bundle),
+    });
+    return handle<{ status: string; bundleId: string; stage: string }>(res);
+  },
+
+  /**
+   * Promote a bundle to the next stage (Staging → Production).
+   */
+  async promoteRollout(bundleId: string): Promise<{ status: string; bundleId: string; stage: string }> {
+    const res = await fetch(`${API_BASE}/api/rollout/promote`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ bundleId }),
+    });
+    return handle<{ status: string; bundleId: string; stage: string }>(res);
+  },
+
+  /**
+   * Roll back to the last-known-good bundle.
+   */
+  async rollbackRollout(reason?: string): Promise<{ status: string; bundleId: string; stage: string }> {
+    const res = await fetch(`${API_BASE}/api/rollout/rollback`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(reason ? { reason } : {}),
+    });
+    return handle<{ status: string; bundleId: string; stage: string }>(res);
+  },
+
+  // ---- Security ops (task_055 / Phase 7 task_095) ----
+
+  /**
+   * List vulnerabilities with optional filters — mirrors
+   * `GET /api/security/vulnerabilities`. `minSeverity` is one of
+   * "Low" | "Medium" | "High" | "Critical" (lowercase also accepted).
+   * `status` is one of the `VulnerabilityStatus` enum values.
+   */
+  async getVulnerabilities(params: {
+    minSeverity?: string;
+    status?: string;
+    component?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  } = {}): Promise<{ count: number; vulnerabilities: VulnerabilityDto[] }> {
+    const qs = new URLSearchParams();
+    if (params.minSeverity) qs.set("minSeverity", params.minSeverity);
+    if (params.status) qs.set("status", params.status);
+    if (params.component) qs.set("component", params.component);
+    if (params.from) qs.set("from", params.from);
+    if (params.to) qs.set("to", params.to);
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    const url = qs.toString() ? `${API_BASE}/api/security/vulnerabilities?${qs.toString()}` : `${API_BASE}/api/security/vulnerabilities`;
+    const res = await fetch(url, { headers: headers(false) });
+    return handle<{ count: number; vulnerabilities: VulnerabilityDto[] }>(res);
+  },
+
+  /** Aggregated vulnerability summary (Open / Critical / High / Medium / Low). */
+  async getVulnerabilitySummary(): Promise<VulnerabilitySummaryDto> {
+    const res = await fetch(`${API_BASE}/api/security/vulnerabilities/summary`, { headers: headers(false) });
+    return handle<VulnerabilitySummaryDto>(res);
+  },
+
+  /** Single vulnerability by ID. */
+  async getVulnerability(id: string): Promise<VulnerabilityDto> {
+    const res = await fetch(
+      `${API_BASE}/api/security/vulnerabilities/${encodeURIComponent(id)}`,
+      { headers: headers(false) },
+    );
+    return handle<VulnerabilityDto>(res);
+  },
+
+  /**
+   * Update vulnerability status. `status` is the new value; `notes` is
+   * optional. Returns the updated record.
+   */
+  async updateVulnerabilityStatus(
+    id: string,
+    status: string,
+    notes?: string,
+  ): Promise<VulnerabilityDto> {
+    const res = await fetch(
+      `${API_BASE}/api/security/vulnerabilities/${encodeURIComponent(id)}/status`,
+      { method: "PATCH", headers: headers(), body: JSON.stringify(notes ? { status, notes } : { status }) },
+    );
+    return handle<VulnerabilityDto>(res);
+  },
+
+  /**
+   * Security-relevant audit events from the audit log. Mirrors
+   * `GET /api/security/events?from=&to=&limit=`. Returns the most recent
+   * `limit` events ordered by `Timestamp` descending.
+   */
+  async getSecurityEvents(params: { from?: string; to?: string; limit?: number } = {}): Promise<SecurityEventsResponseDto> {
+    const qs = new URLSearchParams();
+    if (params.from) qs.set("from", params.from);
+    if (params.to) qs.set("to", params.to);
+    if (params.limit != null) qs.set("limit", String(params.limit));
+    const url = qs.toString() ? `${API_BASE}/api/security/events?${qs.toString()}` : `${API_BASE}/api/security/events`;
+    const res = await fetch(url, { headers: headers(false) });
+    return handle<SecurityEventsResponseDto>(res);
+  },
+
+  /**
+   * Compliance report for a standard ("SOC2" | "ISO27001" | "GDPR" | "HIPAA").
+   * Mirrors `GET /api/security/compliance/{standard}`.
+   */
+  async getComplianceReport(standard: string): Promise<ComplianceReportDto> {
+    const res = await fetch(
+      `${API_BASE}/api/security/compliance/${encodeURIComponent(standard)}`,
+      { headers: headers(false) },
+    );
+    return handle<ComplianceReportDto>(res);
+  },
 };
 
 // ---- Mesh DTOs ----
@@ -1559,4 +1744,232 @@ export interface SloSummaryDto {
   okCount: number;
   warningCount: number;
   criticalCount: number;
+}
+
+// ---- Quota DTOs (task_056 / Phase 7 task_095) ----
+
+/**
+ * Mirrors the anonymous `counters` payload of `GET /api/quotas` and
+ * `GET /api/quotas/{scope}/{scopeId}`. Field names use snake_case because
+ * the backend uses `[JsonPropertyName]` attributes on the C# side.
+ */
+export interface QuotaCountersDto {
+  tokensUsedToday: number;
+  messagesUsedToday: number;
+  requestsUsedToday: number;
+  storageUsedMb: number;
+  costUsedTodayCents: number;
+  activeConcurrentRequests: number;
+  activeSkillExecutions: number;
+  lastResetDate: string;
+}
+
+/**
+ * Mirrors the anonymous per-limit payload of `GET /api/quotas`.
+ * `type` is one of the `QuotaLimitType` enum values (e.g. "CallsPerMinutePerAgent").
+ * `usagePercent` is the precomputed [0..100] percentage.
+ */
+export interface QuotaStatusDto {
+  type: string;
+  limit: number;
+  current: number;
+  remaining: number;
+  isExceeded: boolean;
+  isHardCap: boolean;
+  usagePercent: number;
+  resetAt: string | null;
+}
+
+/**
+ * Wire payload of `GET /api/quotas` and `GET /api/quotas/{scope}/{scopeId}`.
+ * `limits` is the list of individual limit statuses for this scope.
+ */
+export interface QuotaStatusListDto {
+  scope: string;
+  scopeId: string;
+  counters: QuotaCountersDto;
+  limits: QuotaStatusDto[];
+}
+
+/**
+ * Mirrors `RateLimitInfo` (Quotas/Models.cs) — returned by
+ * `GET /api/quotas/rate-limit`. `resetAt` is ISO 8601 UTC.
+ */
+export interface RateLimitInfoDto {
+  limit: string;
+  remaining: number;
+  resetAt: string;
+  retryAfterSeconds: number;
+}
+
+// ---- Rollout DTOs (task_058 / Phase 7 task_095) ----
+
+/**
+ * Mirrors `RolloutHistoryEntry` (Config/Rollout/Models.cs).
+ * `action` is one of: "applied" | "promoted" | "rolled_back" | "expired".
+ */
+export interface RolloutHistoryEntryDto {
+  bundleId: string;
+  version: string;
+  action: string;
+  timestamp: string;
+  reason: string | null;
+}
+
+/**
+ * Mirrors `RolloutState` (Config/Rollout/Models.cs) — returned by
+ * `GET /api/rollout/state`. `currentStage` is one of the `BundleStage`
+ * enum values: "Pending" | "Staging" | "Production" | "Retired".
+ * `lastPromotedAt` and `lastRollbackAt` are nullable timestamps.
+ */
+export interface RolloutStateDto {
+  currentBundleId: string | null;
+  currentVersion: string | null;
+  currentStage: string;
+  lastKnownGoodBundleId: string | null;
+  lastKnownGoodVersion: string | null;
+  pendingBundleId: string | null;
+  pendingVersion: string | null;
+  lastPromotedAt: string | null;
+  lastRollbackAt: string | null;
+  rolloutHistory: RolloutHistoryEntryDto[];
+}
+
+/**
+ * Mirrors `ConfigBundle` (Config/Rollout/Models.cs) — returned by
+ * `GET /api/rollout/bundle/{id}` and accepted by `POST /api/rollout/apply`.
+ * `type` is "config" | "policy". `stage` follows the same enum as
+ * `RolloutState.currentStage`. Fields use snake_case because the backend
+ * uses `[JsonPropertyName]` attributes.
+ */
+export interface ConfigBundleDto {
+  id: string;
+  version: string;
+  type: string;
+  name: string;
+  description: string;
+  signerId: string | null;
+  signedAt: string | null;
+  algorithm: string;
+  signature: string;
+  publicKeyFingerprint: string | null;
+  stagingGroup: string | null;
+  expiresAt: string | null;
+  minHerculesVersion: string | null;
+  maxHerculesVersion: string | null;
+  stage: string;
+  createdAt: string;
+  appliedAt: string | null;
+  stagingDurationMinutes: number;
+  payload: string;
+}
+
+// ---- Security DTOs (task_055 / Phase 7 task_095) ----
+
+/**
+ * Mirrors `VulnerabilityReport` (Security/IVulnerabilityReporter.cs).
+ * `severity` is one of: "Low" | "Medium" | "High" | "Critical".
+ * `status` is one of: "Reported" | "Confirmed" | "InProgress" | "Mitigated"
+ * | "Resolved" | "FalsePositive" | "Accepted".
+ */
+export interface VulnerabilityDto {
+  vulnerabilityId: string;
+  title: string;
+  description: string;
+  severity: string;
+  status: string;
+  affectedComponent: string;
+  affectedVersion: string | null;
+  reporter: string;
+  reportedAt: string;
+  resolvedAt: string | null;
+  resolution: string | null;
+  references: string[];
+}
+
+/**
+ * Mirrors `VulnerabilitySummary` (Security/IVulnerabilityReporter.cs).
+ * Returned by `GET /api/security/vulnerabilities/summary`.
+ */
+export interface VulnerabilitySummaryDto {
+  total: number;
+  open: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  lastReportedAt: string;
+  lastResolvedAt: string | null;
+}
+
+/**
+ * Mirrors `SecurityEvent` (Security/ISecurityAuditExporter.cs) — one
+ * entry in the security-events feed. `success` is the heuristic that
+ * inspects the audit entry result.
+ */
+export interface SecurityEventDto {
+  eventId: string;
+  eventType: string;
+  actor: string;
+  target: string | null;
+  timestamp: string;
+  details: string | null;
+  ipAddress: string | null;
+  success: boolean;
+}
+
+/**
+ * Mirrors `SecurityMetrics` (Security/ISecurityAuditExporter.cs).
+ */
+export interface SecurityMetricsDto {
+  totalEvents: number;
+  authenticationEvents: number;
+  authorizationEvents: number;
+  configurationChanges: number;
+  toolExecutions: number;
+  skillOperations: number;
+  securityAlerts: number;
+  averageResponseTimeMs: number;
+}
+
+/**
+ * Wire payload of `GET /api/security/events`. `from`/`to` are the
+ * requested audit window; `total` is the full count of events the
+ * exporter saw; `returned` is the count actually serialised (capped
+ * to `limit`).
+ */
+export interface SecurityEventsResponseDto {
+  from: string;
+  to: string;
+  total: number;
+  returned: number;
+  events: SecurityEventDto[];
+  metrics: SecurityMetricsDto;
+}
+
+/**
+ * Mirrors `ComplianceCheck` (Security/ISecurityAuditExporter.cs).
+ */
+export interface ComplianceCheckDto {
+  controlId: string;
+  description: string;
+  passed: boolean;
+  evidence: string | null;
+  remediation: string | null;
+}
+
+/**
+ * Mirrors `ComplianceReport` (Security/ISecurityAuditExporter.cs).
+ * `standard` is one of: "SOC2" | "ISO27001" | "GDPR" | "HIPAA".
+ */
+export interface ComplianceReportDto {
+  reportId: string;
+  standard: string;
+  generatedAt: string;
+  periodStart: string;
+  periodEnd: string;
+  isCompliant: boolean;
+  checks: ComplianceCheckDto[];
+  findings: string[];
+  recommendations: string[];
 }

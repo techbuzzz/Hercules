@@ -1,0 +1,494 @@
+---
+// Security Ops Panel (Phase 7 task_095).
+// Vulnerabilities (open / critical / high / medium / low) + recent
+// security-events (audit-derived) + compliance summary (SOC2 / ISO27001 /
+// GDPR / HIPAA). 30s auto-refresh (opt-in).
+---
+
+<div class="flex flex-col gap-5" id="security-panel">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">Security Operations</h2>
+      <p class="text-xs text-gray-500">
+        Vulnerabilities, security events, compliance reports.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="sp-updated" class="text-xs text-gray-600"></span>
+      <label class="flex items-center gap-1 text-[11px] text-gray-400">
+        <input id="sp-autorefresh" type="checkbox" class="rounded border-white/20 bg-[#0a0a0b]" />
+        авто (30s)
+      </label>
+      <button id="sp-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- Banners -->
+  <div id="sp-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+  <div id="sp-ok" class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"></div>
+
+  <!-- Vulnerability summary -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">Vulnerability summary</h3>
+    <div id="sp-vuln-loading" class="hidden py-6 text-center text-xs text-gray-500">Загрузка…</div>
+    <div id="sp-vuln-grid" class="grid gap-3 sm:grid-cols-6"></div>
+  </section>
+
+  <!-- Vulnerabilities table -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <h3 class="text-sm font-medium text-gray-300">
+        Уязвимости
+        <span id="sp-vuln-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+      </h3>
+      <div class="flex items-center gap-2">
+        <label for="sp-vuln-filter" class="text-[11px] text-gray-500">Filter</label>
+        <select id="sp-vuln-filter"
+          class="rounded-lg border border-white/10 bg-[#0a0a0b] px-2 py-1 text-[11px] text-gray-200 focus:border-violet-500/50 focus:outline-none">
+          <option value="" selected>All</option>
+          <option value="Critical">Critical</option>
+          <option value="High">High</option>
+          <option value="Medium">Medium</option>
+          <option value="Low">Low</option>
+        </select>
+      </div>
+    </div>
+    <div id="sp-vuln-empty" class="hidden py-6 text-center text-xs text-gray-500">
+      Уязвимостей нет.
+    </div>
+    <div id="sp-vuln-table-wrap" class="hidden overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <th class="py-2 pr-3 font-medium">ID</th>
+            <th class="py-2 pr-3 font-medium">Title</th>
+            <th class="py-2 pr-3 font-medium">Component</th>
+            <th class="py-2 pr-3 font-medium">Severity</th>
+            <th class="py-2 pr-3 font-medium">Status</th>
+            <th class="py-2 pr-3 font-medium">Reported</th>
+            <th class="py-2 pr-3 font-medium text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody id="sp-vuln-tbody" class="divide-y divide-white/5"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Recent security events -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <h3 class="text-sm font-medium text-gray-300">
+        Security events
+        <span id="sp-events-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+      </h3>
+    </div>
+    <div id="sp-events-empty" class="hidden py-6 text-center text-xs text-gray-500">
+      Событий в выбранном окне нет.
+    </div>
+    <div id="sp-events-loading" class="hidden py-6 text-center text-xs text-gray-500">Загрузка…</div>
+    <ol id="sp-events-list" class="flex flex-col gap-1.5"></ol>
+  </section>
+
+  <!-- Compliance -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">Compliance reports</h3>
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <button data-compliance="SOC2" type="button"
+        class="rounded-lg border border-white/10 bg-[#0a0a0b] p-3 text-left transition-colors hover:bg-white/5">
+        <div class="text-[10px] uppercase tracking-wide text-gray-500">Standard</div>
+        <div class="mt-1 text-sm font-semibold text-white">SOC2</div>
+        <div id="sp-comp-SOC2-status" class="mt-1 text-[11px] text-gray-400">…</div>
+      </button>
+      <button data-compliance="ISO27001" type="button"
+        class="rounded-lg border border-white/10 bg-[#0a0a0b] p-3 text-left transition-colors hover:bg-white/5">
+        <div class="text-[10px] uppercase tracking-wide text-gray-500">Standard</div>
+        <div class="mt-1 text-sm font-semibold text-white">ISO 27001</div>
+        <div id="sp-comp-ISO27001-status" class="mt-1 text-[11px] text-gray-400">…</div>
+      </button>
+      <button data-compliance="GDPR" type="button"
+        class="rounded-lg border border-white/10 bg-[#0a0a0b] p-3 text-left transition-colors hover:bg-white/5">
+        <div class="text-[10px] uppercase tracking-wide text-gray-500">Standard</div>
+        <div class="mt-1 text-sm font-semibold text-white">GDPR</div>
+        <div id="sp-comp-GDPR-status" class="mt-1 text-[11px] text-gray-400">…</div>
+      </button>
+      <button data-compliance="HIPAA" type="button"
+        class="rounded-lg border border-white/10 bg-[#0a0a0b] p-3 text-left transition-colors hover:bg-white/5">
+        <div class="text-[10px] uppercase tracking-wide text-gray-500">Standard</div>
+        <div class="mt-1 text-sm font-semibold text-white">HIPAA</div>
+        <div id="sp-comp-HIPAA-status" class="mt-1 text-[11px] text-gray-400">…</div>
+      </button>
+    </div>
+    <div id="sp-comp-detail" class="hidden mt-3 rounded border border-white/5 bg-[#0a0a0b] p-3 text-xs"></div>
+  </section>
+</div>
+
+<script>
+  import {
+    api,
+    type VulnerabilityDto,
+    type VulnerabilitySummaryDto,
+    type SecurityEventsResponseDto,
+    type ComplianceReportDto,
+  } from "../lib/api";
+
+  const errBanner = document.getElementById("sp-error")!;
+  const okBanner = document.getElementById("sp-ok")!;
+  const updatedEl = document.getElementById("sp-updated")!;
+  const refreshBtn = document.getElementById("sp-refresh")!;
+  const autorefreshChk = document.getElementById("sp-autorefresh") as HTMLInputElement;
+
+  const vulnLoading = document.getElementById("sp-vuln-loading")!;
+  const vulnGrid = document.getElementById("sp-vuln-grid")!;
+  const vulnFilter = document.getElementById("sp-vuln-filter") as HTMLSelectElement;
+  const vulnCount = document.getElementById("sp-vuln-count")!;
+  const vulnEmpty = document.getElementById("sp-vuln-empty")!;
+  const vulnTableWrap = document.getElementById("sp-vuln-table-wrap")!;
+  const vulnTbody = document.getElementById("sp-vuln-tbody")!;
+
+  const eventsCount = document.getElementById("sp-events-count")!;
+  const eventsEmpty = document.getElementById("sp-events-empty")!;
+  const eventsLoading = document.getElementById("sp-events-loading")!;
+  const eventsList = document.getElementById("sp-events-list")!;
+
+  const compDetail = document.getElementById("sp-comp-detail")!;
+
+  let autorefreshTimer: number | null = null;
+  let lastVulns: VulnerabilityDto[] = [];
+
+  function escapeHtml(s: string | null | undefined): string {
+    if (s == null) return "";
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = message;
+    errBanner.classList.remove("hidden");
+    okBanner.classList.add("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+  function showOk(message: string, durationMs = 3000): void {
+    okBanner.textContent = message;
+    okBanner.classList.remove("hidden");
+    errBanner.classList.add("hidden");
+    window.setTimeout(() => okBanner.classList.add("hidden"), durationMs);
+  }
+
+  function formatTimestamp(iso: string | null | undefined): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleString();
+  }
+
+  function severityPill(severity: string): string {
+    const s = (severity || "").toLowerCase();
+    const palette: Record<string, string> = {
+      critical: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+      high: "border-orange-500/30 bg-orange-500/10 text-orange-300",
+      medium: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      low: "border-sky-500/30 bg-sky-500/10 text-sky-300",
+    };
+    const cls = palette[s] ?? "border-white/10 bg-white/5 text-gray-300";
+    return `<span class="rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${cls}">${escapeHtml(severity || "—")}</span>`;
+  }
+
+  function statusPill(status: string): string {
+    const s = (status || "").toLowerCase();
+    const palette: Record<string, string> = {
+      reported: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+      confirmed: "border-orange-500/30 bg-orange-500/10 text-orange-300",
+      inprogress: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      mitigated: "border-sky-500/30 bg-sky-500/10 text-sky-300",
+      resolved: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      falsepositive: "border-gray-500/30 bg-gray-500/10 text-gray-300",
+      accepted: "border-violet-500/30 bg-violet-500/10 text-violet-300",
+    };
+    const cls = palette[s] ?? "border-white/10 bg-white/5 text-gray-300";
+    return `<span class="rounded-full border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${cls}">${escapeHtml(status || "—")}</span>`;
+  }
+
+  function renderSummary(s: VulnerabilitySummaryDto): void {
+    const cards = [
+      { label: "Total", value: s.total, pill: "border-violet-500/30 bg-violet-500/10 text-violet-300" },
+      { label: "Open", value: s.open, pill: "border-sky-500/30 bg-sky-500/10 text-sky-300" },
+      { label: "Critical", value: s.critical, pill: "border-rose-500/30 bg-rose-500/10 text-rose-300" },
+      { label: "High", value: s.high, pill: "border-orange-500/30 bg-orange-500/10 text-orange-300" },
+      { label: "Medium", value: s.medium, pill: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
+      { label: "Low", value: s.low, pill: "border-sky-500/30 bg-sky-500/10 text-sky-300" },
+    ];
+    vulnGrid.innerHTML = cards
+      .map(
+        (c) => `
+        <div class="rounded border border-white/5 bg-[#0a0a0b] p-3">
+          <div class="text-[10px] uppercase tracking-wide text-gray-500">${c.label}</div>
+          <div class="mt-1 flex items-baseline gap-2">
+            <span class="text-xl font-semibold text-white">${c.value}</span>
+            <span class="rounded-full border px-1.5 py-0.5 text-[10px] ${c.pill}">${c.label.toLowerCase()}</span>
+          </div>
+        </div>`,
+      )
+      .join("");
+  }
+
+  function renderVulnRow(v: VulnerabilityDto): string {
+    return `
+      <tr data-vuln-id="${escapeHtml(v.vulnerabilityId)}">
+        <td class="py-2 pr-3 mono text-gray-300">${escapeHtml(v.vulnerabilityId)}</td>
+        <td class="py-2 pr-3 text-gray-200">${escapeHtml(v.title)}</td>
+        <td class="py-2 pr-3 mono text-gray-400">${escapeHtml(v.affectedComponent)}${v.affectedVersion ? ` <span class="text-gray-600">@ ${escapeHtml(v.affectedVersion)}</span>` : ""}</td>
+        <td class="py-2 pr-3">${severityPill(v.severity)}</td>
+        <td class="py-2 pr-3">${statusPill(v.status)}</td>
+        <td class="py-2 pr-3 text-[11px] text-gray-500">${formatTimestamp(v.reportedAt)}</td>
+        <td class="py-2 pr-3 text-right">
+          <button data-action="resolve" data-id="${escapeHtml(v.vulnerabilityId)}" type="button"
+            class="rounded border border-emerald-500/30 px-2 py-0.5 text-[10px] text-emerald-300 transition-colors hover:bg-emerald-500/10">Resolve</button>
+        </td>
+      </tr>`;
+  }
+
+  function renderVulns(items: VulnerabilityDto[]): void {
+    const filterVal = vulnFilter.value;
+    const filtered = filterVal
+      ? items.filter((v) => (v.severity || "").toLowerCase() === filterVal.toLowerCase())
+      : items;
+    if (filtered.length === 0) {
+      vulnTableWrap.classList.add("hidden");
+      vulnEmpty.classList.remove("hidden");
+      vulnCount.textContent = items.length > 0 ? `(0 of ${items.length})` : "";
+      vulnTbody.innerHTML = "";
+      return;
+    }
+    vulnEmpty.classList.add("hidden");
+    vulnTableWrap.classList.remove("hidden");
+    vulnCount.textContent = `(${filtered.length}${filterVal ? ` of ${items.length}` : ""})`;
+    vulnTbody.innerHTML = filtered.map(renderVulnRow).join("");
+  }
+
+  function renderEvents(resp: SecurityEventsResponseDto): void {
+    if (!resp.events || resp.events.length === 0) {
+      eventsList.innerHTML = "";
+      eventsEmpty.classList.remove("hidden");
+      eventsCount.textContent = "";
+      return;
+    }
+    eventsEmpty.classList.add("hidden");
+    eventsCount.textContent = `(${resp.returned} of ${resp.total})`;
+    eventsList.innerHTML = resp.events
+      .slice(0, 20)
+      .map(
+        (e) => `
+        <li class="rounded border border-white/5 bg-[#0a0a0b] p-2 text-[11px]">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="${e.success ? "text-emerald-300" : "text-rose-300"}">${e.success ? "✓" : "✗"}</span>
+            <span class="mono text-gray-300 break-all">${escapeHtml(e.eventType)}</span>
+            <span class="text-gray-500">${escapeHtml(e.actor)}</span>
+            ${e.target ? `<span class="text-gray-500 mono break-all">→ ${escapeHtml(e.target)}</span>` : ""}
+            <span class="text-gray-500 ml-auto">${formatTimestamp(e.timestamp)}</span>
+          </div>
+          ${e.details ? `<div class="mt-0.5 truncate text-gray-400" title="${escapeHtml(e.details)}">${escapeHtml(e.details)}</div>` : ""}
+        </li>`,
+      )
+      .join("");
+    if (resp.events.length > 20) {
+      eventsList.insertAdjacentHTML(
+        "beforeend",
+        `<li class="text-[10px] text-gray-500">…и ещё ${resp.events.length - 20}.</li>`,
+      );
+    }
+  }
+
+  function renderComplianceStatus(standard: string, r: ComplianceReportDto): void {
+    const node = document.getElementById(`sp-comp-${standard}-status`);
+    if (!node) return;
+    const passed = r.checks.filter((c) => c.passed).length;
+    const total = r.checks.length;
+    const cls = r.isCompliant
+      ? "text-emerald-300"
+      : "text-rose-300";
+    node.innerHTML = `<span class="${cls}">${passed}/${total} checks · ${r.isCompliant ? "compliant" : "non-compliant"}</span>`;
+  }
+
+  function renderComplianceDetail(r: ComplianceReportDto): void {
+    const passedCount = r.checks.filter((c) => c.passed).length;
+    const total = r.checks.length;
+    const cls = r.isCompliant
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+      : "border-rose-500/30 bg-rose-500/10 text-rose-200";
+    compDetail.className = `mt-3 rounded border ${cls} p-3 text-xs`;
+    compDetail.classList.remove("hidden");
+    compDetail.innerHTML = `
+      <div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <span class="text-sm font-semibold text-white">${escapeHtml(r.standard)}</span>
+          <span class="ml-2 text-[11px] text-gray-400 mono">${escapeHtml(r.reportId)}</span>
+        </div>
+        <span class="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${r.isCompliant ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-rose-500/30 bg-rose-500/10 text-rose-300"}">
+          ${r.isCompliant ? "compliant" : "non-compliant"}
+        </span>
+      </div>
+      <div class="mb-2 text-[11px] text-gray-500">${passedCount}/${total} checks passed · period ${formatTimestamp(r.periodStart)} → ${formatTimestamp(r.periodEnd)}</div>
+      <ul class="flex flex-col gap-1">
+        ${r.checks
+          .map(
+            (c) => `
+          <li class="rounded border border-white/5 bg-[#0a0a0b] p-2 text-[11px]">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <span class="${c.passed ? "text-emerald-300" : "text-rose-300"} mono">${c.passed ? "✓" : "✗"}</span>
+                <span class="mono text-gray-300">${escapeHtml(c.controlId)}</span>
+                <span class="ml-2 text-gray-400">${escapeHtml(c.description)}</span>
+              </div>
+            </div>
+            ${c.evidence ? `<div class="mt-0.5 text-[10px] text-gray-500">evidence: ${escapeHtml(c.evidence)}</div>` : ""}
+            ${c.remediation ? `<div class="mt-0.5 text-[10px] text-amber-300">remediation: ${escapeHtml(c.remediation)}</div>` : ""}
+          </li>`,
+          )
+          .join("")}
+      </ul>
+      ${
+        r.findings.length > 0
+          ? `<div class="mt-2 text-[11px]"><span class="text-rose-300">Findings:</span><ul class="ml-4 list-disc">${r.findings.map((f) => `<li class="text-gray-300">${escapeHtml(f)}</li>`).join("")}</ul></div>`
+          : ""
+      }
+      ${
+        r.recommendations.length > 0
+          ? `<div class="mt-2 text-[11px]"><span class="text-amber-300">Recommendations:</span><ul class="ml-4 list-disc">${r.recommendations.map((f) => `<li class="text-gray-300">${escapeHtml(f)}</li>`).join("")}</ul></div>`
+          : ""
+      }`;
+  }
+
+  async function loadSummary(silent = false): Promise<void> {
+    if (!silent) clearError();
+    if (!silent) vulnLoading.classList.remove("hidden");
+    try {
+      const summary: VulnerabilitySummaryDto = await api.getVulnerabilitySummary();
+      renderSummary(summary);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить vulnerability summary: ${msg}`);
+      vulnGrid.innerHTML = "";
+    } finally {
+      vulnLoading.classList.add("hidden");
+    }
+  }
+
+  async function loadVulns(silent = false): Promise<void> {
+    if (!silent) clearError();
+    try {
+      const wrapper = await api.getVulnerabilities({});
+      lastVulns = wrapper.vulnerabilities || [];
+      renderVulns(lastVulns);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить уязвимости: ${msg}`);
+      lastVulns = [];
+      renderVulns([]);
+    }
+  }
+
+  async function loadEvents(silent = false): Promise<void> {
+    if (!silent) clearError();
+    if (!silent) eventsLoading.classList.remove("hidden");
+    try {
+      const resp: SecurityEventsResponseDto = await api.getSecurityEvents({ limit: 50 });
+      renderEvents(resp);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить security events: ${msg}`);
+      eventsList.innerHTML = "";
+    } finally {
+      eventsLoading.classList.add("hidden");
+    }
+  }
+
+  async function loadCompliance(): Promise<void> {
+    const standards = ["SOC2", "ISO27001", "GDPR", "HIPAA"];
+    await Promise.all(
+      standards.map(async (s) => {
+        try {
+          const r = await api.getComplianceReport(s);
+          renderComplianceStatus(s, r);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const node = document.getElementById(`sp-comp-${s}-status`);
+          if (node) node.textContent = `error: ${msg}`;
+        }
+      }),
+    );
+  }
+
+  async function loadAll(silent = false): Promise<void> {
+    updatedEl.textContent = silent ? "" : `обновлено: ${new Date().toLocaleTimeString()}`;
+    await Promise.all([
+      loadSummary(silent),
+      loadVulns(silent),
+      loadEvents(silent),
+      loadCompliance(),
+    ]);
+  }
+
+  vulnFilter.addEventListener("change", () => {
+    renderVulns(lastVulns);
+  });
+
+  vulnTbody.addEventListener("click", async (e) => {
+    const target = e.target as HTMLElement;
+    const btn = target.closest('[data-action="resolve"]') as HTMLButtonElement | null;
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (!id) return;
+    btn.disabled = true;
+    try {
+      await api.updateVulnerabilityStatus(id, "Resolved", "resolved from web");
+      showOk(`Vulnerability ${id.slice(0, 12)}… resolved.`, 2000);
+      await Promise.all([loadSummary(true), loadVulns(true)]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showError(`Resolve failed: ${msg}`);
+      btn.disabled = false;
+    }
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-compliance]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const standard = btn.dataset.compliance || "";
+      if (!standard) return;
+      try {
+        const r = await api.getComplianceReport(standard);
+        renderComplianceDetail(r);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        showError(`Compliance ${standard} failed: ${msg}`);
+      }
+    });
+  });
+
+  refreshBtn.addEventListener("click", () => {
+    void loadAll();
+  });
+  autorefreshChk.addEventListener("change", () => {
+    if (autorefreshChk.checked) {
+      autorefreshTimer = window.setInterval(() => {
+        void loadAll(true);
+      }, 30000);
+    } else if (autorefreshTimer != null) {
+      window.clearInterval(autorefreshTimer);
+      autorefreshTimer = null;
+    }
+  });
+
+  void loadAll();
+</script>

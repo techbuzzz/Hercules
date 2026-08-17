@@ -960,6 +960,7 @@ catch (Exception ex)
 app.MapBudget();
 app.MapQuotas();
 app.MapAudit();
+app.MapSecurityOps();
 app.MapLlm();
 app.MapA2A();
 app.MapBackups();

@@ -63,6 +63,9 @@ src/
 │   └── MeshObservabilityPanel.astro# Mesh counters + recent traces/logs (task_093)
 │   └── BackupPanel.astro# Backup create / verify / restore / delete (task_094)
 │   └── SloPanel.astro# SLO summary + per-vertical objectives, violations, ack (task_094)
+│   └── QuotasPanel.astro# Quota status per scope (Agent/Skill/User/Tenant) + counters + limits (task_095)
+│   └── RolloutPanel.astro# Config/policy rollout state + history + apply/promote/rollback (task_095)
+│   └── SecurityOpsPanel.astro# Vulnerabilities + security events + compliance reports (task_095)
 ├── pages/
 │   ├── index.astro         # Чат
 │   ├── skills.astro        # Список + создание/редактирование/улучшение
@@ -146,6 +149,21 @@ UI дёргает следующие эндпоинты (см. `src/lib/api.ts`)
 | GET    | `/api/slos/{vertical}/report`        | Полный SLO-отчёт + compliance (task_094) |
 | POST   | `/api/slos/{vertical}/ack/{violationId}` | Ack конкретного нарушения (task_094) |
 | POST   | `/api/slos/{vertical}/ack`           | Ack всех нарушений вертикали (task_094) |
+| GET    | `/api/quotas?scope=Agent&scopeId=…`  | Quota status + counters по scope (task_095) |
+| GET    | `/api/quotas/{scope}/{scopeId}`      | Quota status + counters по scope+id (task_095) |
+| GET    | `/api/quotas/{scope}/{scopeId}/{type}` | Single quota status (task_095) |
+| GET    | `/api/quotas/rate-limit`             | Rate limit info для HTTP headers (task_095) |
+| GET    | `/api/rollout/state`                 | Текущее состояние rollout (task_095) |
+| GET    | `/api/rollout/bundle/{id}`           | Bundle по ID (task_095) |
+| POST   | `/api/rollout/apply`                 | Применить config/policy bundle (task_095) |
+| POST   | `/api/rollout/promote`               | Продвинуть bundle на следующую стадию (task_095) |
+| POST   | `/api/rollout/rollback`              | Откатиться к last-known-good (task_095) |
+| GET    | `/api/security/vulnerabilities`      | Список уязвимостей с фильтрами (task_095) |
+| GET    | `/api/security/vulnerabilities/summary` | Сводка по уязвимостям (task_095) |
+| GET    | `/api/security/vulnerabilities/{id}` | Конкретная уязвимость (task_095) |
+| PATCH  | `/api/security/vulnerabilities/{id}/status` | Обновить статус уязвимости (task_095) |
+| GET    | `/api/security/events`               | Security-relevant audit events (task_095) |
+| GET    | `/api/security/compliance/{standard}`| Compliance report (SOC2/ISO27001/GDPR/HIPAA) (task_095) |
 
 Все запросы отправляют заголовок `X-Api-Key: $PUBLIC_API_KEY`. Backend CORS по умолчанию разрешает `http://localhost:4321` и `http://127.0.0.1:4321` (см. `WebApi.AllowedCorsOrigins` в `appsettings.json`).
 
