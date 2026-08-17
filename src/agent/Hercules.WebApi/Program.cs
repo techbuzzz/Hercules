@@ -161,6 +161,15 @@ builder.Services.AddSingleton<Hercules.WebApi.Auth.ApiKeyStore>();
 // resolve'ится лениво через IServiceProvider, чтобы оставаться опциональным.
 builder.Services.AddSingleton<Hercules.CheckIn.CheckInService>();
 
+// task_099: RestartService для supervisor-протокола. Singleton — состояние
+// restart-флага персистится в {DataRoot}/restart-state.json. IAuditService
+// resolve'ится лениво через IServiceProvider (опционально).
+builder.Services.AddSingleton<Hercules.Restart.RestartService>(sp =>
+    new Hercules.Restart.RestartService(
+        sp.GetRequiredService<ILogger<Hercules.Restart.RestartService>>(),
+        sp.GetService<Hercules.Audit.IAuditService>(),
+        Path.Combine(sp.GetRequiredService<Hercules.Config.StorageConfig>().DataRoot, "restart-state.json")));
+
 // task_078: IHttpClientFactory + named clients with standard resilience handlers
 builder.Services.AddHttpClient();
 

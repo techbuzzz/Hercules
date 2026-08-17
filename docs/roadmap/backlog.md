@@ -163,7 +163,7 @@
 | 96 | 1 (pre-PR) | [Port migration 5000 → 8421](tasks/completed/task_096.md) | `port-migration-8421` | done |
 | 97 | 1 | [Dual API keys (contribute + system)](tasks/task_097.md) | `dual-api-keys` | pending |
 | 98 | 1 | [CheckIn/CheckOut protocol](tasks/task_098.md) | `checkin-checkout-protocol` | pending |
-| 99 | 6 | [System restart protocol](tasks/task_099.md) | `system-restart-protocol` | pending |
+| 99 | 6 | [System restart protocol](tasks/task_099.md) | `system-restart-protocol` | done |
 | 100 | 6 | [MCP hot-reload (IConfigReload)](tasks/task_100.md) | `mcp-hot-reload` | pending |
 | 101 | 6 | [SkillSdk (Hercules.SkillSdk NuGet)](tasks/task_101.md) | `skill-sdk` | pending |
 | 102 | 6 | [Context distillation](tasks/task_102.md) | `context-distillation` | pending |
