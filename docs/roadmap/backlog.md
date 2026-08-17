@@ -168,7 +168,7 @@
 | 101 | 6 | [SkillSdk (Hercules.SkillSdk NuGet)](tasks/completed/task_101.md) | `skill-sdk` | done |
 | 102 | 6 | [Context distillation](tasks/completed/task_102.md) | `context-distillation` | done |
 | 103 | 6 | [PostgreSQL session store](tasks/task_103.md) | `postgres-session-store` | pending |
-| 104 | 8 | [hercules-workflow-server](tasks/task_104.md) | `workflow-server` | pending |
+| 104 | 8 | [hercules-workflow-server](tasks/task_104.md) | `workflow-server` | done |
 | 105 | 8 | [Workflow graph model + executor](tasks/task_105.md) | `workflow-graph-executor` | pending |
 | 106 | 8 | [DelegatedTask persistence](tasks/task_106.md) | `delegated-task-persistence` | done |
 | 107 | 8 | [Parent/child task relationships](tasks/task_107.md) | `parent-child-tasks` | pending |

@@ -440,3 +440,6 @@ src/hercules-studio/.vite/
 *.db
 # Hercules runtime data directory (resolved outside repo by BuiltIn.ResolveDataRoot)
 HerculesData/
+
+# hercules-workflow-server runtime data (task_104)
+src/workflow-server/data/

@@ -29,6 +29,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\agent\Hercules.csproj" />
     <ProjectReference Include="..\..\src\agent\Hercules.WebApi\Hercules.WebApi.csproj" />
+    <ProjectReference Include="..\..\src\workflow-server\Hercules.WorkflowServer.csproj" />
   </ItemGroup>
 
 </Project>

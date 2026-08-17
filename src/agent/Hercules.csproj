@@ -9,9 +9,9 @@
     <RootNamespace>Hercules</RootNamespace>
     <AssemblyName>Hercules</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <!-- Вложенные проекты (Web API и фронтенд) исключаем из сборки ядра,
+    <!-- Вложенные проекты (Web API, workflow-server и фронтенд) исключаем из сборки ядра,
          иначе SDK подхватит их .cs-файлы через стандартный globbing. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);Hercules.WebApi/**;hercules-web/**;SkillSdk/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Hercules.WebApi/**;hercules-web/**;Hercules.WorkflowServer/**;SkillSdk/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
