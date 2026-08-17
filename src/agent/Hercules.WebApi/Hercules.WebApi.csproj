@@ -8,11 +8,29 @@
     <RootNamespace>Hercules.WebApi</RootNamespace>
     <AssemblyName>Hercules.WebApi</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- [task_109] OpenAPI build-time generation: emits openapi.json in project root on `dotnet build` -->
+    <OpenApiDocumentsDirectory>.</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
+
+    <!-- [task_109] XML doc comments → OpenAPI descriptions; suppress missing-doc warnings
+         (not every public member needs OpenAPI docs) -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591;1573</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Ссылка на ядро агента: переиспользуем Agent/LLM/Storage и WebApiAdapter -->
     <ProjectReference Include="..\Hercules.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- [task_109] Scalar UI for /scalar endpoint -->
+    <PackageReference Include="Scalar.AspNetCore" Version="2.11.4" />
+    <!-- [task_109] Microsoft.AspNetCore.OpenApi (built-in .NET 10) for AddOpenApi/MapOpenApi -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <!-- [task_109] Build-time OpenAPI document generation via GetDocument.Insider -->
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.0" />
   </ItemGroup>
 
   <ItemGroup>

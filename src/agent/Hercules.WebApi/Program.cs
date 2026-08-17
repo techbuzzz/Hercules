@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Threading.RateLimiting;
+using Scalar.AspNetCore;
 using Hercules.Agent;
 using Hercules.Audit;
 using Hercules.Budget;
@@ -61,6 +62,14 @@ using Microsoft.Extensions.Http.Resilience;
 //  Предоставляет HTTP-доступ к чату, навыкам, памяти, статистике и конфигурации.
 //  Запуск: dotnet run --project Hercules.WebApi   (порт 8421, см. ADR-0003)
 // ============================================================================
+
+// [task_109] Build-time detection: when MSBuild invokes GetDocument.Insider
+// for OpenAPI document generation, skip side-effecting service registration
+// (DB-touching singletons, OpenTelemetry exporters, file I/O) and post-build
+// bootstrap (key generation, manifest publishing, MCP init). The build target
+// only needs `app.MapOpenApi()` to expose the document via DI; it never
+// serves HTTP requests.
+var isBuildTime = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -151,6 +160,25 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
+
+// [task_109] OpenAPI document generation (built-in .NET 10, OpenAPI 3.1).
+// Exposes /openapi/v1.json at runtime and feeds the build-time `openapi.json`
+// artefact produced by Microsoft.Extensions.ApiDescription.Server.
+// `ShouldInclude = _ => true` opts every endpoint into the document — without
+// this, minimal API routes are skipped unless they call `.WithOpenApi()`
+// explicitly (see task_110 for WithTags / task_111 for Produces<T>).
+builder.Services.AddOpenApi(options =>
+{
+    options.ShouldInclude = _ => true;
+});
+
+// [task_109] Bridges minimal API endpoints to MVC's IApiDescriptionProvider so
+// that downstream tooling (Spectral in task_117, dotnet-getdocument build target)
+// can enumerate them. The runtime OpenAPI service has its own minimal-API
+// provider, so this is a no-op for `app.MapOpenApi()` but required for the
+// build-time document to contain the routes.
+builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSingleton(webCfg);
 // task_097: ApiKeyStore (load-or-generate API keys с ролями, см. ADR-0004).
 // Регистрируем ДО app.Build(), чтобы можно было resolve при первом запросе.
@@ -362,7 +390,15 @@ builder.Services.AddSingleton<ITool, A2AClient>(sp =>
     new A2AClient(
         sp.GetRequiredService<A2AConfig>(),
         sp.GetService<IHttpClientFactory>()));
-builder.Services.AddSingleton<ITool, CodeExecutionTool>();
+// [task_109] CodeExecutionTool registration skipped at build-time:
+// its ambiguous constructors (IEnumerable<ICodeExecutor> vs ICodeExecutor) trip
+// DI scope validation when the OpenAPI build target boots the host in a stripped
+// environment. The tool itself is documented in task_024 and re-registered at
+// runtime via `dotnet run` / `dotnet exec` where validation is properly scoped.
+if (!isBuildTime)
+{
+    builder.Services.AddSingleton<ITool, CodeExecutionTool>();
+}
 // Tool policy engine (task_009)
 builder.Services.AddSingleton(sp =>
 {
@@ -879,10 +915,19 @@ else if (builder.Environment.IsDevelopment())
 
 var app = builder.Build();
 
+// [task_109] OpenAPI document is exposed on /openapi/v1.json and Scalar
+// interactive UI on /scalar. Both paths live outside /api/* so ApiKeyMiddleware
+// already lets them through without X-Api-Key (open access to documentation).
+// Important: MapOpenApi() MUST be called after all domain `MapXxx()` calls so
+// the route table is complete before the OpenAPI document provider snapshots it.
+app.MapOpenApi();
+app.MapScalarApiReference();
+
 // --- task_097: финализируем список API-ключей до первого запроса ---
 // Если ни в appsettings, ни в legacy ApiKey ничего нет — генерируем пару и сохраняем
 // в data/security/keys.json (ADR-0004). Делаем это ДО app.Run(), чтобы оператор увидел
 // ключи в логах при первом старте.
+if (!isBuildTime)
 {
     var keyStore = app.Services.GetRequiredService<Hercules.WebApi.Auth.ApiKeyStore>();
     var resolved = keyStore.LoadOrGenerate(webCfg.ApiKeys);
@@ -912,7 +957,11 @@ app.UseOutputCache();
 app.UseMiddleware<PeerAuthMiddleware>();
 
 // --- Инициализация сессии агента ---
-app.Services.GetRequiredService<WebApiAdapter>().EnsureSessionStarted();
+// [task_109] skipped at build-time (touches SQLite via SqliteSessionStore)
+if (!isBuildTime)
+{
+    app.Services.GetRequiredService<WebApiAdapter>().EnsureSessionStarted();
+}
 
 // --- Служебные эндпоинты ---
 app.MapGet("/", () => Results.Ok(new
@@ -1010,47 +1059,55 @@ app.MapMeshObservability();
 app.MapLifecycle();
 
 // Agent manifest — публикация на startup (task_032)
-try
+// [task_109] skipped at build-time (writes files into DataRoot)
+if (!isBuildTime)
 {
-    var manifestService = app.Services.GetRequiredService<AgentManifestService>();
-    var manifest = manifestService.Save();
-    var errors = manifestService.Validate();
-    if (errors.Count > 0)
+    try
     {
-        Console.WriteLine($"[Manifest] Опубликован с предупреждениями: {manifestService.ManifestPath}");
-        foreach (var err in errors)
+        var manifestService = app.Services.GetRequiredService<AgentManifestService>();
+        var manifest = manifestService.Save();
+        var errors = manifestService.Validate();
+        if (errors.Count > 0)
         {
-            Console.WriteLine($"  ⚠ {err}");
+            Console.WriteLine($"[Manifest] Опубликован с предупреждениями: {manifestService.ManifestPath}");
+            foreach (var err in errors)
+            {
+                Console.WriteLine($"  ⚠ {err}");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"[Manifest] Опубликован: {manifestService.ManifestPath}");
         }
     }
-    else
+    catch (Exception ex)
     {
-        Console.WriteLine($"[Manifest] Опубликован: {manifestService.ManifestPath}");
+        Console.WriteLine($"[Manifest] Publishing failed: {ex.Message}");
     }
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[Manifest] Publishing failed: {ex.Message}");
 }
 
 // A2A Agent Card — публикация на startup (task_033)
-try
+// [task_109] skipped at build-time (writes files)
+if (!isBuildTime)
 {
-    var agentCardService = app.Services.GetRequiredService<IAgentCardService>();
-    var a2aConfig = app.Services.GetRequiredService<A2AConfig>();
-    if (a2aConfig.AgentCard.Publish)
+    try
     {
-        var path = await agentCardService.PublishAsync();
-        Console.WriteLine($"[AgentCard] Published: {path}");
+        var agentCardService = app.Services.GetRequiredService<IAgentCardService>();
+        var a2aConfig = app.Services.GetRequiredService<A2AConfig>();
+        if (a2aConfig.AgentCard.Publish)
+        {
+            var path = await agentCardService.PublishAsync();
+            Console.WriteLine($"[AgentCard] Published: {path}");
+        }
+        else
+        {
+            Console.WriteLine("[AgentCard] Publishing disabled (A2A.AgentCard.Publish = false)");
+        }
     }
-    else
+    catch (Exception ex)
     {
-        Console.WriteLine("[AgentCard] Publishing disabled (A2A.AgentCard.Publish = false)");
+        Console.WriteLine($"[AgentCard] Publishing failed: {ex.Message}");
     }
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[AgentCard] Publishing failed: {ex.Message}");
 }
 
 app.MapBudget();
@@ -1101,29 +1158,37 @@ else
 Console.WriteLine($"💾 Данные: {appConfig.Storage.DataRoot}");
 
 // Tool registry discovery (task_024)
-try
+// [task_109] skipped at build-time (filesystem I/O and side effects)
+if (!isBuildTime)
 {
-    var registry = app.Services.GetRequiredService<IToolRegistryService>();
-    var policyEngine = app.Services.GetService<ToolPolicyEngine>();
-    var logger = app.Services.GetService<ILogger<Program>>();
-    var discovered = ToolDiscovery.Discover(appConfig, registry, policyEngine, logger);
-    Console.WriteLine($"[ToolRegistry] {discovered} tools discovered from file system");
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[ToolRegistry] Discovery failed: {ex.Message}");
+    try
+    {
+        var registry = app.Services.GetRequiredService<IToolRegistryService>();
+        var policyEngine = app.Services.GetService<ToolPolicyEngine>();
+        var logger = app.Services.GetService<ILogger<Program>>();
+        var discovered = ToolDiscovery.Discover(appConfig, registry, policyEngine, logger);
+        Console.WriteLine($"[ToolRegistry] {discovered} tools discovered from file system");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[ToolRegistry] Discovery failed: {ex.Message}");
+    }
 }
 
 // MCP client initialization (task_025)
-try
+// [task_109] skipped at build-time (network I/O via MCP servers)
+if (!isBuildTime)
 {
-    var mcpService = app.Services.GetRequiredService<Hercules.Mcp.McpClientService>();
-    await mcpService.InitializeAsync();
-    Console.WriteLine($"[MCP] Client initialized: {mcpService.ServerStates.Count} servers configured");
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[MCP] Initialization failed: {ex.Message}");
-}
+    try
+    {
+        var mcpService = app.Services.GetRequiredService<Hercules.Mcp.McpClientService>();
+        await mcpService.InitializeAsync();
+        Console.WriteLine($"[MCP] Client initialized: {mcpService.ServerStates.Count} servers configured");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[MCP] Initialization failed: {ex.Message}");
+    }
 
-app.Run();
+    app.Run();
+}
