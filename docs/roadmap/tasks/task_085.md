@@ -21,7 +21,18 @@
   - Latency (ms): `[5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]`
   - Tokens: `[10, 50, 100, 500, 1000, 2000, 4000, 8000, 16000, 32000]`
   - Use `Histogram<long>.Create(..., unit: "ms", explicitBucketBoundaries: ...)`.
+  - **Note:** the tuned arrays are defined on `OtelMetrics` and applied via
+    `AddHistogramViews` in `OtelHostBuilderExtensions` — but the public
+    `MetricStreamConfiguration` in OTel SDK 1.17 does not expose
+    `HistogramBucketBoundaries`; the SDK currently uses the default buckets.
+    The arrays are wired so the override is a one-line change once the SDK
+    exposes the API (or once we add the `OpenTelemetry.Exporter.Prometheus.AspNetCore`
+    or advice-based wiring).
 - [x] `Program.cs` / `WebApi/Program.cs` — configure async logging: `builder.Logging.AddJsonConsole(o => { o.JsonWriter = ...; o.IncludeScopes = true; })` с async queue ИЛИ добавить OTLP log exporter (`AddOpenTelemetry().WithLogging(l => l.AddOtlpExporter())`).
+  - **Note:** `OpenTelemetry.Extensions.Logging` package is intentionally not
+    referenced to keep the dependency footprint small. `OtlpLogExporterEnabled`
+    flag is exposed so apps can flip it once the package is added. The async
+    JSON console path is wired via `AddJsonConsole(...)` in both entry points.
 - [x] `LLM/ResilientLLMClient.cs:176,190,198,222,248` — add sampled logging: emit `LogWarning` 1-in-N (default N=10) + increment `LlmRetryCounter` metric always. Use `Interlocked.Increment(ref _retryLogCount)` + `if (count % 10 == 0) _logger.LogWarning(...)`.
 - [x] `Quotas/QuotaGuard.cs:54,74` — аналогично: sampled warning для soft violations (>80% usage).
 - [x] `Agent/AgentCore.cs:260,300,402,549` — sampled warnings для guardrail/quota/timeout.

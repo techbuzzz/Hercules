@@ -148,9 +148,11 @@ public sealed class NetworkMonitor : INetworkMonitor, IDisposable
         if (!string.IsNullOrWhiteSpace(_config.NetworkPollUrl))
             return _config.NetworkPollUrl;
 
-        // Fallback: use Mesh bus health endpoint if available
-        // The actual URL will be provided via NetworkPollUrl in config
-        return null;
+        // [task_087] Fall back to a well-known external endpoint instead of
+        // returning null (which would make NetworkMonitor report offline forever).
+        // The default points at Cloudflare 1.1.1.1; operators can override via
+        // OfflineSync.NetworkFallbackPollUrl in appsettings.json.
+        return string.IsNullOrWhiteSpace(_config.NetworkFallbackPollUrl) ? null : _config.NetworkFallbackPollUrl;
     }
 
     public void Dispose()

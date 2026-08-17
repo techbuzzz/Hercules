@@ -22,6 +22,14 @@ public sealed class BackupConfig
     /// </summary>
     public string Passphrase { get; set; } = "";
 
+    /// <summary>
+    ///     [task_087] If true and <see cref="Passphrase"/> is empty, log an
+    ///     error (instead of a warning) at scheduler startup so production
+    ///     deployments fail loudly when backups would be created unencrypted.
+    ///     Default: false (warning only — dev-friendly).
+    /// </summary>
+    public bool RequirePassphrase { get; set; } = false;
+
     /// <summary>Include config files in backup. Default: true.</summary>
     public bool IncludeConfig { get; set; } = true;
 

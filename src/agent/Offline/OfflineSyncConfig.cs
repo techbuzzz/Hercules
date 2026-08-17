@@ -26,9 +26,17 @@ public sealed class OfflineSyncConfig
 
     /// <summary>
     ///     URI to poll for network connectivity (HTTP HEAD).
-    ///     Falls back to Mesh bus endpoint if null/empty.
+    ///     Falls back to <see cref="NetworkFallbackPollUrl"/> if null/empty.
     /// </summary>
     public string? NetworkPollUrl { get; set; }
+
+    /// <summary>
+    ///     [task_087] Fallback URL used when <see cref="NetworkPollUrl"/> is empty.
+    ///     Default: <c>https://1.1.1.1</c> (Cloudflare) — reachable in the vast
+    ///     majority of networks, very small payload, never returns HTML so the
+    ///     HEAD check is reliable. Set to empty string to disable polling.
+    /// </summary>
+    public string NetworkFallbackPollUrl { get; set; } = "https://1.1.1.1";
 
     /// <summary>
     ///     Timeout in seconds for each network poll request.

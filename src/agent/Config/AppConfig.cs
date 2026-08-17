@@ -919,6 +919,15 @@ public sealed class DelegationBoundaryConfig
     ///     Максимум cumulative wall-clock milliseconds за весь delegation chain. 0 = без ограничений. Default: 300000 (5 min).
     /// </summary>
     public long MaxCumulativeWallClockMs { get; set; } = 300_000;
+
+    /// <summary>
+    ///     [task_087] TTL in seconds for a chain context entry. Entries with
+    ///     <c>UpdatedUtc</c> older than this are evicted from the in-memory
+    ///     dictionary on the next access (or by an explicit cleanup call).
+    ///     Prevents unbounded growth from chains that never reach a terminal
+    ///     state (e.g. lost ack). Default: 300s (5 min). 0 = disable eviction.
+    /// </summary>
+    public int ChainContextTtlSec { get; set; } = 300;
 }
 
 /// <summary>

@@ -170,6 +170,23 @@ public sealed class BackupService : IBackupService
 
         manifest.CompressedSizeBytes = finalBytes.Length;
 
+        // [task_087] Enforce MaxSizeMb before writing the archive. The check
+        // happens after compression+encryption so the size we compare against
+        // is the actual on-disk size. If exceeded, abort the backup with a
+        // clear error in the result and skip writing.
+        var maxSizeBytes = _config.MaxSizeMb > 0 ? _config.MaxSizeMb * 1024L * 1024L : -1L;
+        if (maxSizeBytes > 0 && finalBytes.Length > maxSizeBytes)
+        {
+            var msg = $"Backup {id} aborted: archive size {finalBytes.Length} bytes exceeds MaxSizeMb={_config.MaxSizeMb} MB. " +
+                      "Increase Backup.MaxSizeMb or reduce included components.";
+            _logger.LogError(msg);
+            warnings.Add(msg);
+            sw.Stop();
+            return new BackupResult(
+                id, "", 0, uncompressedSize, entries.Count,
+                useEncryption, null, sw.Elapsed, warnings);
+        }
+
         // Write archive
         var archivePath = Path.Combine(_config.BackupDir, $"{_config.FilePrefix}-{id}.hba");
         await File.WriteAllBytesAsync(archivePath, finalBytes, ct);

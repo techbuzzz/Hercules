@@ -353,9 +353,14 @@ public sealed class SharedMemorySync : IDisposable
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip peer on error
+                // [task_087] log the error instead of silently swallowing it.
+                // Per-peer failures should not abort the overall sync loop, but
+                // the operator must see why a particular peer was skipped.
+                _logger.LogWarning(ex,
+                    "[SharedMemory] Skip peer {PeerId} on sync error ({ErrorType})",
+                    peer.AgentId, ex.GetType().Name);
             }
         }
 
