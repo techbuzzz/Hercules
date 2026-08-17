@@ -3,6 +3,7 @@ import Layout from "../layouts/Layout.astro";
 import MeshRouterPanel from "../components/MeshRouterPanel.astro";
 import EscalationPanel from "../components/EscalationPanel.astro";
 import MeshDashboard from "../components/MeshDashboard.astro";
+import MeshProfilePanel from "../components/MeshProfilePanel.astro";
 import CapabilityRegistryPanel from "../components/CapabilityRegistryPanel.astro";
 import DiscoveryPanel from "../components/DiscoveryPanel.astro";
 import TrustAdmissionPanel from "../components/TrustAdmissionPanel.astro";
@@ -12,6 +13,11 @@ import TrustAdmissionPanel from "../components/TrustAdmissionPanel.astro";
   <div class="mb-4">
     <h1 class="text-xl font-semibold text-white">Mesh Dashboard</h1>
     <p class="text-sm text-gray-400">Live topology, traffic, health, denials, skill heatmap, eval results.</p>
+  </div>
+
+  <!-- Mesh profile & backend health (Phase 7 task_092) -->
+  <div class="mb-6">
+    <MeshProfilePanel />
   </div>
 
   <!-- Full dashboard (Phase 5 task_053) -->

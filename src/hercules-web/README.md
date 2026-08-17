@@ -58,7 +58,8 @@ src/
 │   ├── AgentCardPanel.astro# A2A Agent Card view/import/discover (task_088)
 │   ├── CapabilityRegistryPanel.astro# Peer-агенты: trust/health/capabilities, Touch/Remove (task_089)
 │   ├── DiscoveryPanel.astro# Discovery-источники + discovered peer-агенты, Refresh + diff (task_090)
-│   └── TrustAdmissionPanel.astro# Trust admission policy status + dry-run (task_091)
+│   ├── TrustAdmissionPanel.astro# Trust admission policy status + dry-run (task_091)
+│   └── MeshProfilePanel.astro# Active profile, effective backends, live backend health, degradation policy (task_092)
 ├── pages/
 │   ├── index.astro         # Чат
 │   ├── skills.astro        # Список + создание/редактирование/улучшение
@@ -119,6 +120,11 @@ UI дёргает следующие эндпоинты (см. `src/lib/api.ts`)
 | POST   | `/api/a2a/agent-card/publish`   | Принудительная публикация        |
 | GET    | `/api/mesh/policy/status`       | Текущая trust admission policy    |
 | POST   | `/api/mesh/policy/dry-run`      | Dry-run evaluation без отправки   |
+| GET    | `/api/mesh/profiles`            | Список mesh-профилей + активный   |
+| GET    | `/api/mesh/profiles/{name}`     | Полное определение профиля        |
+| GET    | `/api/mesh/profiles/{name}/backends` | Effective backends профиля    |
+| GET    | `/api/mesh/backend-status`      | Live health всех mesh-бэкендов    |
+| GET    | `/api/mesh/backend-status/{role}` | Live health конкретного бэкенда |
 
 Все запросы отправляют заголовок `X-Api-Key: $PUBLIC_API_KEY`. Backend CORS по умолчанию разрешает `http://localhost:4321` и `http://127.0.0.1:4321` (см. `WebApi.AllowedCorsOrigins` в `appsettings.json`).
 

@@ -334,6 +334,64 @@ export const api = {
     return handle<MeshEvalSummaryDto>(res);
   },
 
+  // ---- Mesh profiles & backend health (Phase 5 task_070 / Phase 7 task_092) ----
+
+  /**
+   * List registered mesh profile names and the active profile.
+   * Wire format: `{count, profiles: string[], activeProfile: string}`.
+   */
+  async listMeshProfiles(): Promise<MeshProfileListDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/profiles`, { headers: headers(false) });
+    return handle<MeshProfileListDto>(res);
+  },
+
+  /**
+   * Fetch a single mesh profile definition (name, description, profile kind,
+   * backends{role → config}, constraints, degradationPolicy).
+   */
+  async getMeshProfile(name: string): Promise<MeshProfileDto> {
+    const res = await fetch(
+      `${API_BASE}/api/mesh/profiles/${encodeURIComponent(name)}`,
+      { headers: headers(false) },
+    );
+    return handle<MeshProfileDto>(res);
+  },
+
+  /**
+   * Effective backend configurations for a profile (bus/queue/stateStore) —
+   * honours `Enabled` and falls back to in-process defaults. Wire format:
+   * `{profile, backends: {role: {role, kind, enabled, ...}}}`.
+   */
+  async getMeshProfileBackends(name: string): Promise<MeshProfileBackendsDto> {
+    const res = await fetch(
+      `${API_BASE}/api/mesh/profiles/${encodeURIComponent(name)}/backends`,
+      { headers: headers(false) },
+    );
+    return handle<MeshProfileBackendsDto>(res);
+  },
+
+  /**
+   * Live health status for all mesh backends plus the overall rollup.
+   * Wire format: `{overall: "Healthy"|"Degraded"|"Unavailable"|"Unknown",
+   * backends: BackendStatusDto[]}`.
+   */
+  async getAllBackendsStatus(): Promise<MeshBackendStatusListDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/backend-status`, { headers: headers(false) });
+    return handle<MeshBackendStatusListDto>(res);
+  },
+
+  /**
+   * Live health status for a specific backend role ("bus" | "queue" | "stateStore").
+   * Backend returns 404 when the role is not present in the active profile.
+   */
+  async getBackendStatus(role: string): Promise<BackendStatusDto> {
+    const res = await fetch(
+      `${API_BASE}/api/mesh/backend-status/${encodeURIComponent(role)}`,
+      { headers: headers(false) },
+    );
+    return handle<BackendStatusDto>(res);
+  },
+
   // ---- A2A Agent Card (Phase 7 task_088) ----
 
   async getAgentCard(): Promise<AgentCardDto> {
@@ -853,4 +911,125 @@ export interface RefreshDiscoveryRawDto {
   status: string;
   count: number;
   agents: DiscoveredAgentDto[];
+}
+
+// ---- Mesh profiles & backend health (Phase 5 task_070 / Phase 7 task_092) ----
+
+/**
+ * Wire payload of GET /api/mesh/profiles — names only plus active.
+ * `activeProfile` is the profile currently in use (falls back to "local").
+ */
+export interface MeshProfileListDto {
+  count: number;
+  profiles: string[];
+  activeProfile: string;
+}
+
+/**
+ * Backend config for a single role ("bus" | "queue" | "stateStore") inside
+ * a profile definition. Mirrors `MeshBackendConfig` in Mesh/Profiles/MeshProfile.cs.
+ */
+export interface MeshProfileBackendDto {
+  /** "in-process" | "redis" | "nats" | "postgres". */
+  kind: string;
+  /** Connection string or host list. `null` when in-process. */
+  connectionString: string | null;
+  /** Comma-separated host:port pairs (alternative to connectionString). */
+  hosts: string[];
+  /** Whether this backend is enabled in the profile. */
+  enabled: boolean;
+  /** Interval in seconds between health checks. Default 30. */
+  healthCheckIntervalSec: number;
+  /** Connection/operation timeout in seconds. Default 5. */
+  timeoutSec: number;
+  /** Max consecutive retries before marking Unavailable. Default 3. */
+  maxRetries: number;
+}
+
+/** Mirrors `MeshProfileConstraints` (Mesh/Profiles/MeshProfile.cs). */
+export interface MeshProfileConstraintsDto {
+  /** 0 = no limit. */
+  maxAgents: number;
+  /** Target region / availability zone. */
+  region: string | null;
+  /** Required external services (e.g. ["redis:6379"]). */
+  requiredServices: string[];
+}
+
+/**
+ * Mirrors `DegradationPolicy` (Mesh/Profiles/MeshProfile.cs).
+ * `mode` is one of: "FailSilent" | "DegradeToLocal" | "RefuseDelegations".
+ */
+export interface DegradationPolicyDto {
+  mode: string;
+  /** Optional webhook URL called when a backend transitions. */
+  alertWebhook: string | null;
+  /** 0 = no forced stop. */
+  maxDegradedSeconds: number;
+}
+
+/**
+ * Mirrors `MeshProfileDefinition` (Mesh/Profiles/MeshProfile.cs) as returned
+ * by GET /api/mesh/profiles/{name}. `profile` is one of: "Local" | "Redis"
+ * | "Nats" | "Postgres" | "Hybrid". `backends` is keyed by role
+ * ("bus" | "queue" | "stateStore").
+ */
+export interface MeshProfileDto {
+  name: string;
+  description: string;
+  profile: string;
+  backends: Record<string, MeshProfileBackendDto>;
+  constraints: MeshProfileConstraintsDto;
+  degradationPolicy: DegradationPolicyDto;
+}
+
+/**
+ * Effective backend config for a profile (after Enabled/fallback resolution).
+ * Returned by GET /api/mesh/profiles/{name}/backends. The wrapper is
+ * `{profile, backends: {role: Effective}}` — `Effective` carries the role
+ * name back for convenience.
+ */
+export interface MeshProfileBackendEffectiveDto {
+  role: string;
+  kind: string;
+  enabled: boolean;
+  connectionString: string | null;
+  hosts: string[];
+  healthCheckIntervalSec: number;
+  timeoutSec: number;
+  maxRetries: number;
+}
+
+export interface MeshProfileBackendsDto {
+  profile: string;
+  backends: Record<string, MeshProfileBackendEffectiveDto>;
+}
+
+/**
+ * Mirrors the controller-private `BackendHealthDto` from
+ * `MeshProfileController`. The backend does NOT return `latencyMs` per
+ * backend (that field is on agent-level mesh health, not on backend health)
+ * nor a separate `enabled` flag — that information lives on the profile's
+ * backend config. `state` is one of:
+ *   "Unknown" | "Healthy" | "Degraded" | "Unavailable".
+ */
+export interface BackendStatusDto {
+  role: string;
+  kind: string;
+  state: string;
+  lastCheckedAt: string;
+  consecutiveFailures: number;
+  lastError: string | null;
+}
+
+/**
+ * Wire payload of GET /api/mesh/backend-status. `overall` mirrors
+ * the rollup returned by the controller: "Healthy" if all backends are
+ * Healthy, "Unavailable" if any is Unavailable, "Degraded" if any is
+ * Degraded (but none Unavailable), "Unknown" when no backends are
+ * registered.
+ */
+export interface MeshBackendStatusListDto {
+  overall: string;
+  backends: BackendStatusDto[];
 }
