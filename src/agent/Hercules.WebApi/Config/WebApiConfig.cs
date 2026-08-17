@@ -3,8 +3,14 @@ namespace Hercules.WebApi.Config;
 /// <summary>Настройки Web API (секция "WebApi" в appsettings.json).</summary>
 public sealed class WebApiConfig
 {
-    /// <summary>Ключ, ожидаемый в заголовке X-Api-Key. Если пуст — авторизация отключена (dev).</summary>
+    /// <summary>Legacy: одиночный ключ, ожидаемый в заголовке X-Api-Key. Если пуст — авторизация отключена (dev).
+    /// Используется как fallback (role=contribute) если <see cref="ApiKeys"/> пуст (task_097).</summary>
     public string ApiKey { get; set; } = "";
+
+    /// <summary>Список API-ключей с ролями (task_097, ADR-0004).
+    /// При наличии хотя бы одного элемента legacy <see cref="ApiKey"/> игнорируется.
+    /// Backward compat: пустой список + legacy <see cref="ApiKey"/> → contribute role.</summary>
+    public List<ApiKeyEntry> ApiKeys { get; set; } = new();
 
     /// <summary>Разрешённые CORS-источники (origin'ы фронтенда). Если пуст — fallback к localhost.</summary>
     public List<string> AllowedCorsOrigins { get; set; } = new();
@@ -58,4 +64,27 @@ public sealed class RateLimitingConfig
 
     /// <summary>Length of the queue when the limiter is full (chat only). Default: 0 (reject).</summary>
     public int ChatQueueLimit { get; set; } = 0;
+}
+
+/// <summary>Роль API-ключа (task_097, ADR-0004). Определяет уровень привилегий.</summary>
+public enum ApiKeyRole
+{
+    /// <summary>Оператор: ежедневная работа — чат, навыки, конфиг чтение/патч, mesh read, tools enable/disable, marketplace install.</summary>
+    Contribute = 0,
+
+    /// <summary>Админ: всё что у contribute + restart, lifecycle destructive, config PUT (full replace), MCP add/remove, quota changes, force checkout.</summary>
+    System = 1
+}
+
+/// <summary>Один API-ключ с ролью (task_097, ADR-0004).</summary>
+public sealed class ApiKeyEntry
+{
+    /// <summary>Значение ключа (открытый текст — как у legacy <c>WebApi:ApiKey</c>).</summary>
+    public string Key { get; set; } = "";
+
+    /// <summary>Роль: <c>contribute</c> или <c>system</c>.</summary>
+    public ApiKeyRole Role { get; set; } = ApiKeyRole.Contribute;
+
+    /// <summary>Опциональное описание (для отладки, в <c>keys.json</c>).</summary>
+    public string? Description { get; set; }
 }

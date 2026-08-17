@@ -90,6 +90,18 @@ var webCfg = builder.Configuration.GetSection("WebApi").Get<WebApiConfig>() ?? n
 // task_079: health checks configuration (liveness, readiness, LLM ping timeout, disk/outbox thresholds)
 var healthCfg = builder.Configuration.GetSection("HealthChecks").Get<HealthChecksConfig>() ?? new HealthChecksConfig();
 
+// task_097: backward-compat fallback — если ApiKeys не сконфигурированы, используем
+// legacy ApiKey как contribute. Это позволяет существующим развёртываниям не ломаться.
+if (webCfg.ApiKeys.Count == 0 && !string.IsNullOrEmpty(webCfg.ApiKey))
+{
+    webCfg.ApiKeys.Add(new ApiKeyEntry
+    {
+        Key = webCfg.ApiKey,
+        Role = ApiKeyRole.Contribute,
+        Description = "legacy single key (forwarded as contribute)"
+    });
+}
+
 // Делаем хранилище общим с CLI-приложением: проект Hercules лежит на уровень выше.
 var sharedData = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "data"));
 if (Directory.Exists(Path.GetDirectoryName(sharedData)!))
@@ -140,6 +152,9 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
 builder.Services.AddSingleton(webCfg);
+// task_097: ApiKeyStore (load-or-generate API keys с ролями, см. ADR-0004).
+// Регистрируем ДО app.Build(), чтобы можно было resolve при первом запросе.
+builder.Services.AddSingleton<Hercules.WebApi.Auth.ApiKeyStore>();
 
 // task_078: IHttpClientFactory + named clients with standard resilience handlers
 builder.Services.AddHttpClient();
@@ -801,6 +816,21 @@ else if (builder.Environment.IsDevelopment())
 
 var app = builder.Build();
 
+// --- task_097: финализируем список API-ключей до первого запроса ---
+// Если ни в appsettings, ни в legacy ApiKey ничего нет — генерируем пару и сохраняем
+// в data/security/keys.json (ADR-0004). Делаем это ДО app.Run(), чтобы оператор увидел
+// ключи в логах при первом старте.
+{
+    var keyStore = app.Services.GetRequiredService<Hercules.WebApi.Auth.ApiKeyStore>();
+    var resolved = keyStore.LoadOrGenerate(webCfg.ApiKeys);
+    if (resolved.Count > 0)
+    {
+        // Перезаписываем snapshot конфига: middleware читает именно webCfg.ApiKeys.
+        webCfg.ApiKeys.Clear();
+        webCfg.ApiKeys.AddRange(resolved);
+    }
+}
+
 // --- Middleware ---
 // task_081: response compression first so downstream responses are emitted
 // compressed (RateLimiter, ApiKey, Drain, OutputCache все пишут в поток).
@@ -981,7 +1011,26 @@ app.MapToolRegistry();
 app.MapMcpEndpoints();
 
 Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:8421");
-Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");
+if (webCfg.ApiKeys.Count > 0)
+{
+    foreach (var entry in webCfg.ApiKeys)
+    {
+        var role = entry.Role == ApiKeyRole.System ? "system" : "contribute";
+        Console.WriteLine($"🔑 X-Api-Key [{role}]: {entry.Key}");
+    }
+    if (webCfg.ApiKeys.Count > 0)
+    {
+        var keyStore = app.Services.GetRequiredService<Hercules.WebApi.Auth.ApiKeyStore>();
+        if (File.Exists(keyStore.KeysFilePath))
+        {
+            Console.WriteLine($"   (keys.json: {keyStore.KeysFilePath})");
+        }
+    }
+}
+else
+{
+    Console.WriteLine("🔑 X-Api-Key: (отключён — auth bypass)");
+}
 Console.WriteLine($"💾 Данные: {appConfig.Storage.DataRoot}");
 
 // Tool registry discovery (task_024)
