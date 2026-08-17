@@ -36,7 +36,9 @@ import { defineConfig } from "orval";
 
 export default defineConfig({
   hercules: {
-    input: { target: "http://localhost:8421/openapi/v1.json" },
+    // Source: build-time generated openapi.json (committed to git by task_109)
+    // Alternative for dev: http://localhost:8421/openapi/v1.json (running agent)
+    input: { target: "../../agent/Hercules.WebApi/openapi.json" },
     output: {
       mode: "tags-split",
       target: "src/api/generated",
@@ -98,7 +100,7 @@ renderer/src/api/
 ```
 
 ## Dependencies (backend)
-- task_109 (AddOpenApi — нужен openapi.json)
+- task_109 (OpenAPI producer + build-time generation — нужен `openapi.json` в git)
 - task_110 (WithTags — нужен для tags-split)
 - task_111 (Produces<T> + DTOs — нужен для качественных типов)
 - task_112 (WithName — нужен для operationId)
@@ -113,10 +115,23 @@ renderer/src/api/
 - Keep: `src/hercules-studio/renderer/src/sdk/client.ts` → thin wrapper over openapi-fetch (or remove if Orval hooks replace it)
 
 ## Workflow
-1. Запустить агент: `dotnet run --project src/agent/Hercules.WebApi`
-2. `cd src/hercules-studio && npm run gen:api`
+
+### Option A: From build-time openapi.json (CI, no running agent needed)
+1. `dotnet build src/agent/Hercules.WebApi` → generates `openapi.json` in project root
+2. `cd src/hercules-studio && npm run gen:api` (reads `../../agent/Hercules.WebApi/openapi.json`)
 3. Commit: `git add renderer/src/api/ && git commit -m "regen API client"`
-4. Использовать в коде: `import { useListSkillsQuery } from "api/generated/skills/skills"`
+
+### Option B: From running agent (dev iteration)
+1. Запустить агент: `dotnet run --project src/agent/Hercules.WebApi`
+2. Temporarily change orval.config.ts target to `http://localhost:8421/openapi/v1.json`
+3. `cd src/hercules-studio && npm run gen:api`
+4. Restore orval.config.ts target to build-time path
+5. Commit
+
+### Using in code
+```typescript
+import { useListSkillsQuery } from "api/generated/skills/skills";
+```
 
 ## Links
 - Backlog: [../backlog.md](../backlog.md)

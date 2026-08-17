@@ -35,7 +35,9 @@ import { defineConfig } from "orval";
 
 export default defineConfig({
   hercules: {
-    input: { target: "http://localhost:8421/openapi/v1.json" },
+    // Source: build-time generated openapi.json (committed to git by task_109)
+    // Alternative for dev: http://localhost:8421/openapi/v1.json (running agent)
+    input: { target: "../../agent/Hercules.WebApi/openapi.json" },
     output: {
       mode: "tags-split",
       target: "src/api/generated",

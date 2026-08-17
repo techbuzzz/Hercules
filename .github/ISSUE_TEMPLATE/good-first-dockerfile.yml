@@ -1,0 +1,32 @@
+name: Add Dockerfile
+description: Provide a production-ready Dockerfile for Hercules (not only edge Raspberry Pi).
+labels: ["good first issue", "ops", "docker"]
+title: "[Good first issue] Add main Dockerfile and compose for Hercules"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        There is an edge Dockerfile under `deploy/raspberry-pi/`. This issue is about adding
+        a generic, non-privileged Dockerfile for the main agent and Web API.
+  - type: checkboxes
+    id: tasks
+    attributes:
+      label: Checklist
+      options:
+        - label: Read `deploy/raspberry-pi/Dockerfile` for conventions
+        - label: Add `Dockerfile` at repo root (or `deploy/default/Dockerfile`)
+        - label: Multi-stage build: restore → build → runtime (Alpine or Debian-slim)
+        - label: Add `.dockerignore`
+        - label: Add `docker-compose.yml` with optional Redis/PostgreSQL profiles
+        - label: Document build/run commands in README
+        - label: Add a GitHub Actions job that builds the image
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Non-functional requirements.
+      value: |
+        Use non-root user.
+        Expose ports 8421 (Web API) and optionally 4321 (frontend static).
+        Mount `data/` as a volume.
+        Keep image size small.

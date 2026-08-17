@@ -589,12 +589,27 @@ API контракт агента (.NET Minimal API) → OpenAPI 3.1 докум�
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Hercules.WebApi (.NET 10 Minimal API)                          │
-│  AddOpenApi() + MapOpenApi() → /openapi/v1.json                 │
+│                                                                  │
+│  Runtime: AddOpenApi() → /openapi/v1.json (OpenAPI 3.1)         │
+│  Scalar UI: app.MapScalarApiReference() → /scalar               │
+│  Build-Time: Microsoft.Extensions.ApiDescription.Server          │
+│    → dotnet build генерирует openapi.json в корне проекта         │
+│    → коммитится в git, виден в PR diff                           │
+│                                                                  │
 │  .Produces<T>() + .WithName() + .WithTags() на каждом endpoint  │
 │  Contracts/ — named DTOs (без анонимных типов)                  │
+│  XML doc comments → OpenAPI descriptions (GenerateDocumentation) │
+│                                                                  │
+│  Spectral lint (task_117): spectral lint openapi.json в CI       │
 └────────────────┬────────────────────────────────────────────────┘
-                 │ /openapi/v1.json (OpenAPI 3.1)
-                 ▼
+                 │
+         ┌───────┴───────┐
+         │               │
+         │  Build-time   │  Runtime (dev)
+         │  openapi.json  │  /openapi/v1.json
+         │  (in git)     │  (running agent)
+         └───────┬───────┘
+                 │
       ┌──────────┴──────────┐
       │                     │
       ▼                     ▼
@@ -629,10 +644,13 @@ API контракт агента (.NET Minimal API) → OpenAPI 3.1 докум�
 | Инструмент | Роль | Зачем |
 |---|---|---|
 | `Microsoft.AspNetCore.OpenApi` | Producer (.NET 10 built-in) | OpenAPI 3.1, без NuGet |
+| `Scalar.AspNetCore` | Interactive API docs UI | `/scalar` — тест endpoints из браузера |
+| `Microsoft.Extensions.ApiDescription.Server` | Build-time generation | `dotnet build` → `openapi.json` в git, виден в PR diff |
 | `openapi-typescript` | Types only | Все DTOs + paths как TS interfaces, ~3KB runtime |
 | `openapi-fetch` | Typed fetch wrapper | End-to-end typed `c.GET('/api/skills')` |
 | `Orval` | Vue Query hooks + Zod + MSW | `useListSkillsQuery()`, `useCreateSkillMutation()`, runtime validation, mocks |
 | `@tanstack/vue-query` | Client-side data fetching | Cache, retries, optimistic updates, loading/error states |
+| `Spectral` | Linting | Проверка OpenAPI контракта на correctness, best practices, OWASP |
 
 ### Generated структура (Studio и Web-UI одинаковы)
 
@@ -656,17 +674,21 @@ src/api/
 
 ```
 1. Изменить API на бэкенде (добавить endpoint, DTO, .Produces<T>())
-2. Запустить агент: dotnet run --project src/agent/Hercules.WebApi
-3. Regenerate: cd src/hercules-studio && npm run gen:api
-4. Commit: git add src/api/ && git commit -m "regen API client"
-5. Использовать: import { useListSkillsQuery } from "api/generated/skills"
+2. dotnet build → openapi.json regenerated (build-time, task_109)
+3. (опционально) spectral lint openapi.json (task_117)
+4. Regenerate TS clients: cd src/hercules-studio && npm run gen:api
+5. Commit: git add openapi.json src/api/ && git commit -m "regen API client"
+6. PR review: openapi.json diff shows contract changes ← KEY BENEFIT
+7. Использовать: import { useListSkillsQuery } from "api/generated/skills"
 ```
+
+> **Build-time generation** (task_109) — ключевой benefit: `openapi.json` генерируется при `dotnet build`, коммитится в git, виден в PR diff. Не нужно запускать агента для regen TS client.
 
 ### Задачи pipeline
 
 | Task | Что | Зависимости |
 |---|---|---|
-| task_109 | `AddOpenApi()` + `MapOpenApi()` в Program.cs | — |
+| task_109 | `AddOpenApi()` + `MapOpenApi()` + Scalar UI + build-time generation + XML docs | — |
 | task_110 | `.WithTags()` на все 35 контроллеров | task_109 |
 | task_111 | `.Produces<T>()` + DTO рефакторинг (исключить анонимные) | task_109 |
 | task_112 | `.WithName()` на Marketplace + Template | — |
@@ -674,6 +696,7 @@ src/api/
 | task_114 | Studio: migrate stores to Vue Query | task_113 |
 | task_115 | Web-UI: openapi-typescript + Orval setup | task_109-112 |
 | task_116 | Web-UI: migrate api.ts to Vue Query | task_115 |
+| task_117 | Spectral lint для openapi.json в CI | task_109 |
 
 ## 16. Связанные ADR
 

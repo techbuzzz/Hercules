@@ -1,0 +1,30 @@
+name: Add OpenRouter adapter
+description: Add OpenRouter as a supported LLM provider.
+labels: ["good first issue", "llm", "provider"]
+title: "[Good first issue] Add OpenRouter LLM provider adapter"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for picking this up! OpenRouter exposes an OpenAI-compatible endpoint,
+        so the change is usually a new client class + registration in `LlmClientFactory`.
+  - type: checkboxes
+    id: tasks
+    attributes:
+      label: Checklist
+      options:
+        - label: Read [docs/CONFIGURATION-EN.md](docs/CONFIGURATION-EN.md)
+        - label: Implement `OpenRouterClient.cs` under `src/agent/Hercules/LLM/`
+        - label: Add "openrouter" to `LlmClientFactory` and `AppConfig`
+        - label: Add config section example to `appsettings.json`
+        - label: Add a unit test in `tests/Hercules.Agent.Tests/LLM/`
+        - label: Update README provider table
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Useful links or hints for the implementer.
+      value: |
+        Endpoint: `https://openrouter.ai/api/v1`
+        Docs: https://openrouter.ai/docs
+        Similar existing clients: `YandexGPTClient.cs`, `LocalLLMClient.cs`

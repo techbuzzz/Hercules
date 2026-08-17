@@ -181,6 +181,7 @@
 | 114 | 0-2 (Studio) | [Studio: migrate stores to Vue Query](tasks/task_114.md) | `studio-migrate-vue-query` | pending |
 | 115 | 0 (Web-UI) | [Web-UI: openapi-typescript + Orval setup](tasks/task_115.md) | `webui-openapi-codegen-setup` | pending |
 | 116 | 0 (Web-UI) | [Web-UI: migrate api.ts to Vue Query](tasks/task_116.md) | `webui-migrate-vue-query` | pending |
+| 117 | 0 (pre-req) | [Spectral lint для OpenAPI документа](tasks/task_117.md) | `spectral-openapi-lint` | pending |
 
 ## Workflow
 
