@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Budget;
 using Hercules.Config;
+using Hercules.Fleet;
 using Hercules.Mesh.A2A;
 using Hercules.Mesh.Abstractions;
 using Hercules.Mesh.Aggregation;
@@ -283,7 +284,8 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<RetryPolicy>(),
                 sp.GetRequiredService<ResilienceConfig>(),
                 logger,
-                sp.GetService<IMeshObservabilityService>());
+                sp.GetService<IMeshObservabilityService>(),
+                sp.GetService<Hercules.Slo.ISloLatencyTracker>());
         });
 
         // Phase 4: Mesh Router (task_043) — capability-based peer routing with health + scoring
@@ -313,7 +315,8 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<FanOutOptions>(),
                 sp.GetRequiredService<CircuitBreaker>(),
                 sp.GetRequiredService<ILogger<FanOutOrchestrator>>(),
-                sp.GetService<IMeshObservabilityService>()));
+                sp.GetService<IMeshObservabilityService>(),
+                sp.GetService<IFleetTemplateManager>()));
 
         // Phase 4: MeshRouter — fan-out/fan-in оркестрация с LLM-judge
         services.AddSingleton<MeshRouter>();

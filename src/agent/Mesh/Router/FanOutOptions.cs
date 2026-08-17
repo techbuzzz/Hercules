@@ -118,4 +118,14 @@ public sealed class FanOutOptions
     ///     Default: 2.
     /// </summary>
     public int MinPeersForFanOut { get; set; } = 2;
+
+    /// <summary>
+    ///     Hard cap on the number of peers contacted in a single fan-out,
+    ///     derived from <c>FleetPolicy.MaxFanOutWidth</c> (task_087). Zero or
+    ///     negative means "unlimited unless the fleet template overrides".
+    ///     The orchestrator truncates the routed peer list to this size after
+    ///     budget/circuit-breaker filtering, before fanning out in parallel.
+    ///     Default: 0 (unlimited unless a fleet template is present).
+    /// </summary>
+    public int MaxFanOutWidth { get; set; } = 0;
 }

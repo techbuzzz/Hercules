@@ -1,4 +1,5 @@
 using System.Net.Http;
+using Hercules.Slo;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.Offline;
@@ -8,7 +9,7 @@ namespace Hercules.Offline;
 ///     Raises <see cref="OnReconnected"/> when the network transitions from offline to online.
 ///     Raises <see cref="OnDisconnected"/> when the network transitions from online to offline.
 /// </summary>
-public sealed class NetworkMonitor : INetworkMonitor, IDisposable
+public sealed class NetworkMonitor : INetworkMonitor, IConnectivityStateProvider, IDisposable
 {
     /// <summary>Имя named HttpClient-клиента для health-check polling (task_078).</summary>
     public const string HttpClientName = "network-monitor";
@@ -21,6 +22,11 @@ public sealed class NetworkMonitor : INetworkMonitor, IDisposable
 
     private volatile bool _isOnline;
     private volatile bool _disposed;
+    // task_087: track the wall-clock duration of the most recent offline→online
+    // transition so the SLO service can report real recovery time. Reset to
+    // TimeSpan.Zero on each successful reconnect.
+    private DateTimeOffset? _offlineSince;
+    private TimeSpan _lastOutageDuration;
 
     /// <summary>Fired when network becomes available after being offline.</summary>
     public event EventHandler? OnReconnected;
@@ -116,12 +122,31 @@ public sealed class NetworkMonitor : INetworkMonitor, IDisposable
             {
                 _log.LogInformation("NetworkMonitor: connectivity restored ({Url})", url);
                 IsOnline = true;
+                // task_087: capture outage duration for the SLO service. The
+                // measurement is taken under the lock so a concurrent
+                // IsOnline read cannot see a half-applied state.
+                lock (_lock)
+                {
+                    if (_offlineSince.HasValue)
+                    {
+                        _lastOutageDuration = DateTimeOffset.UtcNow - _offlineSince.Value;
+                        _offlineSince = null;
+                    }
+                }
                 OnReconnected?.Invoke(this, EventArgs.Empty);
             }
             else if (!reachable && IsOnline)
             {
                 _log.LogWarning("NetworkMonitor: connectivity lost ({Url})", url);
                 IsOnline = false;
+                // task_087: stamp the start of the outage.
+                lock (_lock)
+                {
+                    if (!_offlineSince.HasValue)
+                    {
+                        _offlineSince = DateTimeOffset.UtcNow;
+                    }
+                }
                 OnDisconnected?.Invoke(this, EventArgs.Empty);
             }
 
@@ -153,6 +178,21 @@ public sealed class NetworkMonitor : INetworkMonitor, IDisposable
         // The default points at Cloudflare 1.1.1.1; operators can override via
         // OfflineSync.NetworkFallbackPollUrl in appsettings.json.
         return string.IsNullOrWhiteSpace(_config.NetworkFallbackPollUrl) ? null : _config.NetworkFallbackPollUrl;
+    }
+
+    // ── IConnectivityStateProvider (task_087) ────────────────────────────────
+
+    /// <summary>
+    ///     Duration of the most recent offline→online transition. Returns
+    ///     <see cref="TimeSpan.Zero"/> when the node has not yet recovered
+    ///     from an outage during this process lifetime.
+    /// </summary>
+    public TimeSpan LastOutageDuration
+    {
+        get
+        {
+            lock (_lock) return _lastOutageDuration;
+        }
     }
 
     public void Dispose()

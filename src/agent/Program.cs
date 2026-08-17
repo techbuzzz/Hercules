@@ -694,6 +694,11 @@ builder.ConfigureServices((context, services) =>
 
     // task_064: Operational SLOs — availability, response-time, data-loss, recovery-time, cost targets
     services.AddSingleton(appConfig.Slos);
+    // task_087: real P95 latency tracker + connectivity provider feed the SLO
+    // service with measured values instead of the previous synthetic heuristics.
+    services.AddSingleton<Hercules.Slo.ISloLatencyTracker, Hercules.Slo.SloLatencyTracker>();
+    services.AddSingleton<Hercules.Slo.IConnectivityStateProvider>(sp =>
+        sp.GetRequiredService<Hercules.Offline.NetworkMonitor>());
     services.AddSingleton<ISloService>(sp =>
         new SloService(
             sp.GetRequiredService<SlosConfig>(),
@@ -701,7 +706,9 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<Hercules.Mesh.Observability.IMeshObservabilityService>(),
             sp.GetService<Hercules.Offline.IOutboxStore>(),
             sp.GetService<IBudgetService>(),
-            sp.GetRequiredService<ILogger<SloService>>()));
+            sp.GetRequiredService<ILogger<SloService>>(),
+            sp.GetService<Hercules.Slo.ISloLatencyTracker>(),
+            sp.GetService<Hercules.Slo.IConnectivityStateProvider>()));
 
     // Агент
     services.AddSingleton<SkillManager>();

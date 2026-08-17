@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Hercules.Budget;
+using Hercules.Fleet;
 using Hercules.Mesh;
 using Hercules.Mesh.Aggregation;
 using Hercules.Mesh.Observability;
@@ -25,6 +26,7 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
     private readonly CircuitBreaker _circuitBreaker;
     private readonly ILogger<FanOutOrchestrator> _logger;
     private readonly IMeshObservabilityService? _observability;
+    private readonly IFleetTemplateManager? _fleetTemplates;
 
     public FanOutOrchestrator(
         IMeshRouter meshRouter,
@@ -33,7 +35,8 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
         FanOutOptions options,
         CircuitBreaker circuitBreaker,
         ILogger<FanOutOrchestrator> logger,
-        IMeshObservabilityService? observability = null)
+        IMeshObservabilityService? observability = null,
+        IFleetTemplateManager? fleetTemplates = null)
     {
         _meshRouter = meshRouter ?? throw new ArgumentNullException(nameof(meshRouter));
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
@@ -42,6 +45,7 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
         _circuitBreaker = circuitBreaker ?? throw new ArgumentNullException(nameof(circuitBreaker));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _observability = observability;
+        _fleetTemplates = fleetTemplates;
     }
 
     /// <inheritdoc />
@@ -105,6 +109,23 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
         {
             _logger.LogDebug("[FanOutOrchestrator] All peers have open circuit breakers");
             return AggregationResult.NoPeers(sw.Elapsed);
+        }
+
+        // 3a. task_087: enforce FleetPolicy.MaxFanOutWidth from the active
+        // fleet template. The cap protects the orchestrator (and downstream
+        // transports) from accidentally fanning out to every reachable peer
+        // when an admin pushes a generous MaxPeerCandidates via MeshRouter.
+        // MaxConcurrentTasksPerAgent is enforced elsewhere (agent loop) and
+        // is intentionally not duplicated here because the per-agent
+        // in-flight counter needs a process-wide view that fan-out alone
+        // does not own.
+        var maxFanOutWidth = ResolveMaxFanOutWidth();
+        if (maxFanOutWidth > 0 && peers.Count > maxFanOutWidth)
+        {
+            _logger.LogDebug(
+                "[FanOutOrchestrator] FleetPolicy.MaxFanOutWidth={Cap} → truncating {Before} peers to {After}",
+                maxFanOutWidth, peers.Count, maxFanOutWidth);
+            peers = peers.Take(maxFanOutWidth).ToList();
         }
 
         // 4. Determine fan-out vs single-peer
@@ -264,5 +285,54 @@ public sealed class FanOutOrchestrator : IFanOutOrchestrator
         }
 
         return results.ToList();
+    }
+
+    // ── FleetPolicy enforcement (task_087) ─────────────────────────────────
+    //
+    // The active FleetTemplateManager may be absent (e.g. unit tests, single-
+    // node edge deployments). In that case we fall back to the static
+    // FanOutOptions value so the orchestrator never silently loses its cap.
+
+    /// <summary>
+    ///     Resolve the effective max fan-out width. Returns 0 when no
+    ///     positive limit is configured (interpreted as "unlimited" by the
+    ///     caller).
+    /// </summary>
+    private int ResolveMaxFanOutWidth()
+    {
+        var fromOptions = _options.MaxFanOutWidth;
+        if (fromOptions > 0)
+        {
+            return fromOptions;
+        }
+
+        if (_fleetTemplates == null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            foreach (var entry in _fleetTemplates.List())
+            {
+                if (entry is null)
+                {
+                    continue;
+                }
+
+                var manifest = _fleetTemplates.GetManifest(entry.FileName);
+                if (manifest?.Policy is { MaxFanOutWidth: > 0 } policy)
+                {
+                    return policy.MaxFanOutWidth;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[FanOutOrchestrator] Failed to read FleetPolicy.MaxFanOutWidth — using FanOutOptions default");
+        }
+
+        return 0;
     }
 }

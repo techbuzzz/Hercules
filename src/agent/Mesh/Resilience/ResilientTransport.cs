@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Hercules.Config;
 using Hercules.Mesh.Observability;
 using Hercules.Mesh.Transport;
+using Hercules.Slo;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.Mesh.Resilience;
@@ -21,9 +22,15 @@ public sealed class ResilientTransport : ITransport
     private readonly ResilienceConfig _config;
     private readonly ILogger<ResilientTransport> _logger;
     private readonly IMeshObservabilityService? _observability;
+    private readonly ISloLatencyTracker? _latencyTracker;
 
     // Per-peer bulkhead: limits concurrent calls to each peer
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _peerSemaphores = new(StringComparer.OrdinalIgnoreCase);
+
+    // Last time the per-peer semaphore was acquired (for idle-based trimming, task_087).
+    // Without this, _peerSemaphores grows unbounded as the mesh sees more agents over
+    // its lifetime, even when most peers are long gone.
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _peerLastUsed = new(StringComparer.OrdinalIgnoreCase);
 
     // Global bulkhead: limits total concurrent outbound calls
     private readonly SemaphoreSlim _globalSemaphore;
@@ -41,7 +48,8 @@ public sealed class ResilientTransport : ITransport
         RetryPolicy retryPolicy,
         ResilienceConfig config,
         ILogger<ResilientTransport> logger,
-        IMeshObservabilityService? observability = null)
+        IMeshObservabilityService? observability = null,
+        ISloLatencyTracker? latencyTracker = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _circuitBreaker = circuitBreaker ?? throw new ArgumentNullException(nameof(circuitBreaker));
@@ -49,6 +57,7 @@ public sealed class ResilientTransport : ITransport
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _observability = observability;
+        _latencyTracker = latencyTracker;
 
         _globalSemaphore = new SemaphoreSlim(_config.MaxConcurrentTotal, _config.MaxConcurrentTotal);
 
@@ -98,6 +107,8 @@ public sealed class ResilientTransport : ITransport
         var peerSemaphore = _peerSemaphores.GetOrAdd(
             targetAgentId,
             _ => new SemaphoreSlim(_config.MaxConcurrentPerPeer, _config.MaxConcurrentPerPeer));
+        // task_087: stamp last-used so TrimIdlePeers() can prune dead peers.
+        _peerLastUsed[targetAgentId] = DateTimeOffset.UtcNow;
 
         // 4. Acquire global bulkhead
         await _globalSemaphore.WaitAsync(ct);
@@ -105,6 +116,7 @@ public sealed class ResilientTransport : ITransport
         // Start resilience span
         var span = _observability?.StartMeshSpan("ResilientTransport.Send",
             peerAgentId: targetAgentId, intent: envelope.Intent);
+        var totalSw = Stopwatch.StartNew();
 
         try
         {
@@ -123,10 +135,23 @@ public sealed class ResilientTransport : ITransport
         }
         finally
         {
+            totalSw.Stop();
             _globalSemaphore.Release();
             _observability?.RecordMeshEvent(span, "resilience.send_completed",
                 intent: envelope.Intent, senderAgentId: envelope.Sender,
                 receiverAgentId: targetAgentId);
+
+            // task_087: feed the SLO latency tracker with the real end-to-end
+            // duration. We record regardless of success/failure so the P95
+            // reflects what the user actually experienced, not only happy paths.
+            try
+            {
+                _latencyTracker?.RecordSample(envelope.Intent, totalSw.Elapsed.TotalMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "[ResilientTransport] Latency tracker record failed");
+            }
         }
     }
 
@@ -299,5 +324,109 @@ public sealed class ResilientTransport : ITransport
             sem.Dispose();
         }
         _peerSemaphores.Clear();
+        _peerLastUsed.Clear();
+    }
+
+    // ── Peer-semaphore lifecycle (task_087) ─────────────────────────────────
+    //
+    // Without explicit pruning the per-peer semaphore map grows monotonically as
+    // the mesh discovers (and forgets) peers over its lifetime. Each entry holds
+    // a SemaphoreSlim backed by a kernel object — not free even when idle.
+    // The hooks below let callers (and periodic sweepers) reclaim that memory.
+
+    /// <summary>Number of peer semaphores currently held.</summary>
+    public int TrackedPeerCount => _peerSemaphores.Count;
+
+    /// <summary>
+    ///     Snapshot of the peer IDs currently holding a per-peer semaphore.
+    ///     Returned in stable ordinal order to make assertions deterministic.
+    /// </summary>
+    public IReadOnlyList<string> GetTrackedPeers()
+        => _peerSemaphores.Keys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>
+    ///     Remove (and dispose) the per-peer semaphore for <paramref name="agentId"/>.
+    ///     Returns true if a semaphore was actually removed; false if the peer was
+    ///     not tracked. Safe to call from peer-removed event handlers.
+    ///     No-op when the semaphore is currently held (WaitAsync in progress) — the
+    ///     pending call completes against the still-allocated instance and a new
+    ///     semaphore is allocated on the next SendAsync, avoiding use-after-free.
+    /// </summary>
+    public bool RemovePeer(string agentId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(agentId);
+
+        if (!_peerSemaphores.TryRemove(agentId, out var sem))
+        {
+            _peerLastUsed.TryRemove(agentId, out _);
+            return false;
+        }
+
+        _peerLastUsed.TryRemove(agentId, out _);
+
+        // Only dispose when the semaphore is free. SemaphoreSlim doesn't expose
+        // CurrentCount without a race, so we attempt a zero-wait acquire. If
+        // someone is mid-call, they will finish against this instance (still
+        // referenced by their local) and the next SendAsync will allocate a
+        // fresh one — at worst we leak one extra semaphore until the next
+        // RemovePeer call for the same agent.
+        try
+        {
+            if (sem.Wait(0))
+            {
+                sem.Release();
+                sem.Dispose();
+            }
+            else
+            {
+                _logger.LogDebug(
+                    "[ResilientTransport] RemovePeer({AgentId}) — semaphore in use, deferring dispose",
+                    agentId);
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already disposed elsewhere.
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Remove per-peer semaphores that have not been used in
+    ///     <paramref name="idleThreshold"/>. Returns the number of entries trimmed.
+    ///     Idempotent and safe to call from a periodic timer.
+    /// </summary>
+    public int TrimIdlePeers(TimeSpan idleThreshold)
+    {
+        if (idleThreshold <= TimeSpan.Zero)
+        {
+            return 0;
+        }
+
+        var cutoff = DateTimeOffset.UtcNow - idleThreshold;
+        var trimmed = 0;
+
+        foreach (var kvp in _peerLastUsed.ToArray())
+        {
+            if (kvp.Value >= cutoff)
+            {
+                continue; // recently used
+            }
+
+            if (RemovePeer(kvp.Key))
+            {
+                trimmed++;
+            }
+        }
+
+        if (trimmed > 0)
+        {
+            _logger.LogDebug(
+                "[ResilientTransport] Trimmed {Count} idle peer semaphores (idleThreshold={IdleMinutes:F1}m)",
+                trimmed, idleThreshold.TotalMinutes);
+        }
+
+        return trimmed;
     }
 }

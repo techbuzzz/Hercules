@@ -22,6 +22,8 @@ public sealed class SloService : ISloService
     private readonly IOutboxStore? _outbox;
     private readonly IBudgetService? _budget;
     private readonly ILogger<SloService> _logger;
+    private readonly ISloLatencyTracker? _latencyTracker;
+    private readonly IConnectivityStateProvider? _connectivity;
 
     private readonly string _slosDir;
     private readonly Dictionary<string, SloDefinition> _definitionsCache = new(StringComparer.OrdinalIgnoreCase);
@@ -43,7 +45,9 @@ public sealed class SloService : ISloService
         IMeshObservabilityService meshObs,
         IOutboxStore outbox,
         IBudgetService budget,
-        ILogger<SloService> logger)
+        ILogger<SloService> logger,
+        ISloLatencyTracker? latencyTracker = null,
+        IConnectivityStateProvider? connectivity = null)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _audit = audit ?? throw new ArgumentNullException(nameof(audit));
@@ -51,6 +55,8 @@ public sealed class SloService : ISloService
         _outbox = outbox;
         _budget = budget;
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _latencyTracker = latencyTracker;
+        _connectivity = connectivity;
 
         _slosDir = Path.IsPathRooted(config.SlosDir)
             ? config.SlosDir
@@ -277,31 +283,58 @@ public sealed class SloService : ISloService
         List<SloObjectiveStatus> objectives,
         CancellationToken ct)
     {
-        // Estimate P95 response time from audit log (tool execution latency encoded in result field).
-        // In a real system this would come from mesh latency histogram (hercules.mesh.delegation_latency_ms).
-        double currentMs = def.ResponseTimeTargetMs; // default to target — measured in production
+        // task_087: prefer the real per-intent P95 from the in-process latency
+        // tracker. The previous implementation extrapolated a synthetic value
+        // from the audit row count, which had no correlation to actual
+        // handler latency. When the tracker is missing (e.g. legacy DI wiring
+        // or tests) we fall back to the audit row count heuristic so the
+        // SLO status remains computable.
+        double currentMs = def.ResponseTimeTargetMs;
+        string source = "default";
 
-        try
+        if (_latencyTracker != null)
         {
-            // task_077: a single row count tells us "do we have any data at all" without
-            // materialising 10k rows. We still need a histogram for real P95, but the
-            // pre-task_077 hot path was loading 10k rows just to test `Count > 0`.
-            var stats = await _audit.GetActionStatsAsync(
-                action: "tool_execution",
-                from: DateTime.UtcNow.AddDays(-1),
-                to: DateTime.UtcNow,
-                ct: ct).ConfigureAwait(false);
-
-            if (stats.Total > 0)
+            try
             {
-                // Simulate P95 from a reasonable distribution based on entry count
-                // In production: query histogram buckets from OTLP / MeshObservabilityService metrics
-                currentMs = Math.Min(def.ResponseTimeTargetMs * 1.1, def.ResponseTimeTargetMs + 500);
+                var tracked = _latencyTracker.GetP95Ms(intent: null, window: TimeSpan.FromHours(24));
+                if (tracked > 0)
+                {
+                    currentMs = tracked;
+                    source = "tracker";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Slo] Latency tracker query failed");
             }
         }
-        catch (Exception ex)
+
+        if (source == "default")
         {
-            _logger.LogWarning(ex, "[Slo] Failed to query audit for response time");
+            try
+            {
+                // task_077: a single row count tells us "do we have any data at all" without
+                // materialising 10k rows. We still need a histogram for real P95, but the
+                // pre-task_077 hot path was loading 10k rows just to test `Count > 0`.
+                var stats = await _audit.GetActionStatsAsync(
+                    action: "tool_execution",
+                    from: DateTime.UtcNow.AddDays(-1),
+                    to: DateTime.UtcNow,
+                    ct: ct).ConfigureAwait(false);
+
+                if (stats.Total > 0)
+                {
+                    // Fallback heuristic: assume P95 ~= target + 500ms (capped at
+                    // 1.1x target) when the tracker is unavailable. Keeps the
+                    // SLO report non-empty without fabricating extreme values.
+                    currentMs = Math.Min(def.ResponseTimeTargetMs * 1.1, def.ResponseTimeTargetMs + 500);
+                    source = "audit-heuristic";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Slo] Failed to query audit for response time");
+            }
         }
 
         var thresholds = GetThresholds(def);
@@ -316,7 +349,7 @@ public sealed class SloService : ISloService
             Severity = severity,
             BreachDescription = severity != SloSeverity.Ok
                 ? $"P95={currentMs:F0}ms > target={def.ResponseTimeTargetMs:F0}ms"
-                : ""
+                : $"P95={currentMs:F0}ms (source={source})"
         };
     }
 
@@ -359,40 +392,73 @@ public sealed class SloService : ISloService
         List<SloObjectiveStatus> objectives,
         CancellationToken ct)
     {
-        // Recovery time is measured when degradation events occur.
-        // For now: check audit for recent degradation transitions.
-        var maxRecovery = 0;
+        // task_087: prefer the real outage duration from the connectivity
+        // provider. The previous implementation reported the SLO target as
+        // the current value whenever a degradation event existed, which is
+        // not a measurement. When no outage has been observed the value is
+        // 0 and the objective is treated as Ok.
+        int maxRecoveryMinutes = 0;
+        string source = "none";
 
-        try
+        if (_connectivity != null)
         {
-            // task_077: a count is enough for the boolean "do we have degradation events?".
-            var stats = await _audit.GetActionStatsAsync(
-                action: "degradation",
-                from: DateTime.UtcNow.AddDays(-7),
-                to: DateTime.UtcNow,
-                ct: ct).ConfigureAwait(false);
-
-            // Estimate from total (real impl: measure time between degraded→full transition)
-            maxRecovery = stats.Total > 0 ? def.RecoveryTimeTargetMinutes : 0;
+            try
+            {
+                var outage = _connectivity.LastOutageDuration;
+                if (outage > TimeSpan.Zero)
+                {
+                    // Round up to the next whole minute — sub-minute outages
+                    // are still sub-target and we want to be honest about
+                    // partial minutes.
+                    maxRecoveryMinutes = (int)Math.Ceiling(outage.TotalMinutes);
+                    source = "connectivity";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Slo] Connectivity provider query failed");
+            }
         }
-        catch (Exception ex)
+
+        if (source == "none")
         {
-            _logger.LogWarning(ex, "[Slo] Failed to query audit for recovery time");
+            try
+            {
+                // Fallback heuristic: query audit for degradation events. If
+                // any are present in the last 7 days, treat the recovery time
+                // as the target (i.e. "at the limit") so the SLO surfaces a
+                // warning rather than silently reporting zero.
+                var stats = await _audit.GetActionStatsAsync(
+                    action: "degradation",
+                    from: DateTime.UtcNow.AddDays(-7),
+                    to: DateTime.UtcNow,
+                    ct: ct).ConfigureAwait(false);
+
+                if (stats.Total > 0)
+                {
+                    maxRecoveryMinutes = def.RecoveryTimeTargetMinutes;
+                    source = "audit-heuristic";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[Slo] Failed to query audit for recovery time");
+            }
         }
 
         var thresholds = GetThresholds(def);
-        var severity = ClassifyRecoveryTime(maxRecovery, thresholds);
+        var severity = ClassifyRecoveryTime(maxRecoveryMinutes, thresholds);
 
         return new SloObjectiveStatus
         {
             Objective = "recovery_time",
-            CurrentValue = maxRecovery,
+            CurrentValue = maxRecoveryMinutes,
             TargetValue = def.RecoveryTimeTargetMinutes,
             Unit = "minutes",
             Severity = severity,
             BreachDescription = severity != SloSeverity.Ok
-                ? $"Max recovery={maxRecovery}min > target={def.RecoveryTimeTargetMinutes}min"
-                : ""
+                ? $"Max recovery={maxRecoveryMinutes}min > target={def.RecoveryTimeTargetMinutes}min"
+                : $"Max recovery={maxRecoveryMinutes}min (source={source})"
         };
     }
 
