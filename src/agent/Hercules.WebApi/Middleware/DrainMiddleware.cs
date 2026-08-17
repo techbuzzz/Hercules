@@ -22,8 +22,8 @@ public sealed class DrainMiddleware
         "/api/health",
         "/api/ready",
         "/api/live",
-        "/agent.manifest.json",
-        "/agent-card.json"
+        $"/{Hercules.BuiltIn.AgentManifestFileName}",
+        $"/{Hercules.BuiltIn.AgentCardFileName}"
     };
 
     private readonly RequestDelegate _next;

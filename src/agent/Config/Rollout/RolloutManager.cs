@@ -39,8 +39,10 @@ public sealed class RolloutManager : IRolloutManager
         _configStore = configStore ?? throw new ArgumentNullException(nameof(configStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        _bundlesDir = Path.Combine(AppContext.BaseDirectory, _config.BundlesPath);
-        _stateFilePath = Path.Combine(_bundlesDir, "rollout-state.json");
+        _bundlesDir = Hercules.BuiltIn.ResolvePathUnderDataRoot(
+            Hercules.BuiltIn.ResolveDataRoot(),
+            _config.BundlesPath);
+        _stateFilePath = Path.Combine(_bundlesDir, Hercules.BuiltIn.RolloutStateFileName);
         Directory.CreateDirectory(_bundlesDir);
 
         _state = LoadState();

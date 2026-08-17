@@ -141,9 +141,9 @@ public sealed class SharedMemorySync : IDisposable
         _config = config ?? new SharedMemorySyncConfig();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        var sharedDir = Path.Combine(dataRoot, "Memory", "shared");
+        var sharedDir = Path.Combine(dataRoot, Hercules.BuiltIn.MemorySubdir, Hercules.BuiltIn.SharedMemorySubdir);
         Directory.CreateDirectory(sharedDir);
-        SharedMemoryPath = Path.Combine(sharedDir, "shared_facts.json");
+        SharedMemoryPath = Path.Combine(sharedDir, Hercules.BuiltIn.SharedFactsFileName);
     }
 
     /// <summary>Путь к файлу локальных shared-фактов.</summary>

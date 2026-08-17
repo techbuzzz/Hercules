@@ -32,7 +32,7 @@ public sealed class AgentTemplateManager
     public AgentTemplateManager(StorageConfig cfg, SkillPackager packager)
     {
         _storageCfg = cfg;
-        var templatesSubdir = cfg.Phase2?.TemplatesDir ?? "Templates";
+        var templatesSubdir = cfg.Phase2?.TemplatesDir ?? Hercules.BuiltIn.TemplatesSubdir;
         DirectoryPath = Path.Combine(cfg.DataRoot, templatesSubdir);
         Directory.CreateDirectory(DirectoryPath);
         _packager = packager ?? throw new ArgumentNullException(nameof(packager));
@@ -150,7 +150,7 @@ public sealed class AgentTemplateManager
         }
 
         // 3. Копирование деклараций инструментов
-        var toolsSubdir = _storageCfg.Phase2?.ToolsDir ?? "Tools";
+        var toolsSubdir = _storageCfg.Phase2?.ToolsDir ?? Hercules.BuiltIn.ToolsSubdir;
         var toolsDir = Path.Combine(_storageCfg.DataRoot, toolsSubdir);
         Directory.CreateDirectory(toolsDir);
         foreach (var toolFile in manifest.ToolFiles)

@@ -43,7 +43,7 @@ public sealed class ProposalStore : IDisposable
         _proposalsDir = Path.Combine(
             storageConfig.DataRoot,
             storageConfig.SkillsDir,
-            ".proposals");
+            Hercules.BuiltIn.ProposalsSubdir);
 
         if (!Directory.Exists(_proposalsDir))
         {

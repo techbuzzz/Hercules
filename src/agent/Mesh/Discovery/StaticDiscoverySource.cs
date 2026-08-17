@@ -127,6 +127,6 @@ public sealed class StaticDiscoverySource : IDiscoverySource
 
         var baseUrl = endpoint.TrimEnd('/');
         // Prefer well-known Agent Card URL (A2A spec) over legacy manifest path
-        return $"{baseUrl}/agent.manifest.json";
+        return $"{baseUrl}/{Hercules.BuiltIn.AgentManifestFileName}";
     }
 }

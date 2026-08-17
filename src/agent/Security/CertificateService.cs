@@ -29,9 +29,11 @@ public sealed class CertificateService : ICertificateService
         _audit = audit ?? throw new ArgumentNullException(nameof(audit));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        var dataRoot = Path.Combine(AppContext.BaseDirectory, _config.CertificateStoragePath);
+        var dataRoot = Hercules.BuiltIn.ResolvePathUnderDataRoot(
+            Hercules.BuiltIn.ResolveDataRoot(),
+            _config.CertificateStoragePath);
         Directory.CreateDirectory(dataRoot);
-        _certStorePath = Path.Combine(dataRoot, "certificates.json");
+        _certStorePath = Path.Combine(dataRoot, Hercules.BuiltIn.CertificatesFileName);
     }
 
     public Task<CertificateInfo?> GetCurrentCertificateAsync(CancellationToken ct = default)

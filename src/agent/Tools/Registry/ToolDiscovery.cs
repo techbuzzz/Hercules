@@ -46,7 +46,7 @@ public static class ToolDiscovery
         }
 
         // Resolve relative to data directory
-        var baseDir = config.Storage?.DataRoot ?? ".";
+        var baseDir = config.Storage?.DataRoot ?? Hercules.BuiltIn.ResolveDataRoot();
         var fullPath = Path.IsPathRooted(toolsDir)
             ? toolsDir
             : Path.Combine(baseDir, toolsDir);

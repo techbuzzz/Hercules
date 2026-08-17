@@ -15,8 +15,8 @@ namespace Hercules.WebApi.Auth;
 /// </summary>
 public sealed class ApiKeyStore
 {
-    private const string SecuritySubdir = "security";
-    private const string KeysFileName = "keys.json";
+    private const string SecuritySubdir = Hercules.BuiltIn.SecuritySubdir;
+    private const string KeysFileName = Hercules.BuiltIn.ApiKeysFileName;
     private const int RandomBytes = 32; // 256 бит энтропии → ~43 Base64-символа
 
     private static readonly JsonSerializerOptions JsonOptions = new()

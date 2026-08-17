@@ -438,7 +438,5 @@ src/hercules-studio/.vite/
 *.msm
 *.msp
 *.db
-src/agent/data/sessions.db-shm
-src/agent/data/sessions.db-wal
-src/agent/data/logs/
-data/logs/
+# Hercules runtime data directory (resolved outside repo by BuiltIn.ResolveDataRoot)
+HerculesData/

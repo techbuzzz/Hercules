@@ -117,7 +117,7 @@ public sealed class PeerAuthMiddleware
         var path = context.Request.Path;
         // /api/mesh/* and /agent.manifest.json (well-known peer discovery)
         return path.StartsWithSegments("/api/mesh") ||
-               path.Equals("/agent.manifest.json");
+                path.Equals($"/{Hercules.BuiltIn.AgentManifestFileName}");
     }
 
     private static IReadOnlyDictionary<string, string> ExtractHeaders(IHeaderDictionary headers)

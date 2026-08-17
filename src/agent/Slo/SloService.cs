@@ -60,7 +60,7 @@ public sealed class SloService : ISloService
 
         _slosDir = Path.IsPathRooted(config.SlosDir)
             ? config.SlosDir
-            : Path.Combine(AppContext.BaseDirectory, config.SlosDir);
+            : Hercules.BuiltIn.ResolvePathUnderDataRoot(Hercules.BuiltIn.ResolveDataRoot(), config.SlosDir);
     }
 
     /// <inheritdoc />

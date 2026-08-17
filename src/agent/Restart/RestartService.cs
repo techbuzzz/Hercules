@@ -192,7 +192,7 @@ public sealed class RestartService
     {
         // Фолбэк для DI-конструктора, если stateFilePath не указан явно в Program.cs.
         // Production-overwrite делается в Program.cs через DI-фабрику.
-        return Path.Combine(AppContext.BaseDirectory, "data", "restart-state.json");
+        return Hercules.BuiltIn.DataPath(Hercules.BuiltIn.RestartStateFileName);
     }
 }
 

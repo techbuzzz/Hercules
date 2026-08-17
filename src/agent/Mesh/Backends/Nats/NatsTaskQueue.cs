@@ -50,7 +50,7 @@ public sealed class NatsTaskQueue : ITaskQueue
 
         // Resolve DLQ file path (task_074). Default: {DataRoot}/{StreamPrefix}-dlq.jsonl
         var dataRoot = string.IsNullOrEmpty(config.DataRoot)
-            ? AppContext.BaseDirectory
+            ? Hercules.BuiltIn.ResolveDataRoot()
             : config.DataRoot;
         var dlqFileName = string.IsNullOrEmpty(config.DlqFileName)
             ? $"{config.StreamPrefix}-dlq.jsonl"

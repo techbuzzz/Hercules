@@ -265,7 +265,7 @@ public sealed class AgentManifestService
             TrustMetadata = trustMetadata
         };
 
-        ManifestPath = Path.Combine(manifestDir, "agent.manifest.json");
+        ManifestPath = Path.Combine(manifestDir, Hercules.BuiltIn.AgentManifestFileName);
         Directory.CreateDirectory(manifestDir);
         _capabilitiesProvider = capabilitiesProvider ?? throw new ArgumentNullException(nameof(capabilitiesProvider));
         _skillsProvider = skillsProvider;

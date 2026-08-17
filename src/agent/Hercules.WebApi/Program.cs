@@ -132,16 +132,13 @@ if (webCfg.ApiKeys.Count == 0 && !string.IsNullOrEmpty(webCfg.ApiKey))
     });
 }
 
-// Делаем хранилище общим с CLI-приложением: проект Hercules лежит на уровень выше.
-var sharedData = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "data"));
-if (Directory.Exists(Path.GetDirectoryName(sharedData)!))
-{
-    appConfig.Storage.DataRoot = sharedData;
-}
+// The data root is already resolved by BuiltIn.ResolveDataRoot at AppConfig init.
+// Web API intentionally shares the same runtime data directory as the console host.
+var sharedData = appConfig.Storage.DataRoot;
 
-var runtimeConfigFile = Path.Combine(appConfig.Storage.DataRoot, "runtime-config.json");
+var runtimeConfigFile = Path.Combine(appConfig.Storage.DataRoot, Hercules.BuiltIn.RuntimeConfigFileName);
 
-var logsDir = Path.Combine(appConfig.Storage.DataRoot, "logs");
+var logsDir = Path.Combine(appConfig.Storage.DataRoot, Hercules.BuiltIn.LogsSubdir);
 Directory.CreateDirectory(logsDir);
 builder.Logging.AddProvider(new FileLoggerProvider(logsDir));
 
@@ -224,7 +221,7 @@ builder.Services.AddSingleton<Hercules.Restart.RestartService>(sp =>
     new Hercules.Restart.RestartService(
         sp.GetRequiredService<ILogger<Hercules.Restart.RestartService>>(),
         sp.GetService<Hercules.Audit.IAuditService>(),
-        Path.Combine(sp.GetRequiredService<Hercules.Config.StorageConfig>().DataRoot, "restart-state.json")));
+        Path.Combine(sp.GetRequiredService<Hercules.Config.StorageConfig>().DataRoot, Hercules.BuiltIn.RestartStateFileName)));
 
 // task_078: IHttpClientFactory + named clients with standard resilience handlers
 builder.Services.AddHttpClient();
@@ -528,7 +525,7 @@ builder.Services.AddSingleton<INetworkMonitor>(sp => sp.GetRequiredService<Netwo
 // task_026: Least-privilege grants
 builder.Services.AddSingleton(sp =>
     new Hercules.Tools.Grants.SkillGrantStore(
-        Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, "grants.db")));
+        Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, Hercules.BuiltIn.GrantsDatabaseFileName)));
 builder.Services.AddSingleton<Hercules.Tools.Grants.ISkillGrantService, Hercules.Tools.Grants.SkillGrantService>();
 
 // Hybrid storage services (task_003)
@@ -707,7 +704,7 @@ builder.Services.AddSingleton<AgentTemplateManager>();
 builder.Services.AddSingleton<ISensorSimulator>(sp =>
     new FileSensorSimulator(sp.GetRequiredService<ILogger<FileSensorSimulator>>())
     {
-        TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, "templates")
+        TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, Hercules.BuiltIn.TemplatesSubdir)
     });
 builder.Services.AddSingleton<FailureScenarioEngine>();
 builder.Services.AddSingleton<TemplateSimulationService>();
@@ -1087,7 +1084,7 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/maintenance/proposals", "GET /api/maintenance/proposals/{id}",
         "POST /api/maintenance/proposals/{id}/approve",
         "POST /api/maintenance/proposals/{id}/reject",
-        "GET /agent.manifest.json", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
+        $"GET /{Hercules.BuiltIn.AgentManifestFileName}", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
         "GET /api/mesh/agents/{id}", "DELETE /api/mesh/agents/{id}",
         "GET /api/mesh/capabilities", "GET /api/mesh/capabilities/{name}",
         "GET /api/mesh/capabilities/search", "POST /api/mesh/intent",
@@ -1120,12 +1117,12 @@ app.MapHealthChecks("/api/health/detail", new HealthCheckOptions
 }).AllowAnonymous(); // ApiKeyMiddleware already guards /api/* — no extra attribute needed
 
 // A2A Agent Card — статический файл по спецификации (task_033)
-app.MapGet("/agent-card.json", () =>
+app.MapGet($"/{Hercules.BuiltIn.AgentCardFileName}", () =>
 {
     // agent-card.json публикуется в dataRoot при старте;.TryReadFromFile чтобы избежать
     // NRE если файл ещё не создан (например, CLI-only запуск)
     var dataRoot = app.Services.GetRequiredService<StorageConfig>().DataRoot;
-    var cardPath = Path.Combine(dataRoot, "agent-card.json");
+    var cardPath = Path.Combine(dataRoot, Hercules.BuiltIn.AgentCardFileName);
     if (!File.Exists(cardPath))
     {
         return Results.NotFound(new { error = "agent-card.json not published yet" });

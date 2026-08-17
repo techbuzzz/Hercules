@@ -377,7 +377,7 @@ builder.ConfigureServices((context, services) =>
     // task_026: Least-privilege grants
     services.AddSingleton(sp =>
         new Hercules.Tools.Grants.SkillGrantStore(
-            Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, "grants.db")));
+            Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, Hercules.BuiltIn.GrantsDatabaseFileName)));
     services.AddSingleton<Hercules.Tools.Grants.ISkillGrantService, Hercules.Tools.Grants.SkillGrantService>();
 
     // Layered memory (task_011, task_075 H6)
@@ -555,7 +555,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<ISensorSimulator>(sp =>
         new FileSensorSimulator(sp.GetRequiredService<ILogger<FileSensorSimulator>>())
         {
-            TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, "templates")
+            TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, Hercules.BuiltIn.TemplatesSubdir)
         });
     services.AddSingleton<FailureScenarioEngine>();
     services.AddSingleton<TemplateSimulationService>();

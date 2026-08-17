@@ -44,7 +44,7 @@ public sealed class SkillMarketplace
         IMarketplaceSigningService? signing,
         IHttpClientFactory? httpFactory)
     {
-        DirectoryPath = Path.Combine(cfg.DataRoot, cfg.SkillsDir, cfg.Phase2?.MarketplaceDir ?? "marketplace");
+        DirectoryPath = Path.Combine(cfg.DataRoot, cfg.SkillsDir, cfg.Phase2?.MarketplaceDir ?? Hercules.BuiltIn.MarketplaceSubdir);
         Directory.CreateDirectory(DirectoryPath);
         _packager = packager ?? throw new ArgumentNullException(nameof(packager));
         _signing = signing;
@@ -324,7 +324,7 @@ public sealed class SkillMarketplace
     private bool IsInstalled(string skillId)
     {
         var marketplaceDir = Path.GetDirectoryName(DirectoryPath) ?? "";
-        var skillsDir = Path.Combine(marketplaceDir, "Skills");
+        var skillsDir = Path.Combine(marketplaceDir, Hercules.BuiltIn.SkillsSubdir);
         if (!Directory.Exists(skillsDir)) return false;
         return Directory.EnumerateDirectories(skillsDir, $"skill.{skillId}*").Any();
     }

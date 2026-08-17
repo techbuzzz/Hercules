@@ -20,7 +20,7 @@ public static class MeshController
         // === Phase 3: Manifest + Registry + Intent ===
 
         // GET /agent.manifest.json — публичный манифест (well-known URL для discovery).
-        app.MapGet("/agent.manifest.json", (AgentManifestService manifestService) =>
+        app.MapGet($"/{Hercules.BuiltIn.AgentManifestFileName}", (AgentManifestService manifestService) =>
         {
             var manifest = manifestService.Current;
             return Results.Ok(manifest);

@@ -19,8 +19,8 @@ public sealed class SecurityOpsConfig
     public bool Enabled { get; set; } = true;
 
     // Identity rotation
-    /// <summary>Директория для хранения fleet identity. Default: "data/security/identity".</summary>
-    public string IdentityStoragePath { get; set; } = "data/security/identity";
+    /// <summary>Директория для хранения fleet identity. Default: "security/identity".</summary>
+    public string IdentityStoragePath { get; set; } = Path.Combine(BuiltIn.SecuritySubdir, BuiltIn.IdentitySubdir);
 
     /// <summary>Default agent ID для fleet identity. Default: "hercules".</summary>
     public string DefaultAgentId { get; set; } = "hercules";
@@ -35,8 +35,8 @@ public sealed class SecurityOpsConfig
     public bool AutoRotateIdentity { get; set; } = true;
 
     // Certificate management
-    /// <summary>Директория для хранения сертификатов. Default: "data/security/certs".</summary>
-    public string CertificateStoragePath { get; set; } = "data/security/certs";
+    /// <summary>Директория для хранения сертификатов. Default: "security/certs".</summary>
+    public string CertificateStoragePath { get; set; } = Path.Combine(BuiltIn.SecuritySubdir, BuiltIn.CertsSubdir);
 
     /// <summary>Срок действия сертификата в днях. Default: 365.</summary>
     public int CertificateValidityDays { get; set; } = 365;
@@ -48,8 +48,8 @@ public sealed class SecurityOpsConfig
     public bool AutoRenewCertificates { get; set; } = true;
 
     // Package signing
-    /// <summary>Директория для хранения подписей пакетов. Default: "data/security/signing".</summary>
-    public string PackageSigningPath { get; set; } = "data/security/signing";
+    /// <summary>Директория для хранения подписей пакетов. Default: "security/signing".</summary>
+    public string PackageSigningPath { get; set; } = Path.Combine(BuiltIn.SecuritySubdir, BuiltIn.SigningSubdir);
 
     /// <summary>Требовать подпись пакетов. Default: false.</summary>
     public bool RequirePackageSignature { get; set; } = false;
@@ -58,8 +58,8 @@ public sealed class SecurityOpsConfig
     public bool RequireTrustedSigner { get; set; } = false;
 
     // Vulnerability reporting
-    /// <summary>Директория для хранения vulnerability reports. Default: "data/security/vulns".</summary>
-    public string VulnerabilityReportPath { get; set; } = "data/security/vulns";
+    /// <summary>Директория для хранения vulnerability reports. Default: "security/vulns".</summary>
+    public string VulnerabilityReportPath { get; set; } = Path.Combine(BuiltIn.SecuritySubdir, BuiltIn.VulnsSubdir);
 
     /// <summary>Включить автоматическое сканирование уязвимостей. Default: false.</summary>
     public bool AutoScanVulnerabilities { get; set; } = false;
@@ -225,8 +225,8 @@ public sealed class ConfigRolloutConfig
     /// <summary>Включить staged rollout. Default: true.</summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Директория для хранения бандлов и state. Default: "data/rollout".</summary>
-    public string BundlesPath { get; set; } = "data/rollout";
+    /// <summary>Директория для хранения бандлов и state. Default: "rollout".</summary>
+    public string BundlesPath { get; set; } = BuiltIn.RolloutSubdir;
 
     /// <summary>Требовать подпись бандлов. Default: false.</summary>
     public bool RequireBundleSignature { get; set; } = false;
@@ -447,8 +447,8 @@ public sealed class ToolRegistryConfig
 {
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Директория с tool declarations (data/Tools/*.tool.json).</summary>
-    public string ToolsDir { get; set; } = "data/Tools";
+    /// <summary>Директория с tool declarations ({DataRoot}/Tools/*.tool.json).</summary>
+    public string ToolsDir { get; set; } = BuiltIn.ToolsSubdir;
 
     /// <summary>Allow patterns (glob). Пусто = все разрешены.</summary>
     public List<string> AllowedPatterns { get; set; } = new() { "*" };
@@ -475,12 +475,12 @@ public sealed class Phase2Config
     public string EmbeddingProvider { get; set; } = "stub-hash";
     public double SimilarityThreshold { get; set; } = 0.35;
     public bool KeywordFallback { get; set; } = true;
-    public string MarketplaceDir { get; set; } = "marketplace";
-    public string ToolsDir { get; set; } = "Tools";
-    public string TemplatesDir { get; set; } = "Templates";
+    public string MarketplaceDir { get; set; } = BuiltIn.MarketplaceSubdir;
+    public string ToolsDir { get; set; } = BuiltIn.ToolsSubdir;
+    public string TemplatesDir { get; set; } = BuiltIn.TemplatesSubdir;
 
-    /// <summary>Fleet templates directory (data/FleetTemplates/). Default: "FleetTemplates".</summary>
-    public string FleetTemplatesDir { get; set; } = "FleetTemplates";
+    /// <summary>Fleet templates directory (DataRoot/FleetTemplates/). Default: "FleetTemplates".</summary>
+    public string FleetTemplatesDir { get; set; } = BuiltIn.FleetTemplatesSubdir;
 
     /// <summary>
     ///     Веса scoring-компонентов для семантической маршрутизации (task_022).
@@ -691,10 +691,10 @@ public sealed class A2AAgentCardConfig
     public bool Publish { get; set; } = true;
 
     /// <summary>
-    ///     Путь/endpoint для публикации Agent Card (по умолчанию "/agent-card.json").
+    ///     Путь/endpoint для публикации Agent Card (по умолчанию "/{BuiltIn.AgentCardFileName}").
     ///     Может быть абсолютным путём или относительным (от dataRoot).
     /// </summary>
-    public string Endpoint { get; set; } = "agent-card.json";
+    public string Endpoint { get; set; } = $"/{BuiltIn.AgentCardFileName}";
 
     /// <summary>TTL кэша Agent Card в минутах. Default: 60.</summary>
     public int CacheTtlMinutes { get; set; } = 60;
@@ -772,10 +772,15 @@ public sealed class OllamaConfig
 /// </summary>
 public sealed class StorageConfig
 {
-    public string DataRoot { get; set; } = "data";
-    public string SkillsDir { get; set; } = "Skills";
-    public string MemoryDir { get; set; } = "Memory";
-    public string SqliteFile { get; set; } = "sessions.db";
+    /// <summary>
+    ///     Absolute or relative root for all agent-generated runtime data.
+    ///     When relative, it is resolved against <see cref="BuiltIn.ResolveDataRoot"/>.
+    ///     Default: resolved at startup via <see cref="BuiltIn.ResolveDataRoot"/>.
+    /// </summary>
+    public string DataRoot { get; set; } = BuiltIn.ResolveDataRoot();
+    public string SkillsDir { get; set; } = BuiltIn.SkillsSubdir;
+    public string MemoryDir { get; set; } = BuiltIn.MemorySubdir;
+    public string SqliteFile { get; set; } = BuiltIn.SqliteDatabaseFileName;
     public Phase2Config? Phase2 { get; set; }
 
     /// <summary>
@@ -1553,11 +1558,11 @@ public sealed class MeshEvalConfig
     /// <summary>Включить evaluation suite. Default: false.</summary>
     public bool Enabled { get; set; } = false;
 
-    /// <summary>Директория с файлами сценариев (.json). Default: "data/mesh-eval/scenarios".</summary>
-    public string ScenariosDir { get; set; } = "data/mesh-eval/scenarios";
+    /// <summary>Директория с файлами сценариев (.json). Default: "mesh-eval/scenarios".</summary>
+    public string ScenariosDir { get; set; } = Path.Combine(BuiltIn.MeshEvalSubdir, BuiltIn.ScenariosSubdir);
 
-    /// <summary>Директория для сохранения результатов. Default: "data/mesh-eval/results".</summary>
-    public string ResultsDir { get; set; } = "data/mesh-eval/results";
+    /// <summary>Директория для сохранения результатов. Default: "mesh-eval/results".</summary>
+    public string ResultsDir { get; set; } = Path.Combine(BuiltIn.MeshEvalSubdir, BuiltIn.ResultsSubdir);
 
     /// <summary>Максимальное время выполнения одного сценария в секундах. Default: 120.</summary>
     public int MaxScenarioDurationSeconds { get; set; } = 120;
@@ -1703,8 +1708,8 @@ public sealed class MeshProfilesConfig
     /// <summary>Имя активного профиля (например "local", "redis-ha", "nats-cluster"). Default: "local".</summary>
     public string? ActiveProfile { get; set; } = "local";
 
-    /// <summary>Директория с .meshprofile.json файлами профилей. Default: "data/mesh-profiles".</summary>
-    public string ProfilesDir { get; set; } = "data/mesh-profiles";
+    /// <summary>Директория с .meshprofile.json файлами профилей. Default: "mesh-profiles".</summary>
+    public string ProfilesDir { get; set; } = BuiltIn.MeshProfilesSubdir;
 
     /// <summary>Интервал health check всех backends в секундах. Default: 30.</summary>
     public int HealthCheckIntervalSec { get; set; } = 30;

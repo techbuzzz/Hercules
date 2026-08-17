@@ -28,7 +28,7 @@ public sealed class DiskSpaceHealthCheck : IHealthCheck
         try
         {
             var path = string.IsNullOrWhiteSpace(_storage.DataRoot)
-                ? Path.GetPathRoot(Directory.GetCurrentDirectory()) ?? "/"
+                ? Path.GetPathRoot(Hercules.BuiltIn.ResolveDataRoot()) ?? "/"
                 : _storage.DataRoot;
 
             // Ensure the directory exists so DriveInfo can resolve a volume on first run.
