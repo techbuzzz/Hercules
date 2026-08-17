@@ -3,13 +3,13 @@
 **Epic:** Hercules Studio
 **Status:** in_progress (web preview working)
 **Estimate:** 1-2 недели
-**Dependencies (backend):** нет
+**Dependencies (backend):** task_109-112 (OpenAPI producer + annotations — для API codegen pipeline)
 **Dependencies (Studio):** нет (стартовый)
 **Branch:** `feat/hercules-studio-stage-0`
 
 ## Goal
 
-Запускаемый skeleton Electron + Vue 3 + Vite + IPC + VS Code-like layout + SQLite + SDK + license consent + empty state с marketing carousel. Studio запускается, можно добавить агента по URL, виден manifest.
+Запускаемый skeleton Electron + Vue 3 + Vite + IPC + VS Code-like layout + SQLite + SDK + license consent + empty state с marketing carousel. Studio запускается, можно добавить агента по URL, виден manifest. API codegen pipeline (openapi-typescript + Orval) настроен и генерирует TS client из OpenAPI документа агента.
 
 ## Boilerplate status
 

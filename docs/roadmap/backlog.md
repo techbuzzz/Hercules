@@ -173,6 +173,14 @@
 | 106 | 8 | [DelegatedTask persistence](tasks/task_106.md) | `delegated-task-persistence` | pending |
 | 107 | 8 | [Parent/child task relationships](tasks/task_107.md) | `parent-child-tasks` | pending |
 | 108 | 8 | [DurableTask checkpoint persistence](tasks/task_108.md) | `checkpoint-persistence` | pending |
+| 109 | 0 (pre-req) | [AddOpenApi() в Program.cs](tasks/task_109.md) | `add-openapi-producer` | pending |
+| 110 | 0 (pre-req) | [WithTags на все контроллеры](tasks/task_110.md) | `withtags-all-controllers` | pending |
+| 111 | 0 (pre-req) | [Produces\<T\>() + DTO рефакторинг](tasks/task_111.md) | `produces-dto-refactor` | pending |
+| 112 | 0 (pre-req) | [WithName на Marketplace + Template](tasks/task_112.md) | `withname-marketplace-template` | pending |
+| 113 | 0 (Studio) | [Studio: openapi-typescript + Orval setup](tasks/task_113.md) | `studio-openapi-codegen-setup` | pending |
+| 114 | 0-2 (Studio) | [Studio: migrate stores to Vue Query](tasks/task_114.md) | `studio-migrate-vue-query` | pending |
+| 115 | 0 (Web-UI) | [Web-UI: openapi-typescript + Orval setup](tasks/task_115.md) | `webui-openapi-codegen-setup` | pending |
+| 116 | 0 (Web-UI) | [Web-UI: migrate api.ts to Vue Query](tasks/task_116.md) | `webui-migrate-vue-query` | pending |
 
 ## Workflow
 

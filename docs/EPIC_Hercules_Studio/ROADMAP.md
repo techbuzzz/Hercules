@@ -16,13 +16,21 @@ Stage 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
 
 ---
 
-## Stage 0 — Skeleton (1-2 недели)
+## Stage 0 — Skeleton + API Codegen (1-2 недели)
 
-**Цель:** Запускаемый skeleton Electron + Vue + Vite + IPC + layout.
+**Цель:** Запускаемый skeleton Electron + Vue + Vite + IPC + layout. API codegen pipeline (openapi-typescript + Orval + Vue Query) настроен и генерирует TS client из OpenAPI документа агента.
 
-**Зависимости от бэкенда:** нет (работает с текущим API)
+**Зависимости от бэкенда:**
+- `task_109` — AddOpenApi() в Program.cs (OpenAPI 3.1 producer)
+- `task_110` — WithTags на все контроллеры (domain grouping для Orval tags-split)
+- `task_111` — Produces\<T\>() + DTO рефакторинг (исключить анонимные типы)
+- `task_112` — WithName на Marketplace + Template (operationId для Orval)
 
-**Результат:** Studio запускается, можно добавить агента по URL, виден manifest. License consent при first-run. Empty state с marketing carousel.
+**Studio tasks:**
+- `task_113` — openapi-typescript + openapi-fetch + Orval setup
+- `task_114` — migrate stores to Vue Query hooks
+
+**Результат:** Studio запускается, можно добавить агента по URL, виден manifest. License consent при first-run. Empty state с marketing carousel. API client auto-generated из openapi.json (types + Vue Query hooks + Zod + MSW mocks).
 
 📄 [tasks/stage_00_skeleton.md](tasks/stage_00_skeleton.md)
 
@@ -153,7 +161,7 @@ Stage 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
 
 | Stage | Срок | Backend deps | Ключевой результат |
 |---|---|---|---|
-| 0 | 1-2 нед | — | Skeleton, license, empty state |
+| 0 | 1-2 нед | task_109-112 (OpenAPI) + task_113-114 (Studio codegen) | Skeleton, license, empty state, API codegen pipeline |
 | 1 | 1-2 нед | task_096-098 | Scanner, connections, checkin/checkout |
 | 2 | 2-3 нед | — | Chat, skill editor (Monaco) |
 | 3 | 1-2 нед | — | Skill push, cross-agent, templates |
@@ -163,15 +171,19 @@ Stage 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
 | 7 | 2-3 нед | — | Consensus (multi-agent chat) |
 | 8 | 3-4 нед | task_104-108 | BPMN workflow (MVP → production) |
 | 9 | 1-2 нед | — | Packaging, tray, auto-update, tests |
-| **Total** | **~16-26 нед** | **13 backend tasks** | **Hercules Studio 0.6.x** |
+| **Total** | **~16-26 нед** | **21 backend tasks** | **Hercules Studio 0.6.x** |
+
+> **Параллельно с Studio:** task_115-116 (Web-UI codegen + migration) — тот же OpenAPI pipeline для hercules-web.
 
 ## Совместимость Studio ↔ Agent
 
 | Studio | Agent version | Notes |
 |---|---|---|
-| 0.1.x (Stage 0-2) | текущая + port migration (task_096) | Basic: chat, skills, config |
+| 0.1.x (Stage 0-2) | + OpenAPI producer (task_109-112) + port migration (task_096) | Basic: chat, skills, config. API codegen pipeline active |
 | 0.2.x (Stage 1-3) | + dual API keys (task_097) + CheckIn/CheckOut (task_098) | Scanner, multi-agent, push |
 | 0.3.x (Stage 4-5) | текущая | Mesh, tools, MCP |
 | 0.4.x (Stage 6) | + restart (task_099) + MCP reload (task_100) + SkillSdk (task_101) + distillation (task_102) + Postgres (task_103) | Full config, C# skills, restart |
 | 0.5.x (Stage 7) | текущая | Consensus |
 | 0.6.x (Stage 8-9) | + workflow-server (task_104-108) | BPMN workflows, packaging |
+
+> **Web-UI** parallel migration: task_115-116 (openapi-typescript + Orval + Vue Query) — hercules-web переходит на generated API client одновременно со Studio.

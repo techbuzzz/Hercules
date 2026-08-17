@@ -574,7 +574,108 @@ Dark + Light, switchable. Dark = базовый (консистентность 
 | Studio crash → checked out forever | Heartbeat TTL 60s → auto checkout |
 | Workflow-server = отдельный сервис | Архитектура заложена в Stage 0, реализация в Stage 8 |
 
-## 14. Связанные ADR
+## 15. API Codegen pipeline (OpenAPI → TypeScript)
+
+> Подробные задачи: [task_109-116](../roadmap/backlog.md#phase-8--hercules-studio-backend-prerequisites)
+
+### Принцип
+
+API контракт агента (.NET Minimal API) → OpenAPI 3.1 документ (`/openapi/v1.json`) → автоматически сгенерированный TypeScript клиент (types + Vue Query hooks + Zod). Generated files коммитятся в git. Regen — ручной (`npm run gen:api`).
+
+Тот же pipeline работает для **Studio** и **Web-UI** — один источник, два потребителя.
+
+### Архитектура
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Hercules.WebApi (.NET 10 Minimal API)                          │
+│  AddOpenApi() + MapOpenApi() → /openapi/v1.json                 │
+│  .Produces<T>() + .WithName() + .WithTags() на каждом endpoint  │
+│  Contracts/ — named DTOs (без анонимных типов)                  │
+└────────────────┬────────────────────────────────────────────────┘
+                 │ /openapi/v1.json (OpenAPI 3.1)
+                 ▼
+      ┌──────────┴──────────┐
+      │                     │
+      ▼                     ▼
+┌──────────────┐    ┌──────────────┐
+│  Studio       │    │  Web-UI      │
+│  (Electron)   │    │  (Astro)     │
+│               │    │              │
+│  npm run      │    │  npm run     │
+│  gen:api      │    │  gen:api     │
+│       │       │    │       │      │
+│       ▼       │    │       ▼      │
+│  openapi-     │    │  openapi-    │
+│  typescript   │    │  typescript  │
+│  → schema.ts  │    │  → schema.ts │
+│               │    │              │
+│  Orval        │    │  Orval       │
+│  → generated/ │    │  → generated/│
+│    (vue-query)│    │    (vue-query│
+│  → models/    │    │  → models/   │
+│    (zod)      │    │    (zod)     │
+│  → *.msw.ts   │    │  → *.msw.ts  │
+│    (mocks)    │    │    (mocks)   │
+│               │    │              │
+│  mutator.ts   │    │  mutator.ts  │
+│  (per-conn    │    │  (Astro env  │
+│   X-Api-Key)  │    │   vars)      │
+└──────────────┘    └──────────────┘
+```
+
+### Инструменты
+
+| Инструмент | Роль | Зачем |
+|---|---|---|
+| `Microsoft.AspNetCore.OpenApi` | Producer (.NET 10 built-in) | OpenAPI 3.1, без NuGet |
+| `openapi-typescript` | Types only | Все DTOs + paths как TS interfaces, ~3KB runtime |
+| `openapi-fetch` | Typed fetch wrapper | End-to-end typed `c.GET('/api/skills')` |
+| `Orval` | Vue Query hooks + Zod + MSW | `useListSkillsQuery()`, `useCreateSkillMutation()`, runtime validation, mocks |
+| `@tanstack/vue-query` | Client-side data fetching | Cache, retries, optimistic updates, loading/error states |
+
+### Generated структура (Studio и Web-UI одинаковы)
+
+```
+src/api/
+├── schema.ts              # openapi-typescript (types only, all paths + schemas)
+├── mutator.ts             # custom fetch wrapper (hand-written, not generated)
+├── generated/             # Orval: Vue Query hooks per domain (tags-split)
+│   ├── skills/
+│   │   ├── skills.ts      # useListSkillsQuery, useCreateSkillMutation...
+│   │   └── skills.msw.ts  # MSW handlers for dev without agent
+│   ├── chat/
+│   ├── mesh/
+│   ├── config/
+│   └── ... (30 domains)
+├── models/                # Orval: Zod schemas + DTO interfaces
+└── README.md              # "Generated. Do not edit. Run: npm run gen:api"
+```
+
+### Workflow разработчика
+
+```
+1. Изменить API на бэкенде (добавить endpoint, DTO, .Produces<T>())
+2. Запустить агент: dotnet run --project src/agent/Hercules.WebApi
+3. Regenerate: cd src/hercules-studio && npm run gen:api
+4. Commit: git add src/api/ && git commit -m "regen API client"
+5. Использовать: import { useListSkillsQuery } from "api/generated/skills"
+```
+
+### Задачи pipeline
+
+| Task | Что | Зависимости |
+|---|---|---|
+| task_109 | `AddOpenApi()` + `MapOpenApi()` в Program.cs | — |
+| task_110 | `.WithTags()` на все 35 контроллеров | task_109 |
+| task_111 | `.Produces<T>()` + DTO рефакторинг (исключить анонимные) | task_109 |
+| task_112 | `.WithName()` на Marketplace + Template | — |
+| task_113 | Studio: openapi-typescript + Orval setup | task_109-112 |
+| task_114 | Studio: migrate stores to Vue Query | task_113 |
+| task_115 | Web-UI: openapi-typescript + Orval setup | task_109-112 |
+| task_116 | Web-UI: migrate api.ts to Vue Query | task_115 |
+
+## 16. Связанные ADR
 
 - [adr/0001-electron-over-tauri.md](adr/0001-electron-over-tauri.md)
 - [adr/0002-vue3-over-react.md](adr/0002-vue3-over-react.md)
