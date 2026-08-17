@@ -156,6 +156,11 @@ builder.Services.AddSingleton(webCfg);
 // Регистрируем ДО app.Build(), чтобы можно было resolve при первом запросе.
 builder.Services.AddSingleton<Hercules.WebApi.Auth.ApiKeyStore>();
 
+// task_098: CheckInService для Studio-протокола (ADR-0005). Singleton — состояние
+// CheckIn'ов живёт в памяти процесса, общий для всех запросов. IAuditService
+// resolve'ится лениво через IServiceProvider, чтобы оставаться опциональным.
+builder.Services.AddSingleton<Hercules.CheckIn.CheckInService>();
+
 // task_078: IHttpClientFactory + named clients with standard resilience handlers
 builder.Services.AddHttpClient();
 
@@ -889,7 +894,10 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/mesh/capabilities", "GET /api/mesh/capabilities/{name}",
         "GET /api/mesh/capabilities/search", "POST /api/mesh/intent",
         "GET /api/tools", "GET /api/tools/{name}", "GET /api/tools/{name}/health",
-        "GET /api/tools/categories", "POST /api/tools/{name}/enable", "POST /api/tools/{name}/disable"
+        "GET /api/tools/categories", "POST /api/tools/{name}/enable", "POST /api/tools/{name}/disable",
+        "POST /api/system/checkin", "POST /api/system/checkout",
+        "POST /api/system/checkin/heartbeat", "GET /api/system/checkin/status",
+        "POST /api/system/checkin/force"
     ]
 }));
 // task_079: real health endpoints replacing the static /api/health stub.
@@ -991,6 +999,7 @@ app.MapBudget();
 app.MapQuotas();
 app.MapAudit();
 app.MapSecurityOps();
+app.MapSystem();
 app.MapLlm();
 app.MapA2A();
 app.MapBackups();
