@@ -598,6 +598,162 @@ export const api = {
     });
     return handle<{ status: string; count: number; agents: DiscoveredAgentDto[] }>(res);
   },
+
+  // ---- Backup (task_063 / Phase 7 task_094) ----
+
+  /**
+   * List all available backup archives. Wire format: `BackupSummary[]`.
+   * Each entry carries id, filename, created_at (ISO 8601), size_bytes,
+   * encrypted, key_fingerprint, components{config, skills, memory, sqlite_db,
+   * identity}, files_count.
+   */
+  async listBackups(): Promise<BackupSummaryDto[]> {
+    const res = await fetch(`${API_BASE}/api/backups`, { headers: headers(false) });
+    return handle<BackupSummaryDto[]>(res);
+  },
+
+  /**
+   * Create a new backup archive. The optional `passphrase` is forwarded to
+   * the backend (which falls back to the configured `BackupConfig.Passphrase`
+   * when omitted). Wire format: `BackupResult` with BackupId, ArchivePath,
+   * SizeBytes, UncompressedBytes, FilesCount, Encrypted, KeyFingerprint,
+   * Duration, Warnings.
+   */
+  async createBackup(passphrase?: string): Promise<BackupResultDto> {
+    const res = await fetch(`${API_BASE}/api/backups`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(passphrase ? { passphrase } : {}),
+    });
+    return handle<BackupResultDto>(res);
+  },
+
+  /**
+   * Restore a backup archive. `passphrase` is required only for encrypted
+   * archives; `targetDir` is optional and falls back to the configured data
+   * dir. Wire format: `RestoreResult` with BackupId, Success, FilesRestored,
+   * FilesSkipped, Errors[], Warnings[], Duration.
+   */
+  async restoreBackup(id: string, passphrase?: string, targetDir?: string): Promise<RestoreResultDto> {
+    const body: { passphrase?: string; targetDir?: string } = {};
+    if (passphrase) body.passphrase = passphrase;
+    if (targetDir) body.targetDir = targetDir;
+    const res = await fetch(`${API_BASE}/api/backups/${encodeURIComponent(id)}/restore`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+    return handle<RestoreResultDto>(res);
+  },
+
+  /**
+   * Verify integrity and hash validity of a backup archive.
+   * Wire format: `VerifyResult` with BackupId, Valid, Encrypted,
+   * KeyFingerprint, FileHashesValid[], FileHashesInvalid[], Warnings[],
+   * Duration.
+   */
+  async verifyBackup(id: string, passphrase?: string): Promise<VerifyResultDto> {
+    const url = passphrase
+      ? `${API_BASE}/api/backups/${encodeURIComponent(id)}/verify?passphrase=${encodeURIComponent(passphrase)}`
+      : `${API_BASE}/api/backups/${encodeURIComponent(id)}/verify`;
+    const res = await fetch(url, { headers: headers(false) });
+    return handle<VerifyResultDto>(res);
+  },
+
+  /**
+   * Delete a backup archive. Returns 204 No Content.
+   */
+  async deleteBackup(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/backups/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: headers(false),
+    });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try {
+        const body = await res.json();
+        if (body?.error) msg = body.error;
+      } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+  },
+
+  // ---- SLO (task_064 / Phase 7 task_094) ----
+
+  /**
+   * SLO summary across all configured verticals. Wire format: `SloSummary`
+   * with Timestamp, Verticals[] (each `SloStatus`), TotalVerticals, OkCount,
+   * WarningCount, CriticalCount.
+   */
+  async getSloSummary(): Promise<SloSummaryDto> {
+    const res = await fetch(`${API_BASE}/api/slos`, { headers: headers(false) });
+    return handle<SloSummaryDto>(res);
+  },
+
+  /**
+   * SLO definition for a specific vertical (e.g. "greenhouse", "cold-chain",
+   * "server-room", "vending"). Wire format: `SloDefinition` with Vertical,
+   * Description, Version, AvailabilityTarget, ResponseTimeTargetMs,
+   * DataLossTargetPerDay, RecoveryTimeTargetMinutes, CostTargetUsd,
+   * AlertThresholds, Runbooks.
+   */
+  async getSloDefinition(vertical: string): Promise<SloDefinitionDto> {
+    const res = await fetch(`${API_BASE}/api/slos/${encodeURIComponent(vertical)}/definition`, {
+      headers: headers(false),
+    });
+    return handle<SloDefinitionDto>(res);
+  },
+
+  /**
+   * Current SLO status for a vertical. Wire format: `SloStatus` with
+   * Vertical, OverallSeverity ("Ok" | "Warning" | "Critical"), Timestamp,
+   * Objectives[], RecentViolations[], IsAcknowledged, AcknowledgedBy,
+   * AcknowledgedAt.
+   */
+  async getSloStatus(vertical: string): Promise<SloStatusDto> {
+    const res = await fetch(`${API_BASE}/api/slos/${encodeURIComponent(vertical)}`, {
+      headers: headers(false),
+    });
+    return handle<SloStatusDto>(res);
+  },
+
+  /**
+   * Full SLO report for a vertical: definition + current status +
+   * historical compliance summary. Wire format: `SloReport` with Vertical,
+   * GeneratedAt, CurrentStatus, Definition, Compliance (windowDays,
+   * availabilityAchievementPct, responseTimeAchievementPct,
+   * dataLossEventsTotal, maxRecoveryTimeMinutes, totalCostUsd,
+   * overallCompliancePct).
+   */
+  async getSloReport(vertical: string): Promise<SloReportDto> {
+    const res = await fetch(`${API_BASE}/api/slos/${encodeURIComponent(vertical)}/report`, {
+      headers: headers(false),
+    });
+    return handle<SloReportDto>(res);
+  },
+
+  /**
+   * Acknowledge a specific SLO violation (suppresses repeated alerts).
+   * `acknowledgedBy` defaults to "operator" on the backend.
+   */
+  async ackSloViolation(vertical: string, violationId: string, acknowledgedBy?: string): Promise<{ acknowledged: boolean; violationId: string; by: string }> {
+    const url = acknowledgedBy
+      ? `${API_BASE}/api/slos/${encodeURIComponent(vertical)}/ack/${encodeURIComponent(violationId)}?acknowledgedBy=${encodeURIComponent(acknowledgedBy)}`
+      : `${API_BASE}/api/slos/${encodeURIComponent(vertical)}/ack/${encodeURIComponent(violationId)}`;
+    const res = await fetch(url, { method: "POST", headers: headers(false) });
+    return handle<{ acknowledged: boolean; violationId: string; by: string }>(res);
+  },
+
+  /**
+   * Acknowledge all active violations for a vertical.
+   */
+  async ackAllSloViolations(vertical: string, acknowledgedBy?: string): Promise<{ acknowledgedAll: boolean; vertical: string; by: string }> {
+    const url = acknowledgedBy
+      ? `${API_BASE}/api/slos/${encodeURIComponent(vertical)}/ack?acknowledgedBy=${encodeURIComponent(acknowledgedBy)}`
+      : `${API_BASE}/api/slos/${encodeURIComponent(vertical)}/ack`;
+    const res = await fetch(url, { method: "POST", headers: headers(false) });
+    return handle<{ acknowledgedAll: boolean; vertical: string; by: string }>(res);
+  },
 };
 
 // ---- Mesh DTOs ----
@@ -1172,4 +1328,235 @@ export interface MeshLogsResponseDto {
   limit: number;
   level: string;
   logs: LogEntryDto[];
+}
+
+// ---- Backup DTOs (task_063 / Phase 7 task_094) ----
+
+/**
+ * Mirrors `BackupComponents` (Backup/Models.cs). All flags indicate which
+ * subsystems were included in the archive.
+ */
+export interface BackupComponentsDto {
+  config: boolean;
+  skills: boolean;
+  memory: boolean;
+  sqlite_db: boolean;
+  identity: boolean;
+}
+
+/**
+ * Mirrors `BackupSummary` (Backup/Models.cs) — the per-archive row returned
+ * by `GET /api/backups`. Field names use snake_case because the backend
+ * serialises them via `[JsonPropertyName]` attributes.
+ */
+export interface BackupSummaryDto {
+  id: string;
+  filename: string;
+  created_at: string;
+  size_bytes: number;
+  encrypted: boolean;
+  key_fingerprint: string | null;
+  components: BackupComponentsDto;
+  files_count: number;
+}
+
+/**
+ * Mirrors `BackupResult` (Backup/Models.cs) — returned by `POST /api/backups`.
+ * `Duration` is serialised as a TimeSpan and arrives as an ISO 8601 duration
+ * string (e.g. "PT1.234S").
+ */
+export interface BackupResultDto {
+  BackupId: string;
+  ArchivePath: string;
+  SizeBytes: number;
+  UncompressedBytes: number;
+  FilesCount: number;
+  Encrypted: boolean;
+  KeyFingerprint: string | null;
+  Duration: string;
+  Warnings: string[];
+}
+
+/**
+ * Mirrors `RestoreResult` (Backup/Models.cs) — returned by
+ * `POST /api/backups/{id}/restore`. `Success=false` with non-empty `Errors`
+ * yields HTTP 422.
+ */
+export interface RestoreResultDto {
+  BackupId: string;
+  Success: boolean;
+  FilesRestored: number;
+  FilesSkipped: number;
+  Errors: string[];
+  Warnings: string[];
+  Duration: string;
+}
+
+/**
+ * Mirrors `VerifyResult` (Backup/Models.cs) — returned by
+ * `GET /api/backups/{id}/verify`. `Valid=false` yields HTTP 422.
+ */
+export interface VerifyResultDto {
+  BackupId: string;
+  Valid: boolean;
+  Encrypted: boolean;
+  KeyFingerprint: string | null;
+  FileHashesValid: string[];
+  FileHashesInvalid: string[];
+  Warnings: string[];
+  Duration: string;
+}
+
+// ---- SLO DTOs (task_064 / Phase 7 task_094) ----
+
+/**
+ * Mirrors `SloAlertThresholds` (Slo/SloTypes.cs). All fields are nullable
+ * — when null, the config default applies.
+ */
+export interface SloAlertThresholdsDto {
+  availability_warning_pct?: number | null;
+  availability_critical_pct?: number | null;
+  response_time_warning_ms?: number | null;
+  response_time_critical_ms?: number | null;
+  data_loss_warning_per_day?: number | null;
+  data_loss_critical_per_day?: number | null;
+  recovery_time_warning_minutes?: number | null;
+  recovery_time_critical_minutes?: number | null;
+  cost_warning_pct?: number | null;
+  cost_critical_pct?: number | null;
+}
+
+/**
+ * Mirrors `SloRunbook` (Slo/SloTypes.cs) — one entry per breach type.
+ */
+export interface SloRunbookDto {
+  title: string;
+  symptoms: string[];
+  diagnosis_steps: string[];
+  mitigation_steps: string[];
+  escalation_trigger: string;
+}
+
+/**
+ * Mirrors `SloRunbooks` (Slo/SloTypes.cs).
+ */
+export interface SloRunbooksDto {
+  availability: SloRunbookDto;
+  response_time: SloRunbookDto;
+  data_loss: SloRunbookDto;
+  recovery_time: SloRunbookDto;
+  cost: SloRunbookDto;
+}
+
+/**
+ * Mirrors `SloDefinition` (Slo/SloTypes.cs) — returned by
+ * `GET /api/slos/{vertical}/definition`.
+ *
+ * Targets are stored as raw values:
+ *  - `availabilityTarget` is a decimal fraction (0.999 = 99.9%)
+ *  - `responseTimeTargetMs` is P95 latency in milliseconds
+ *  - `dataLossTargetPerDay` is the maximum allowed lost events per day
+ *  - `recoveryTimeTargetMinutes` is the maximum recovery time in minutes
+ *  - `costTargetUsd` is the daily cost budget in USD
+ */
+export interface SloDefinitionDto {
+  vertical: string;
+  description: string;
+  version: string;
+  availabilityTarget: number;
+  responseTimeTargetMs: number;
+  dataLossTargetPerDay: number;
+  recoveryTimeTargetMinutes: number;
+  costTargetUsd: number;
+  alertThresholds: SloAlertThresholdsDto | null;
+  runbooks: SloRunbooksDto;
+}
+
+/**
+ * Mirrors `SloObjectiveStatus` (Slo/SloTypes.cs) — per-objective entry in
+ * `SloStatus.Objectives`. `severity` is "Ok" | "Warning" | "Critical".
+ * `targetAchievementPct` is computed server-side and capped at 200.
+ */
+export interface SloObjectiveStatusDto {
+  objective: string;
+  severity: string;
+  currentValue: number;
+  targetValue: number;
+  unit: string;
+  targetAchievementPct: number;
+  breachDescription: string;
+}
+
+/**
+ * Mirrors `SloViolationRecord` (Slo/SloTypes.cs). `severity` is
+ * "Ok" | "Warning" | "Critical".
+ */
+export interface SloViolationRecordDto {
+  violationId: string;
+  vertical: string;
+  objective: string;
+  severity: string;
+  detectedAt: string;
+  resolvedAt: string | null;
+  actualValue: number;
+  targetValue: number;
+  breachDescription: string;
+  isAcknowledged: boolean;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+}
+
+/**
+ * Mirrors `SloStatus` (Slo/SloTypes.cs) — returned by
+ * `GET /api/slos/{vertical}` and embedded in `SloSummary.Verticals`.
+ */
+export interface SloStatusDto {
+  vertical: string;
+  overallSeverity: string;
+  timestamp: string;
+  objectives: SloObjectiveStatusDto[];
+  recentViolations: SloViolationRecordDto[];
+  isAcknowledged: boolean;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+}
+
+/**
+ * Mirrors `SloComplianceSummary` (Slo/SloTypes.cs) — historical compliance
+ * over the configured reporting window (default 7 days).
+ */
+export interface SloComplianceSummaryDto {
+  windowDays: number;
+  availabilityAchievementPct: number;
+  responseTimeAchievementPct: number;
+  dataLossEventsTotal: number;
+  maxRecoveryTimeMinutes: number;
+  totalCostUsd: number;
+  overallCompliancePct: number;
+}
+
+/**
+ * Mirrors `SloReport` (Slo/SloTypes.cs) — returned by
+ * `GET /api/slos/{vertical}/report`.
+ */
+export interface SloReportDto {
+  vertical: string;
+  generatedAt: string;
+  currentStatus: SloStatusDto;
+  definition: SloDefinitionDto;
+  compliance: SloComplianceSummaryDto;
+}
+
+/**
+ * Mirrors `SloSummary` (Slo/SloTypes.cs) — returned by `GET /api/slos`.
+ * `totalVerticals`, `okCount`, `warningCount`, `criticalCount` are computed
+ * server-side from `verticals[]`.
+ */
+export interface SloSummaryDto {
+  timestamp: string;
+  verticals: SloStatusDto[];
+  totalVerticals: number;
+  okCount: number;
+  warningCount: number;
+  criticalCount: number;
 }

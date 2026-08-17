@@ -1,0 +1,20 @@
+---
+import Layout from "../layouts/Layout.astro";
+import BackupPanel from "../components/BackupPanel.astro";
+import SloPanel from "../components/SloPanel.astro";
+---
+
+<Layout title="Hercules · Operations" active="ops">
+  <div class="mb-4">
+    <h1 class="text-xl font-semibold text-white">Operations</h1>
+    <p class="text-sm text-gray-400">
+      Backup &amp; restore, SLO-здоровье по verticals. Критичные операционные действия.
+      <span class="text-gray-500">(Phase 7 task_094)</span>
+    </p>
+  </div>
+
+  <div class="flex flex-col gap-8">
+    <BackupPanel />
+    <SloPanel />
+  </div>
+</Layout>

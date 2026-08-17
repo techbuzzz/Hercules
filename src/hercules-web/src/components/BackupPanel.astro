@@ -1,0 +1,446 @@
+---
+// Backup Panel (Phase 7 task_094).
+// Ручной backup, восстановление из архива, верификация, удаление.
+// Таблица существующих архивов с per-row действиями. 15s auto-refresh (opt-in).
+---
+
+<div class="flex flex-col gap-5" id="backup-panel">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">Backup</h2>
+      <p class="text-xs text-gray-500">
+        Создание, верификация и восстановление архивов (config, skills, memory, sqlite, identity).
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="bp-updated" class="text-xs text-gray-600"></span>
+      <label class="flex items-center gap-1 text-[11px] text-gray-400">
+        <input id="bp-autorefresh" type="checkbox" class="rounded border-white/20 bg-[#0a0a0b]" />
+        авто (15s)
+      </label>
+      <button id="bp-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- Error / OK banners -->
+  <div id="bp-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+  <div id="bp-ok" class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"></div>
+
+  <!-- Create backup form -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">Создать новый архив</h3>
+    <form id="bp-create-form" class="flex flex-wrap items-end gap-2">
+      <div class="flex-1 min-w-[16rem]">
+        <label for="bp-passphrase" class="mb-1 block text-[11px] text-gray-500">
+          Passphrase (опц., перекрывает конфиг; пусто = без шифрования)
+        </label>
+        <input id="bp-passphrase" type="password" placeholder="(использовать passphrase из конфига)"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+      </div>
+      <button type="submit" id="bp-create-submit"
+        class="rounded-lg border border-violet-500/40 bg-violet-500/15 px-4 py-2 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-50">
+        Create backup
+      </button>
+    </form>
+  </section>
+
+  <!-- Backups table -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-2 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Архивы
+        <span id="bp-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+      </h3>
+    </div>
+    <div id="bp-empty" class="hidden py-6 text-center text-xs text-gray-500">
+      Архивов пока нет. Нажмите «Create backup» для создания первого.
+    </div>
+    <div id="bp-loading" class="hidden py-6 text-center text-xs text-gray-500">Загрузка…</div>
+    <div id="bp-table-wrap" class="hidden overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <th class="py-2 pr-3 font-medium">ID</th>
+            <th class="py-2 pr-3 font-medium">Created</th>
+            <th class="py-2 pr-3 font-medium text-right">Size</th>
+            <th class="py-2 pr-3 font-medium text-right">Files</th>
+            <th class="py-2 pr-3 font-medium">Components</th>
+            <th class="py-2 pr-3 font-medium">Encryption</th>
+            <th class="py-2 pr-3 font-medium text-right">Действия</th>
+          </tr>
+        </thead>
+        <tbody id="bp-tbody" class="divide-y divide-white/5"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Restore confirm modal (inline) -->
+  <div id="bp-restore-modal" class="hidden fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4">
+    <div class="w-full max-w-md rounded-xl border border-white/15 bg-[#101012] p-5 shadow-2xl">
+      <h3 class="text-sm font-semibold text-white">Восстановление из архива</h3>
+      <p class="mt-1 text-xs text-gray-400">
+        Архив <span id="bp-restore-id" class="mono text-violet-300"></span> будет восстановлен.
+        Перезаписывает существующие файлы данных.
+      </p>
+      <div class="mt-4 space-y-3">
+        <div>
+          <label for="bp-restore-passphrase" class="mb-1 block text-[11px] text-gray-500">
+            Passphrase (обязателен для зашифрованных архивов)
+          </label>
+          <input id="bp-restore-passphrase" type="password" placeholder="(пусто если архив не зашифрован)"
+            class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+        </div>
+        <div>
+          <label for="bp-restore-target" class="mb-1 block text-[11px] text-gray-500">
+            Target dir (опц., дефолт = data root)
+          </label>
+          <input id="bp-restore-target" type="text" placeholder="(default)"
+            class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+        </div>
+        <label class="flex items-start gap-2 text-[11px] text-gray-300">
+          <input id="bp-restore-confirm" type="checkbox" class="mt-0.5 rounded border-white/20 bg-[#0a0a0b]" />
+          <span>
+            Я понимаю, что восстановление <span class="font-semibold text-rose-300">перезапишет</span> текущие
+            config, skills, memory и базу данных. Действие необратимо.
+          </span>
+        </label>
+      </div>
+      <div class="mt-5 flex justify-end gap-2">
+        <button id="bp-restore-cancel" type="button"
+          class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-300 transition-colors hover:bg-white/5">
+          Отмена
+        </button>
+        <button id="bp-restore-submit" type="button" disabled
+          class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-3 py-1.5 text-xs font-medium text-rose-200 transition-colors hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-50">
+          Восстановить
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import {
+    api,
+    type BackupSummaryDto,
+    type BackupResultDto,
+    type VerifyResultDto,
+    type RestoreResultDto,
+    type BackupComponentsDto,
+  } from "../lib/api";
+
+  const errBanner = document.getElementById("bp-error")!;
+  const okBanner = document.getElementById("bp-ok")!;
+  const updatedEl = document.getElementById("bp-updated")!;
+  const refreshBtn = document.getElementById("bp-refresh")!;
+  const autorefreshChk = document.getElementById("bp-autorefresh") as HTMLInputElement;
+
+  const createForm = document.getElementById("bp-create-form") as HTMLFormElement;
+  const createPassphraseInput = document.getElementById("bp-passphrase") as HTMLInputElement;
+  const createSubmit = document.getElementById("bp-create-submit") as HTMLButtonElement;
+
+  const emptyEl = document.getElementById("bp-empty")!;
+  const loadingEl = document.getElementById("bp-loading")!;
+  const tableWrap = document.getElementById("bp-table-wrap")!;
+  const tbody = document.getElementById("bp-tbody")!;
+  const countEl = document.getElementById("bp-count")!;
+
+  // Restore modal elements.
+  const modal = document.getElementById("bp-restore-modal")!;
+  const modalIdEl = document.getElementById("bp-restore-id")!;
+  const modalPassInput = document.getElementById("bp-restore-passphrase") as HTMLInputElement;
+  const modalTargetInput = document.getElementById("bp-restore-target") as HTMLInputElement;
+  const modalConfirmChk = document.getElementById("bp-restore-confirm") as HTMLInputElement;
+  const modalCancelBtn = document.getElementById("bp-restore-cancel")!;
+  const modalSubmitBtn = document.getElementById("bp-restore-submit") as HTMLButtonElement;
+
+  let autorefreshTimer: number | null = null;
+  let pendingRestoreId: string | null = null;
+
+  function escapeHtml(s: string | null | undefined): string {
+    if (s == null) return "";
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = message;
+    errBanner.classList.remove("hidden");
+    okBanner.classList.add("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+  function showOk(message: string, durationMs = 3000): void {
+    okBanner.textContent = message;
+    okBanner.classList.remove("hidden");
+    errBanner.classList.add("hidden");
+    window.setTimeout(() => okBanner.classList.add("hidden"), durationMs);
+  }
+
+  function formatTimestamp(iso: string): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleString();
+  }
+
+  function formatBytes(n: number): string {
+    if (!Number.isFinite(n) || n < 0) return "—";
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+    return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+
+  function formatDuration(iso: string): string {
+    if (!iso) return "—";
+    // Backend serialises TimeSpan as ISO 8601 duration (e.g. "PT1.234S").
+    const m = /^PT(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?$/.exec(iso);
+    if (!m) return escapeHtml(iso);
+    const h = m[1] ? parseFloat(m[1]) : 0;
+    const min = m[2] ? parseFloat(m[2]) : 0;
+    const s = m[3] ? parseFloat(m[3]) : 0;
+    const totalMs = ((h * 3600) + (min * 60) + s) * 1000;
+    if (totalMs < 1000) return `${totalMs.toFixed(0)}ms`;
+    if (totalMs < 60_000) return `${(totalMs / 1000).toFixed(2)}s`;
+    return `${(totalMs / 60_000).toFixed(1)}m`;
+  }
+
+  function componentsPills(c: BackupComponentsDto | null | undefined): string {
+    if (!c) return `<span class="text-[10px] text-gray-500">—</span>`;
+    const items: { key: keyof BackupComponentsDto; label: string }[] = [
+      { key: "config", label: "config" },
+      { key: "skills", label: "skills" },
+      { key: "memory", label: "memory" },
+      { key: "sqlite_db", label: "sqlite" },
+      { key: "identity", label: "identity" },
+    ];
+    return items
+      .map(({ key, label }) => {
+        const enabled = Boolean(c[key]);
+        const cls = enabled
+          ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
+          : "border-white/10 bg-white/5 text-gray-600 line-through";
+        return `<span class="rounded border px-1.5 py-0.5 text-[10px] ${cls}">${label}</span>`;
+      })
+      .join(" ");
+  }
+
+  function encryptionCell(b: BackupSummaryDto): string {
+    if (!b.encrypted) {
+      return `<span class="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300">plain</span>`;
+    }
+    const fp = b.key_fingerprint
+      ? `<div class="mono mt-0.5 text-[10px] text-gray-500">fp: ${escapeHtml(b.key_fingerprint)}</div>`
+      : "";
+    return `<div>
+      <span class="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-300">encrypted</span>
+      ${fp}
+    </div>`;
+  }
+
+  function renderTable(items: BackupSummaryDto[]): void {
+    if (items.length === 0) {
+      emptyEl.classList.remove("hidden");
+      tableWrap.classList.add("hidden");
+      countEl.textContent = "";
+      tbody.innerHTML = "";
+      return;
+    }
+    emptyEl.classList.add("hidden");
+    tableWrap.classList.remove("hidden");
+    countEl.textContent = `(${items.length})`;
+
+    // Sort newest first by created_at (ISO strings sort correctly).
+    const sorted = [...items].sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+
+    tbody.innerHTML = sorted
+      .map((b) => `
+        <tr data-backup-id="${escapeHtml(b.id)}">
+          <td class="py-2 pr-3 align-top">
+            <div class="mono text-xs text-white">${escapeHtml(b.id)}</div>
+            <div class="mono text-[10px] text-gray-500 truncate max-w-[14rem]">${escapeHtml(b.filename)}</div>
+          </td>
+          <td class="py-2 pr-3 align-top text-gray-300" title="${escapeHtml(b.created_at)}">${formatTimestamp(b.created_at)}</td>
+          <td class="py-2 pr-3 text-right align-top text-gray-300">${formatBytes(b.size_bytes)}</td>
+          <td class="py-2 pr-3 text-right align-top text-gray-400">${b.files_count}</td>
+          <td class="py-2 pr-3 align-top"><div class="flex flex-wrap gap-1">${componentsPills(b.components)}</div></td>
+          <td class="py-2 pr-3 align-top">${encryptionCell(b)}</td>
+          <td class="py-2 pr-3 text-right align-top">
+            <button data-action="verify" data-id="${escapeHtml(b.id)}" type="button"
+              class="mr-1 rounded border border-white/10 px-2 py-0.5 text-[11px] text-gray-300 transition-colors hover:bg-white/5">Verify</button>
+            <button data-action="restore" data-id="${escapeHtml(b.id)}" type="button"
+              class="mr-1 rounded border border-amber-500/30 px-2 py-0.5 text-[11px] text-amber-300 transition-colors hover:bg-amber-500/10">Restore</button>
+            <button data-action="delete" data-id="${escapeHtml(b.id)}" data-filename="${escapeHtml(b.filename)}" type="button"
+              class="rounded border border-rose-500/30 px-2 py-0.5 text-[11px] text-rose-300 transition-colors hover:bg-rose-500/10">Delete</button>
+          </td>
+        </tr>`)
+      .join("");
+  }
+
+  async function loadBackups(silent = false): Promise<void> {
+    if (!silent) clearError();
+    if (!silent) loadingEl.classList.remove("hidden");
+    try {
+      const items = await api.listBackups();
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+      renderTable(items);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить архивы: ${msg}`);
+      renderTable([]);
+    } finally {
+      if (!silent) loadingEl.classList.add("hidden");
+    }
+  }
+
+  async function handleCreate(ev: Event): Promise<void> {
+    ev.preventDefault();
+    clearError();
+    const passphrase = createPassphraseInput.value.trim();
+    createSubmit.disabled = true;
+    try {
+      const result: BackupResultDto = await api.createBackup(passphrase || undefined);
+      showOk(`Backup ${result.BackupId} создан (${formatBytes(result.SizeBytes)}, ${result.FilesCount} файлов, ${formatDuration(result.Duration)}).`);
+      createPassphraseInput.value = "";
+      await loadBackups();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Create backup failed: ${msg}`);
+    } finally {
+      createSubmit.disabled = false;
+    }
+  }
+
+  async function handleVerify(id: string): Promise<void> {
+    clearError();
+    try {
+      const r: VerifyResultDto = await api.verifyBackup(id);
+      if (r.Valid) {
+        showOk(`Backup ${id} валиден: ${r.FileHashesValid.length} файлов проверено (${formatDuration(r.Duration)}).`, 4000);
+      } else {
+        const invalid = r.FileHashesInvalid.length;
+        showError(`Backup ${id} повреждён: ${invalid} файлов с неверным hash.${r.Warnings.length ? " " + r.Warnings.join("; ") : ""}`);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Verify failed: ${msg}`);
+    }
+  }
+
+  function openRestore(id: string): void {
+    pendingRestoreId = id;
+    modalIdEl.textContent = id;
+    modalPassInput.value = "";
+    modalTargetInput.value = "";
+    modalConfirmChk.checked = false;
+    modalSubmitBtn.disabled = true;
+    modal.classList.remove("hidden");
+    modalPassInput.focus();
+  }
+
+  function closeRestore(): void {
+    pendingRestoreId = null;
+    modal.classList.add("hidden");
+  }
+
+  async function handleRestoreSubmit(): Promise<void> {
+    if (!pendingRestoreId) return;
+    clearError();
+    modalSubmitBtn.disabled = true;
+    try {
+      const r: RestoreResultDto = await api.restoreBackup(
+        pendingRestoreId,
+        modalPassInput.value || undefined,
+        modalTargetInput.value.trim() || undefined,
+      );
+      const parts: string[] = [];
+      if (r.Success) {
+        parts.push(`OK: восстановлено ${r.FilesRestored} файлов, пропущено ${r.FilesSkipped} (${formatDuration(r.Duration)}).`);
+        if (r.Warnings.length) parts.push(`warnings: ${r.Warnings.join("; ")}`);
+        showOk(parts.join(" "), 5000);
+      } else {
+        parts.push(`FAIL: errors: ${r.Errors.join("; ")}`);
+        if (r.Warnings.length) parts.push(`warnings: ${r.Warnings.join("; ")}`);
+        showError(parts.join(" "));
+      }
+      closeRestore();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Restore failed: ${msg}`);
+    } finally {
+      modalSubmitBtn.disabled = false;
+    }
+  }
+
+  async function handleDelete(id: string, filename: string): Promise<void> {
+    if (!window.confirm(`Удалить backup ${id} (${filename})? Действие необратимо.`)) return;
+    clearError();
+    try {
+      await api.deleteBackup(id);
+      showOk(`Backup ${id} удалён.`, 2500);
+      await loadBackups();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Delete failed: ${msg}`);
+    }
+  }
+
+  function startAutorefresh(): void {
+    if (autorefreshTimer != null) return;
+    autorefreshTimer = window.setInterval(() => {
+      void loadBackups(true);
+    }, 15_000);
+  }
+  function stopAutorefresh(): void {
+    if (autorefreshTimer != null) {
+      window.clearInterval(autorefreshTimer);
+      autorefreshTimer = null;
+    }
+  }
+
+  // Event wiring.
+  refreshBtn.addEventListener("click", () => { void loadBackups(); });
+  autorefreshChk.addEventListener("change", () => {
+    if (autorefreshChk.checked) startAutorefresh();
+    else stopAutorefresh();
+  });
+  createForm.addEventListener("submit", (ev) => { void handleCreate(ev); });
+  tbody.addEventListener("click", (ev) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target) return;
+    const btn = target.closest("button[data-action]") as HTMLButtonElement | null;
+    if (!btn) return;
+    const id = btn.dataset.id;
+    const action = btn.dataset.action;
+    if (!id || !action) return;
+    if (action === "verify") void handleVerify(id);
+    else if (action === "restore") openRestore(id);
+    else if (action === "delete") void handleDelete(id, btn.dataset.filename || id);
+  });
+  modalCancelBtn.addEventListener("click", () => closeRestore());
+  modalSubmitBtn.addEventListener("click", () => { void handleRestoreSubmit(); });
+  modalConfirmChk.addEventListener("change", () => {
+    modalSubmitBtn.disabled = !modalConfirmChk.checked;
+  });
+  modal.addEventListener("click", (ev) => {
+    if (ev.target === modal) closeRestore();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !modal.classList.contains("hidden")) closeRestore();
+  });
+
+  // Initial load.
+  void loadBackups();
+</script>

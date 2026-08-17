@@ -61,6 +61,8 @@ src/
 │   ├── TrustAdmissionPanel.astro# Trust admission policy status + dry-run (task_091)
 │   └── MeshProfilePanel.astro# Active profile, effective backends, live backend health, degradation policy (task_092)
 │   └── MeshObservabilityPanel.astro# Mesh counters + recent traces/logs (task_093)
+│   └── BackupPanel.astro# Backup create / verify / restore / delete (task_094)
+│   └── SloPanel.astro# SLO summary + per-vertical objectives, violations, ack (task_094)
 ├── pages/
 │   ├── index.astro         # Чат
 │   ├── skills.astro        # Список + создание/редактирование/улучшение
@@ -69,6 +71,7 @@ src/
 │   ├── stats.astro         # Статистика
 │   ├── memmesh.astro       # Mesh dashboard + router + escalation
 │   ├── observability.astro # Mesh counters + recent traces/logs (task_093)
+│   ├── ops.astro           # Backup + SLO операционная панель (task_094)
 │   └── a2a.astro           # A2A Agent Card (локальная карта + import/discover)
 ├── lib/
 │   └── api.ts              # Клиент Hercules Web API + DTO
@@ -132,6 +135,17 @@ UI дёргает следующие эндпоинты (см. `src/lib/api.ts`)
 | GET    | `/api/mesh/observability/counters` | Только counters: totals + byCapability + byPeer |
 | GET    | `/api/mesh/observability/traces?limit=N` | Список последних завершённых traces (task_093) |
 | GET    | `/api/mesh/observability/logs?limit=N&level=info` | Список последних log-entries (task_093) |
+| GET    | `/api/backups`                       | Список backup-архивов (task_094) |
+| POST   | `/api/backups`                       | Создать новый backup (task_094) |
+| POST   | `/api/backups/{id}/restore`          | Восстановить из архива (task_094) |
+| GET    | `/api/backups/{id}/verify`           | Проверить целостность архива (task_094) |
+| DELETE | `/api/backups/{id}`                  | Удалить backup-архив (task_094) |
+| GET    | `/api/slos`                          | Сводка по SLO verticals (task_094) |
+| GET    | `/api/slos/{vertical}/definition`    | SLO-определение вертикали (task_094) |
+| GET    | `/api/slos/{vertical}`               | Текущий SLO-статус вертикали (task_094) |
+| GET    | `/api/slos/{vertical}/report`        | Полный SLO-отчёт + compliance (task_094) |
+| POST   | `/api/slos/{vertical}/ack/{violationId}` | Ack конкретного нарушения (task_094) |
+| POST   | `/api/slos/{vertical}/ack`           | Ack всех нарушений вертикали (task_094) |
 
 Все запросы отправляют заголовок `X-Api-Key: $PUBLIC_API_KEY`. Backend CORS по умолчанию разрешает `http://localhost:4321` и `http://127.0.0.1:4321` (см. `WebApi.AllowedCorsOrigins` в `appsettings.json`).
 
