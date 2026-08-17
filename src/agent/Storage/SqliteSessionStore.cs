@@ -7,7 +7,7 @@ namespace Hercules.Storage;
 /// <summary>
 ///     Хранилище сессий, логов взаимодействий и метрик в SQLite.
 /// </summary>
-public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
+public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable, ISessionStore
 {
     private readonly SqliteConnection _conn;
     // task_071: Serialise access to the shared SqliteConnection.

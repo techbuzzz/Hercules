@@ -427,6 +427,26 @@ builder.Services.AddSingleton<MemoryStore>(sp =>
         sp.GetRequiredService<ISecretMaskingService>()));
 builder.Services.AddSingleton<SqliteSessionStore>();
 
+// task_103: session store backend selection (sqlite | postgres). The
+// ISessionStore contract is satisfied by SqliteSessionStore by default; set
+// Storage.SessionStore.Provider = "postgres" + ConnectionString to switch
+// to the shared Npgsql-backed store. SqliteSessionStore stays registered as
+// a concrete type so consumers that need the SQLite-specific escape
+// hatches (SqliteOutboxStore, SqliteTaskRepository, SqliteDistillationStore,
+// SkillQualityStore) keep compiling unchanged.
+var sessionStoreCfg = builder.Configuration.GetSection("Storage:SessionStore").Get<SessionStoreBackendConfig>()
+    ?? new SessionStoreBackendConfig();
+if (string.Equals(sessionStoreCfg.Provider, "postgres", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<ISessionStore>(sp => new PostgresSessionStore(
+        sessionStoreCfg,
+        sp.GetRequiredService<StorageConfig>()));
+}
+else
+{
+    builder.Services.AddSingleton<ISessionStore>(sp => sp.GetRequiredService<SqliteSessionStore>());
+}
+
 // task_079: Outbox store (optional, used by OutboxHealthCheck and DegradationManager)
 builder.Services.AddSingleton<IOutboxStore>(sp =>
     new SqliteOutboxStore(

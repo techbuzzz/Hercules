@@ -777,6 +777,60 @@ public sealed class StorageConfig
     public string MemoryDir { get; set; } = "Memory";
     public string SqliteFile { get; set; } = "sessions.db";
     public Phase2Config? Phase2 { get; set; }
+
+    /// <summary>
+    ///     task_103: backend selection for the session store. Defaults to the
+    ///     legacy local SQLite file (<c>"sqlite"</c>); set
+    ///     <c>Provider = "postgres"</c> and a connection string to switch to a
+    ///     shared Npgsql-backed store (e.g. for "collective mind" deployments).
+    /// </summary>
+    public SessionStoreBackendConfig SessionStore { get; set; } = new();
+
+    /// <summary>
+    ///     task_103: collective-mind mode knobs — when enabled, multiple agents
+    ///     can read/write the same session-store namespace. <c>SessionIsolation</c>
+    ///     controls per-agent vs shared session visibility; <c>SharedMemory</c>
+    ///     toggles a common memory namespace.
+    /// </summary>
+    public CollectiveMindConfig CollectiveMind { get; set; } = new();
+}
+
+/// <summary>
+///     task_103: selects the concrete <see cref="Hercules.Storage.ISessionStore"/>
+///     implementation at startup. Defaults preserve the previous SQLite-on-disk
+///     behaviour (the SQLite file path lives in
+///     <see cref="StorageConfig.SqliteFile"/> + <see cref="StorageConfig.DataRoot"/>).
+/// </summary>
+public sealed class SessionStoreBackendConfig
+{
+    /// <summary>Backend provider: <c>sqlite</c> (default) or <c>postgres</c>.</summary>
+    public string Provider { get; set; } = "sqlite";
+
+    /// <summary>
+    ///     Npgsql connection string. Required when <see cref="Provider"/> is
+    ///     <c>postgres</c>; ignored for <c>sqlite</c>. Reuses the same
+    ///     connection pool as <c>PostgresMeshConfig</c> when present.
+    /// </summary>
+    public string? ConnectionString { get; set; }
+
+    /// <summary>Optional schema name (default <c>public</c>). Only used by <c>postgres</c>.</summary>
+    public string Schema { get; set; } = "public";
+}
+
+/// <summary>
+///     task_103: collective-mind mode for multi-agent deployments. Disabled by
+///     default; each agent runs against its own isolated session store as before.
+/// </summary>
+public sealed class CollectiveMindConfig
+{
+    /// <summary>Master switch. When false, <see cref="SharedMemory"/> and <see cref="SessionIsolation"/> are ignored.</summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>When true, agents share a common memory namespace via the session store.</summary>
+    public bool SharedMemory { get; set; } = false;
+
+    /// <summary>Session visibility: <c>per-agent</c> (default) or <c>shared</c>.</summary>
+    public string SessionIsolation { get; set; } = "per-agent";
 }
 
 /// <summary>
