@@ -150,7 +150,7 @@
 | 90 | 48 | [Discovery panel](tasks/completed/task_090.md) | `web-discovery-panel` | done |
 | 91 | 48 | [Trust admission policy panel](tasks/completed/task_091.md) | `web-trust-admission-panel` | done |
 | 92 | 48 | [Mesh profiles & backend health](tasks/task_092.md) | `web-mesh-profiles-health` | pending |
-| 93 | 48 | [Mesh observability & centralized logs](tasks/task_093.md) | `web-mesh-observability` | pending |
+| 93 | 48 | [Mesh observability & centralized logs](tasks/completed/task_093.md) | `web-mesh-observability` | done |
 | 94 | 48 | [Backup & SLO panel](tasks/task_094.md) | `web-backup-slo-panel` | pending |
 | 95 | 48 | [Security, quotas & rollout panel](tasks/task_095.md) | `web-security-quotas-rollout` | pending |
 
