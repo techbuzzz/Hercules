@@ -5,6 +5,7 @@ import EscalationPanel from "../components/EscalationPanel.astro";
 import MeshDashboard from "../components/MeshDashboard.astro";
 import CapabilityRegistryPanel from "../components/CapabilityRegistryPanel.astro";
 import DiscoveryPanel from "../components/DiscoveryPanel.astro";
+import TrustAdmissionPanel from "../components/TrustAdmissionPanel.astro";
 ---
 
 <Layout title="Hercules · Mesh" active="mesh">
@@ -30,5 +31,10 @@ import DiscoveryPanel from "../components/DiscoveryPanel.astro";
   <!-- Capability registry (Phase 7 task_089) -->
   <div class="mt-6">
     <CapabilityRegistryPanel />
+  </div>
+
+  <!-- Trust admission policy (Phase 7 task_091) -->
+  <div class="mt-6">
+    <TrustAdmissionPanel />
   </div>
 </Layout>

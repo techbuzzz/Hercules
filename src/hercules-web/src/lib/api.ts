@@ -429,6 +429,29 @@ export const api = {
     await handle<{ status: string; agentId: string }>(res);
   },
 
+  // ---- Trust admission policy (Phase 3 task_040 / Phase 7 task_091) ----
+
+  /** Get the current trust admission policy configuration and effective mode. */
+  async getPolicyStatus(): Promise<TrustAdmissionPolicyStatusDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/policy/status`, { headers: headers(false) });
+    return handle<TrustAdmissionPolicyStatusDto>(res);
+  },
+
+  /**
+   * Evaluate a request against the current trust admission policy without
+   * actually sending the intent. The backend returns whether the request
+   * would be allowed, the reason and code for a denial, and the effective
+   * mode (Enforce/DryRun/Disabled) at the time of evaluation.
+   */
+  async dryRunPolicy(req: TrustAdmissionDryRunRequestDto): Promise<TrustAdmissionDryRunResultDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/policy/dry-run`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(req),
+    });
+    return handle<TrustAdmissionDryRunResultDto>(res);
+  },
+
   // ---- Discovery mechanisms (Phase 3 task_038 / Phase 7 task_090) ----
 
   /**
@@ -717,6 +740,68 @@ export interface MeshCapabilityDto {
   name: string;
   description: string;
   phraseReceivers: string[];
+}
+
+// ---- Trust admission policy (Phase 3 task_040 / Phase 7 task_091) ----
+
+/**
+ * Mirrors the anonymous payload of GET /api/mesh/policy/status.
+ * `mode` is lowercase ("enforce" | "dryrun" | "disabled"); `enabled`
+ * indicates whether the policy subsystem is switched on at all. The
+ * per-list fields default to "allow everything" when the array is empty.
+ */
+export interface TrustAdmissionPolicyStatusDto {
+  enabled: boolean;
+  mode: string;
+  allowedTrustLevels: string[];
+  allowedIntents: string[];
+  allowedClassifications: string[];
+  allowSchemaMismatch: boolean;
+  allowBudgetExceeded: boolean;
+  allowedRiskLevels: string[];
+}
+
+/**
+ * Minimal `IntentEnvelope` shape required by the dry-run endpoint.
+ * Only the fields that the policy engine inspects are typed here;
+ * extra fields from a real envelope are allowed but ignored.
+ */
+export interface TrustAdmissionIntentEnvelopeDto {
+  request_id: string;
+  sender: string;
+  intent: string;
+  payload: string;
+  version: string;
+}
+
+/**
+ * Request body for POST /api/mesh/policy/dry-run.
+ * The required `envelope` carries intent + payload; the rest are the
+ * caller-side attributes that the policy engine checks.
+ */
+export interface TrustAdmissionDryRunRequestDto {
+  envelope: TrustAdmissionIntentEnvelopeDto;
+  targetAgentId?: string | null;
+  callerTrustLevel?: string | null;
+  dataClassification?: string | null;
+  callerSchemaVersion?: string | null;
+  requestedRiskLevel?: string | null;
+}
+
+/**
+ * Mirrors the anonymous payload of POST /api/mesh/policy/dry-run.
+ * `denialCode` is one of: "TrustLevelTooLow", "IntentNotAllowed",
+ * "ClassificationTooHigh", "SchemaVersionMismatch", "BudgetLimitExceeded",
+ * "RiskLevelMismatch" — or null when allowed. `dryRun` reflects whether
+ * the evaluation ran in dry-run mode at the time; `effectiveMode` is the
+ * mode the policy was in (Enforce/DryRun/Disabled).
+ */
+export interface TrustAdmissionDryRunResultDto {
+  allowed: boolean;
+  denialReason: string | null;
+  denialCode: string | null;
+  dryRun: boolean;
+  effectiveMode: string;
 }
 
 // ---- Discovery mechanisms (Phase 3 task_038 / Phase 7 task_090) ----

@@ -57,7 +57,8 @@ src/
 │   ├── EscalationPanel.astro# HITL эскалация (task_049)
 │   ├── AgentCardPanel.astro# A2A Agent Card view/import/discover (task_088)
 │   ├── CapabilityRegistryPanel.astro# Peer-агенты: trust/health/capabilities, Touch/Remove (task_089)
-│   └── DiscoveryPanel.astro# Discovery-источники + discovered peer-агенты, Refresh + diff (task_090)
+│   ├── DiscoveryPanel.astro# Discovery-источники + discovered peer-агенты, Refresh + diff (task_090)
+│   └── TrustAdmissionPanel.astro# Trust admission policy status + dry-run (task_091)
 ├── pages/
 │   ├── index.astro         # Чат
 │   ├── skills.astro        # Список + создание/редактирование/улучшение
@@ -116,6 +117,8 @@ UI дёргает следующие эндпоинты (см. `src/lib/api.ts`)
 | GET    | `/api/a2a/agent-card/from`      | Import remote Agent Card по URL  |
 | POST   | `/api/a2a/discover`             | Batch discover по списку URL     |
 | POST   | `/api/a2a/agent-card/publish`   | Принудительная публикация        |
+| GET    | `/api/mesh/policy/status`       | Текущая trust admission policy    |
+| POST   | `/api/mesh/policy/dry-run`      | Dry-run evaluation без отправки   |
 
 Все запросы отправляют заголовок `X-Api-Key: $PUBLIC_API_KEY`. Backend CORS по умолчанию разрешает `http://localhost:4321` и `http://127.0.0.1:4321` (см. `WebApi.AllowedCorsOrigins` в `appsettings.json`).
 
