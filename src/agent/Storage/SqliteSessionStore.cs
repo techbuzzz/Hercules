@@ -1169,6 +1169,113 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable
         return GetAuditLogByTargetAsync(target, limit).GetAwaiter().GetResult();
     }
 
+    /// <summary>
+    ///     [task_087] Filterable audit-log query. Builds a parameterised SQL
+    ///     statement with a WHERE clause per non-null <see cref="AuditLogQuery"/>
+    ///     property; the previous <c>AuditService.QueryAsync</c> implementation
+    ///     silently dropped all filters and always returned the most recent N
+    ///     rows. This method honours actor / action / target / sessionId /
+    ///     toolName / result / from / to / limit at the database level, so the
+    ///     API endpoint no longer needs to over-fetch and filter in memory.
+    /// </summary>
+    public async Task<List<AuditLogEntry>> GetAuditLogQueryAsync(AuditLogQuery query, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        // task_071: serialise concurrent access to the shared connection.
+        await _connLock.WaitAsync(ct);
+        try
+        {
+            var list = new List<AuditLogEntry>();
+            using SqliteCommand cmd = _conn.CreateCommand();
+
+            // Build the dynamic WHERE clause. String equality is case-insensitive
+            // on SQLite by default for ASCII columns; created_at is stored as ISO
+            // 8601 so lexicographic comparison matches chronological order.
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("""
+                          SELECT id, actor, action, target, details, session_id, created_at,
+                                 request_id, tool_name, policy_decision, permission_used, result, payload_hash
+                          FROM audit_log
+                          WHERE 1=1
+                          """);
+
+            if (!string.IsNullOrEmpty(query.Actor))
+            {
+                sb.AppendLine(" AND actor = $actor");
+                cmd.Parameters.AddWithValue("$actor", query.Actor);
+            }
+            if (!string.IsNullOrEmpty(query.Action))
+            {
+                sb.AppendLine(" AND action = $action");
+                cmd.Parameters.AddWithValue("$action", query.Action);
+            }
+            if (!string.IsNullOrEmpty(query.Target))
+            {
+                sb.AppendLine(" AND target = $target");
+                cmd.Parameters.AddWithValue("$target", query.Target);
+            }
+            if (!string.IsNullOrEmpty(query.SessionId))
+            {
+                sb.AppendLine(" AND session_id = $sessionId");
+                cmd.Parameters.AddWithValue("$sessionId", query.SessionId);
+            }
+            if (!string.IsNullOrEmpty(query.ToolName))
+            {
+                sb.AppendLine(" AND tool_name = $toolName");
+                cmd.Parameters.AddWithValue("$toolName", query.ToolName);
+            }
+            if (!string.IsNullOrEmpty(query.Result))
+            {
+                sb.AppendLine(" AND result = $result");
+                cmd.Parameters.AddWithValue("$result", query.Result);
+            }
+            if (query.From.HasValue)
+            {
+                sb.AppendLine(" AND created_at >= $from");
+                cmd.Parameters.AddWithValue("$from", query.From.Value.ToString("o"));
+            }
+            if (query.To.HasValue)
+            {
+                sb.AppendLine(" AND created_at < $to");
+                cmd.Parameters.AddWithValue("$to", query.To.Value.ToString("o"));
+            }
+
+            sb.AppendLine(" ORDER BY id DESC");
+            sb.AppendLine(" LIMIT $limit");
+            cmd.Parameters.AddWithValue("$limit", query.EffectiveLimit);
+
+            cmd.CommandText = sb.ToString();
+
+            using SqliteDataReader r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                list.Add(new AuditLogEntry(
+                    r.GetInt64(0),
+                    r.GetString(1),
+                    r.GetString(2),
+                    r.IsDBNull(3) ? null : r.GetString(3),
+                    r.IsDBNull(4) ? null : r.GetString(4),
+                    r.IsDBNull(5) ? null : r.GetString(5),
+                    DateTime.Parse(r.GetString(6)))
+                {
+                    RequestId = r.IsDBNull(7) ? null : r.GetString(7),
+                    ToolName = r.IsDBNull(8) ? null : r.GetString(8),
+                    PolicyDecision = r.IsDBNull(9) ? null : r.GetString(9),
+                    PermissionUsed = r.IsDBNull(10) ? null : r.GetString(10),
+                    Result = r.IsDBNull(11) ? null : r.GetString(11),
+                    PayloadHash = r.IsDBNull(12) ? null : r.GetString(12)
+                });
+            }
+
+            return list;
+        }
+        finally
+        {
+            _connLock.Release();
+        }
+    }
+
     // ---- Skill evaluation history (task_003) ----
 
     public async Task SaveEvaluationResultAsync(

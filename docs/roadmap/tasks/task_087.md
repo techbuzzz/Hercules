@@ -30,7 +30,7 @@
 - [x] `Backup/BackupService.cs` — enforce `MaxSizeMb`: check total backup size before write; if exceeds → log error + abort.
 - [ ] `Slo/SloService.cs:296` — replace simulated P95 with real measurement from `OtelMetrics.HandleDurationHistogram` (or a dedicated latency tracker). Aggregate P95 over last N requests or time window.
 - [ ] `Slo/SloService.cs:371` — replace estimated recovery time with real measurement: track `OfflineSyncService` last offline→online transition duration.
-- [ ] `Audit/AuditService.cs:243-250` — implement all filters in `QueryAsync`: WHERE clauses on actor, action, sessionId, toolName, result, from, to. Delegate to `IAuditLog.QueryAsync` extension.
+- [x] `Audit/AuditService.cs:243-250` — implement all filters in `QueryAsync`: WHERE clauses on actor, action, sessionId, toolName, result, from, to. Delegate to `IAuditLog.QueryAsync` extension.
 - [x] `Offline/NetworkMonitor.cs:99-107` — `ResolveUrl`: если `NetworkPollUrl` empty → fallback to first mesh peer endpoint from `CapabilityRegistry` ИЛИ `https://1.1.1.1` (configurable `NetworkMonitor.FallbackPollUrl`).
 - [ ] `Mesh/.../FanOutOrchestrator` или `MeshRouter` — enforce `FleetPolicy.MaxConcurrentTasksPerAgent` and `MaxFanOutWidth`: read from `FleetTemplateManager.GetActivePolicy()`; reject fan-out exceeding limits.
 - [x] `Mesh/IntentRouter.cs:125` — replace fire-and-forget with `try { await _escalationService.EscalateAsync(...) } catch (Exception ex) { _logger.LogError(ex, ...) }` ИЛИ `Task.Run` with try/catch + log.
@@ -77,15 +77,67 @@ Hardening-фиксы из перечисленных 12 sub-tasks, реализ�
 - `dotnet test --filter "FullyQualifiedName~SharedMemorySyncTests|FullyQualifiedName~Backup|FullyQualifiedName~NetworkMonitor|FullyQualifiedName~IntentRouter|FullyQualifiedName~DelegationBoundary|FullyQualifiedName~MiscHardening"` → **79/79 passed**.
 - Полный прогон `dotnet test` показывает 9 pre-existing failures (NumericValidatorTests, OtelServiceTests, RedisTaskQueueTests.EnqueueAsync_StoresTaskMetadata, ResilientLLMClientSampledLogTests — задокументированы в task_085 notes). Новых регрессий от task_087 нет.
 
-### Remaining work (6 of 12 sub-tasks)
+### Remaining work (4 of 12 sub-tasks)
 
 - [ ] `Mesh/Resilience/ResilientTransport.cs:26,98` — peer semaphore trim
 - [ ] `Slo/SloService.cs:296` — P95 real measurement
 - [ ] `Slo/SloService.cs:371` — recovery time real measurement
-- [ ] `Audit/AuditService.cs:243-250` — filter implementation in QueryAsync
 - [ ] `Mesh/.../FanOutOrchestrator` / `MeshRouter` — enforce FleetPolicy limits
 
 These will be tackled in subsequent ticks.
+
+### Round 2 (this tick) — completed
+
+Audit filter implementation (sub-task #33):
+
+- `Storage/Models.cs` — new `AuditLogQuery` record carrying the filter set
+  (`Actor`, `Action`, `Target`, `SessionId`, `ToolName`, `Result`, `From`, `To`,
+  `Limit`); `EffectiveLimit` clamps non-positive `Limit` to 100 so the SQL
+  parameter can never be zero or negative.
+- `Storage/AuditLogService.cs` — `IAuditLog` extended with a default
+  `QueryAsync(AuditLogQuery, CancellationToken)` (in-memory filter over
+  `GetRecentAsync(Limit*4, …)`, capped at 4000 rows) and an override in
+  `AuditLogService` that delegates to a parameterised SQL query.
+- `Storage/SqliteSessionStore.cs` — `GetAuditLogQueryAsync(AuditLogQuery, …)`
+  builds a dynamic `WHERE 1=1 AND col = $p …` statement, one predicate per
+  non-null filter, parameterised to avoid SQL-injection risk; honours
+  `created_at` as ISO 8601 so lexicographic comparison matches chronological
+  order. Uses the existing `_connLock` (task_071) for thread-safety.
+- `Audit/AuditService.cs` — `QueryAsync` now constructs an `AuditLogQuery`
+  from the public parameters and delegates to `IAuditLog.QueryAsync(query)`.
+  The previous implementation silently dropped every filter except `target`,
+  so the audit dashboard could not narrow down by actor / action / session /
+  tool / result / time window.
+
+### Round 2 (this tick) — tests
+
+`tests/Hercules.Agent.Tests/Phase5Tests/AuditServiceFilterTests.cs` — 11
+unit-tests against a real `SqliteSessionStore`:
+
+- `Query_RespectsActorFilter`
+- `Query_RespectsActionFilter`
+- `Query_RespectsToolNameFilter`
+- `Query_RespectsResultFilter`
+- `Query_RespectsSessionIdFilter`
+- `Query_RespectsFromAndToTimeWindow`
+- `Query_CombinesAllFilters`
+- `Query_NoFilters_ReturnsRecent` — backward-compat regression
+- `Query_RespectsLimit`
+- `AuditLogQuery_DefaultsLimitToHundred`
+- `AuditLogQuery_NonPositiveLimit_ClampsToHundred`
+
+### Round 2 (this tick) — validation
+
+- `dotnet build src/agent/Hercules.csproj -c Debug` → 0 errors.
+- `dotnet build tests/Hercules.Agent.Tests/Hercules.Agent.Tests.csproj -c Debug` → 0 errors.
+- `dotnet test --filter "FullyQualifiedName~AuditService|FullyQualifiedName~AuditLogService|FullyQualifiedName~MiscHardening"` → **47/47 passed**
+  (11 new + 9 MiscHardening + 27 existing AuditService).
+- Full `dotnet test` — same 11 pre-existing failures as Round 1
+  (`ProposalStoreCachingTests.CountToday_OnlyIncludesTodayUtc`,
+  `RedisTaskQueueTests.EnqueueAsync_StoresTaskMetadata`,
+  5× `OtelServiceTests`, 2× `NumericValidatorTests`,
+  `ResilientLLMClientSampledLogTests` — all задокументированы в task_085
+  notes). Никаких новых регрессий от task_087.
 
 ## Dependencies
 - блокирует / опирается на: [task_048 — delegation-boundaries](task_048.md)

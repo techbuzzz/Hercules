@@ -259,6 +259,28 @@ public sealed record AuditLogEntry(
 }
 
 /// <summary>
+///     [task_087] Filterable query for <see cref="IAuditLog"/>. Each property is
+///     optional; null/empty means "no filter on this column". A zero or negative
+///     <see cref="Limit"/> is treated as 100. The default in-memory
+///     implementation in <see cref="IAuditLog"/> does post-fetch filtering;
+///     <see cref="AuditLogService"/> pushes the filters into SQL.
+/// </summary>
+public sealed record AuditLogQuery(
+    string? Actor = null,
+    string? Action = null,
+    string? Target = null,
+    string? SessionId = null,
+    string? ToolName = null,
+    string? Result = null,
+    DateTime? From = null,
+    DateTime? To = null,
+    int Limit = 100)
+{
+    /// <summary>Effective row cap (clamps non-positive <see cref="Limit"/> to 100).</summary>
+    public int EffectiveLimit => Limit > 0 ? Limit : 100;
+}
+
+/// <summary>
 ///     task_077: Aggregate counts of audit_log rows within an optional time window,
 ///     grouped by <c>result</c> class. Replaces the legacy
 ///     <c>QueryAsync(limit: 100_000) + .Count()</c> hot path in SLO evaluation so we no longer

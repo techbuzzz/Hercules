@@ -241,13 +241,25 @@ public sealed class AuditService : IAuditService
         int limit = 100,
         CancellationToken ct = default)
     {
-        if (!string.IsNullOrEmpty(target))
-        {
-            return await _auditLog.GetByTargetAsync(target, limit, ct);
-        }
+        // [task_087] Build a structured query and delegate to IAuditLog.
+        // The previous implementation only honoured `target` (via
+        // GetByTargetAsync) and silently dropped actor / action / sessionId /
+        // toolName / result / from / to, so the audit dashboard could not
+        // actually filter by anything but target. The SQLite implementation
+        // pushes all filters into SQL; non-SQLite backends fall back to
+        // IAuditLog's default in-memory filter.
+        var query = new Storage.AuditLogQuery(
+            Actor: actor,
+            Action: action,
+            Target: target,
+            SessionId: sessionId,
+            ToolName: toolName,
+            Result: result,
+            From: from,
+            To: to,
+            Limit: limit);
 
-        var all = await _auditLog.GetRecentAsync(limit, ct);
-        return all;
+        return await _auditLog.QueryAsync(query, ct);
     }
 
     /// <inheritdoc />
