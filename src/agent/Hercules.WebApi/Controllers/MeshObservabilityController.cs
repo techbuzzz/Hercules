@@ -6,7 +6,7 @@ namespace Hercules.WebApi.Controllers;
 
 /// <summary>
 ///     Mesh observability endpoints: status, config, metrics summary.
-///     Specification: docs/roadmap/tasks/task_065.md.
+///     Specification: docs/roadmap/tasks/completed/task_065.md.
 /// </summary>
 public static class MeshObservabilityController
 {

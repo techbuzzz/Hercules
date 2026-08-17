@@ -80,7 +80,7 @@ src/agent/Mesh/Backends/Nats/NatsTaskQueue.cs, src/agent/Mesh/Backends/Nats/Nats
 - `tests/Hercules.Agent.Tests/Mesh/Backends/Nats/NatsTaskInFlightTrackerTests.cs` (новый)
 - `tests/Hercules.Agent.Tests/Mesh/Backends/Nats/NatsTaskDlqStoreTests.cs` (новый)
 - `tests/Hercules.Agent.Tests/Mesh/Backends/Nats/NatsTaskQueueTests.cs` (расширен)
-- `docs/roadmap/tasks/task_074.md` (этот файл)
+- `docs/roadmap/tasks/completed/task_074.md` (этот файл)
 
 ## Risks / Rollback
 NATS client API может отличаться между версиями; проверить совместимость с установленной `NATS.Net` package. Rollback: вернуть no-ops (но баг останется). Если NATS backend не используется в production — понизить priority.

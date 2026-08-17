@@ -77,7 +77,7 @@ cd src\agent
 dotnet run --project Hercules.WebApi
 ```
 
-The agent starts on `http://localhost:8421` (after [task_096](../../docs/roadmap/tasks/task_096.md) port migration) or `http://localhost:5000` (current default).
+The agent starts on `http://localhost:8421` (after [task_096](../../docs/roadmap/tasks/completed/task_096.md) port migration) or `http://localhost:5000` (current default).
 
 2. In Studio, click **"Scan for agents"** — discovers agents on ports 8421-8521 + 5000 (legacy)
 3. Or click **"Add connection manually"** — enter URL + API key
