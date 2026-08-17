@@ -649,6 +649,9 @@ builder.Services.AddSingleton<AgentCore>();
 // чтобы RuntimeConfigReactor мог прокидывать им новые настройки без перезагрузки.
 builder.Services.AddSingleton<IConfigReload>(sp => sp.GetRequiredService<AgentCore>());
 builder.Services.AddSingleton<IConfigReload>(sp => sp.GetRequiredService<SkillManager>());
+// [task_100] MCP hot-reload: при PATCH /api/config с mcp.servers секцией
+// RuntimeConfigReactor вызовет McpClientService.Reload и применит изменения без рестарта.
+builder.Services.AddSingleton<IConfigReload>(sp => sp.GetRequiredService<Hercules.Mcp.McpClientService>());
 
 // Адаптер Web API
 builder.Services.AddSingleton<WebApiAdapter>();
