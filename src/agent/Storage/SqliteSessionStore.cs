@@ -243,37 +243,23 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable, ISession
                            CREATE INDEX IF NOT EXISTS ix_esc_session   ON escalations(session_id);
                            CREATE INDEX IF NOT EXISTS ix_esc_status   ON escalations(status);
                            CREATE INDEX IF NOT EXISTS ix_esc_severity ON escalations(severity);
+                           CREATE TABLE IF NOT EXISTS schema_migrations (
+                               name TEXT PRIMARY KEY
+                           );
                            """;
-        using SqliteCommand cmd = _conn.CreateCommand();
-        cmd.CommandText = ddl;
-        cmd.ExecuteNonQuery();
+         using SqliteCommand cmd = _conn.CreateCommand();
+         cmd.CommandText = ddl;
+         cmd.ExecuteNonQuery();
 
-        // task_014: add new columns to existing audit_log table (forward migration)
-        var migrations = new[]
-        {
+        RunMigration(cmd, "audit_log_enriched",
             "ALTER TABLE audit_log ADD COLUMN request_id TEXT",
             "ALTER TABLE audit_log ADD COLUMN tool_name TEXT",
             "ALTER TABLE audit_log ADD COLUMN policy_decision TEXT",
             "ALTER TABLE audit_log ADD COLUMN permission_used TEXT",
             "ALTER TABLE audit_log ADD COLUMN result TEXT",
-            "ALTER TABLE audit_log ADD COLUMN payload_hash TEXT"
-        };
-        foreach (var migration in migrations)
-        {
-            try
-            {
-                cmd.CommandText = migration;
-                cmd.ExecuteNonQuery();
-            }
-            catch (SqliteException ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
-            {
-                // Column already exists — ignore
-            }
-        }
+            "ALTER TABLE audit_log ADD COLUMN payload_hash TEXT");
 
-        // task_018: extend task_states with durable task fields
-        var taskMigrations = new[]
-        {
+        RunMigration(cmd, "task_states_durable",
             "ALTER TABLE task_states ADD COLUMN name TEXT",
             "ALTER TABLE task_states ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE task_states ADD COLUMN current_step INTEGER NOT NULL DEFAULT 0",
@@ -286,20 +272,59 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable, ISession
             "ALTER TABLE task_states ADD COLUMN tags TEXT",
             "ALTER TABLE task_states ADD COLUMN created_by TEXT",
             "ALTER TABLE task_states ADD COLUMN description TEXT",
-            "ALTER TABLE task_states ADD COLUMN owner_agent_id TEXT"
-        };
-        foreach (var m in taskMigrations)
+            "ALTER TABLE task_states ADD COLUMN owner_agent_id TEXT");
+    }
+
+    private void RunMigration(SqliteCommand cmd, string name, params string[] statements)
+    {
+        cmd.Parameters.Clear();
+        cmd.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE name = $n";
+        cmd.Parameters.AddWithValue("$n", name);
+        var count = Convert.ToInt32(cmd.ExecuteScalar());
+        if (count > 0)
+            return;
+
+        // For existing databases where columns were added by the old try/catch approach,
+        // detect the first statement's column and mark the migration as already applied.
+        if (ColumnExists(cmd, statements[0]))
         {
-            try
-            {
-                cmd.CommandText = m;
-                cmd.ExecuteNonQuery();
-            }
-            catch (SqliteException ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
-            {
-                // Column already exists — ignore
-            }
+            cmd.Parameters.Clear();
+            cmd.CommandText = "INSERT INTO schema_migrations (name) VALUES ($n)";
+            cmd.Parameters.AddWithValue("$n", name);
+            cmd.ExecuteNonQuery();
+            return;
         }
+
+        foreach (var sql in statements)
+        {
+            cmd.Parameters.Clear();
+            cmd.CommandText = sql;
+            cmd.ExecuteNonQuery();
+        }
+
+        cmd.Parameters.Clear();
+        cmd.CommandText = "INSERT INTO schema_migrations (name) VALUES ($n)";
+        cmd.Parameters.AddWithValue("$n", name);
+        cmd.ExecuteNonQuery();
+    }
+
+    private static bool ColumnExists(SqliteCommand cmd, string alterSql)
+    {
+        // Extract table and column from "ALTER TABLE xxx ADD COLUMN yyy ..." or "ALTER TABLE xxx ADD COLUMN yyy TYPE"
+        var match = System.Text.RegularExpressions.Regex.Match(
+            alterSql,
+            @"ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (!match.Success)
+            return false;
+
+        var table = match.Groups[1].Value;
+        var column = match.Groups[2].Value;
+        cmd.Parameters.Clear();
+        cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info($t) WHERE name = $c";
+        cmd.Parameters.AddWithValue("$t", table);
+        cmd.Parameters.AddWithValue("$c", column);
+        return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
     }
 
     public async Task StartSessionAsync(string sessionId, CancellationToken ct = default)

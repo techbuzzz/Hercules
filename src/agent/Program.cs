@@ -221,6 +221,7 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<LlmConfig>(),
             sp.GetRequiredService<ICacheService>(),
             sp.GetService<IHttpClientFactory>()));
+    services.AddSingleton<ILLMClientFactory>(sp => sp.GetRequiredService<LlmClientFactory>());
     services.AddSingleton<RoleRouter>();
     services.AddSingleton<IJsonRepairService, JsonRepairService>();
     services.AddSingleton<ResilientLLMClient>(sp =>
@@ -302,7 +303,7 @@ builder.ConfigureServices((context, services) =>
         new A2AClient(
             sp.GetRequiredService<A2AConfig>(),
             sp.GetService<IHttpClientFactory>()));
-    services.AddSingleton<ITool, CodeExecutionTool>();
+    services.AddSingleton<ITool, CodeExecutionTool>(sp => new CodeExecutionTool(sp));
     // Tool policy engine (task_009) — registered before ToolRegistry so it can be injected
     services.AddSingleton(sp =>
     {

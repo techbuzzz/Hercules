@@ -28,14 +28,14 @@
     <!-- OpenAI-совместимый SDK (используется для YandexGPT и Ollama) -->
 
     <!-- In-process C# compilation for SkillSdkExecutor (task_101) -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
 
     <!-- Хостинг, DI, конфигурация -->
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
     <!-- task_078: standard resilience handlers (retry + circuit breaker + timeout) for named HttpClient clients -->
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.9.0" />
 
     <!-- SQLite для логов сессий и метрик -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />

@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Threading.RateLimiting;
 using Scalar.AspNetCore;
 using Hercules.Agent;
+using Hercules.WebApi.Logging;
 using Hercules.Audit;
 using Hercules.Budget;
 using Hercules.Cache;
@@ -34,6 +35,11 @@ using Hercules.Skills.Routing.ScoringComponents;
 using Hercules.Skills.Routing.Deterministic;
 using Hercules.Storage;
 using Hercules.Mesh.Transport;
+using Hercules.Fleet;
+using Hercules.Slo;
+using Hercules.Security;
+using Hercules.Mesh.Escalation;
+using Hercules.Mesh.Observability;
 using Hercules.Tasks;
 using Hercules.Telegram;
 using Hercules.Tools;
@@ -80,21 +86,36 @@ Console.OutputEncoding = Encoding.UTF8;
 // configuration in the console entry point so both surfaces emit
 // machine-parseable JSON with scopes and UTC timestamps.
 builder.Logging.ClearProviders();
-builder.Logging.AddJsonConsole(options =>
+if (builder.Environment.IsDevelopment())
 {
-    options.IncludeScopes = true;
-    options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
-    options.UseUtcTimestamp = true;
-    options.JsonWriterOptions = new System.Text.Json.JsonWriterOptions
+    builder.Logging.AddSimpleConsole(options =>
     {
-        Indented = false
-    };
-});
+        options.IncludeScopes = true;
+        options.TimestampFormat = "HH:mm:ss ";
+        options.SingleLine = true;
+    });
+    builder.Logging.AddDebug();
+}
+else
+{
+    builder.Logging.AddJsonConsole(options =>
+    {
+        options.IncludeScopes = true;
+        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+        options.UseUtcTimestamp = true;
+        options.JsonWriterOptions = new System.Text.Json.JsonWriterOptions
+        {
+            Indented = false
+        };
+    });
+}
 
 // --- Конфигурация (наследует appsettings.json + переменные окружения HERCULES_) ---
 builder.Configuration.AddEnvironmentVariables("HERCULES_");
+if(builder.Environment.IsDevelopment()) builder.Configuration.AddUserSecrets<Program>();
 
 var appConfig = builder.Configuration.Get<AppConfig>() ?? new AppConfig();
+
 var webCfg = builder.Configuration.GetSection("WebApi").Get<WebApiConfig>() ?? new WebApiConfig();
 // task_079: health checks configuration (liveness, readiness, LLM ping timeout, disk/outbox thresholds)
 var healthCfg = builder.Configuration.GetSection("HealthChecks").Get<HealthChecksConfig>() ?? new HealthChecksConfig();
@@ -119,6 +140,10 @@ if (Directory.Exists(Path.GetDirectoryName(sharedData)!))
 }
 
 var runtimeConfigFile = Path.Combine(appConfig.Storage.DataRoot, "runtime-config.json");
+
+var logsDir = Path.Combine(appConfig.Storage.DataRoot, "logs");
+Directory.CreateDirectory(logsDir);
+builder.Logging.AddProvider(new FileLoggerProvider(logsDir));
 
 // --- Регистрация сервисов ядра (как в консольном приложении) ---
 builder.Services.AddSingleton(sp => new RuntimeConfigStore(
@@ -187,7 +212,10 @@ builder.Services.AddSingleton<Hercules.WebApi.Auth.ApiKeyStore>();
 // task_098: CheckInService для Studio-протокола (ADR-0005). Singleton — состояние
 // CheckIn'ов живёт в памяти процесса, общий для всех запросов. IAuditService
 // resolve'ится лениво через IServiceProvider, чтобы оставаться опциональным.
-builder.Services.AddSingleton<Hercules.CheckIn.CheckInService>();
+builder.Services.AddSingleton<Hercules.CheckIn.CheckInService>(sp =>
+    new Hercules.CheckIn.CheckInService(
+        sp.GetRequiredService<ILogger<Hercules.CheckIn.CheckInService>>(),
+        sp.GetService<Hercules.Audit.IAuditService>()));
 
 // task_099: RestartService для supervisor-протокола. Singleton — состояние
 // restart-флага персистится в {DataRoot}/restart-state.json. IAuditService
@@ -308,6 +336,7 @@ builder.Services.AddSingleton<LlmClientFactory>(sp =>
             sp.GetRequiredService<LlmConfig>(),
             sp.GetRequiredService<ICacheService>(),
             sp.GetService<IHttpClientFactory>()));
+builder.Services.AddSingleton<ILLMClientFactory>(sp => sp.GetRequiredService<LlmClientFactory>());
 builder.Services.AddSingleton<RoleRouter>();
 builder.Services.AddSingleton<IJsonRepairService, JsonRepairService>();
 builder.Services.AddSingleton<ResilientLLMClient>(sp =>
@@ -397,7 +426,7 @@ builder.Services.AddSingleton<ITool, A2AClient>(sp =>
 // runtime via `dotnet run` / `dotnet exec` where validation is properly scoped.
 if (!isBuildTime)
 {
-    builder.Services.AddSingleton<ITool, CodeExecutionTool>();
+    builder.Services.AddSingleton<ITool, CodeExecutionTool>(sp => new CodeExecutionTool(sp));
 }
 // Tool policy engine (task_009)
 builder.Services.AddSingleton(sp =>
@@ -489,6 +518,12 @@ builder.Services.AddSingleton<IOutboxStore>(sp =>
         sp.GetRequiredService<SqliteSessionStore>(),
         sp.GetRequiredService<OfflineSyncConfig>(),
         sp.GetRequiredService<ILogger<SqliteOutboxStore>>()));
+builder.Services.AddSingleton<NetworkMonitor>(sp =>
+    new NetworkMonitor(
+        sp.GetRequiredService<OfflineSyncConfig>(),
+        sp.GetRequiredService<ILogger<NetworkMonitor>>(),
+        sp.GetService<IHttpClientFactory>()!));
+builder.Services.AddSingleton<INetworkMonitor>(sp => sp.GetRequiredService<NetworkMonitor>());
 
 // task_026: Least-privilege grants
 builder.Services.AddSingleton(sp =>
@@ -499,6 +534,33 @@ builder.Services.AddSingleton<Hercules.Tools.Grants.ISkillGrantService, Hercules
 // Hybrid storage services (task_003)
 builder.Services.AddSingleton<IBudgetService, BudgetService>();
 builder.Services.AddSingleton<IAuditLog, AuditLogService>();
+
+// Backup & Recovery (task_063)
+builder.Services.AddSingleton(appConfig.Backup);
+builder.Services.AddSingleton<Hercules.Backup.EncryptionService>();
+builder.Services.AddSingleton<Hercules.Backup.IBackupService>(sp =>
+    new Hercules.Backup.BackupService(
+        sp.GetRequiredService<Hercules.Backup.BackupConfig>(),
+        sp.GetRequiredService<Hercules.Backup.EncryptionService>(),
+        sp.GetRequiredService<ILogger<Hercules.Backup.BackupService>>(),
+        sp.GetRequiredService<StorageConfig>().DataRoot));
+
+// Fleet templates (task_062)
+builder.Services.AddSingleton<AgentTemplateManager>();
+builder.Services.AddSingleton<IFleetTemplateManager, FleetTemplateManager>();
+
+// Security operations (task_055)
+builder.Services.AddSingleton(appConfig.SecurityOps);
+builder.Services.AddSingleton<IVulnerabilityReporter>(sp =>
+    new VulnerabilityReporterService(
+        sp.GetRequiredService<SecurityOpsConfig>(),
+        sp.GetRequiredService<IAuditService>(),
+        sp.GetRequiredService<ILogger<VulnerabilityReporterService>>()));
+builder.Services.AddSingleton<ISecurityAuditExporter>(sp =>
+    new SecurityAuditExporterService(
+        sp.GetRequiredService<SecurityOpsConfig>(),
+        sp.GetRequiredService<IAuditService>(),
+        sp.GetRequiredService<ILogger<SecurityAuditExporterService>>()));
 
 // Durable task lifecycle (task_018)
 builder.Services.AddSingleton<ITaskRepository>(sp =>
@@ -744,6 +806,26 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton<IAgentLifecycleState, AgentLifecycleStateHolder>();
 builder.Services.AddSingleton<IInFlightTracker>(sp => new InFlightTracker(sp.GetService<ILogger<InFlightTracker>>()));
 
+// Escalations (task_049)
+builder.Services.AddSingleton(appConfig.Escalation);
+builder.Services.AddSingleton<IEscalationService, Hercules.Mesh.Escalation.EscalationService>();
+
+// Operational SLOs (task_064)
+builder.Services.AddSingleton(appConfig.Slos);
+builder.Services.AddSingleton<Hercules.Slo.ISloLatencyTracker, Hercules.Slo.SloLatencyTracker>();
+builder.Services.AddSingleton<Hercules.Slo.IConnectivityStateProvider>(sp =>
+    sp.GetRequiredService<Hercules.Offline.NetworkMonitor>());
+builder.Services.AddSingleton<ISloService>(sp =>
+    new SloService(
+        sp.GetRequiredService<SlosConfig>(),
+        sp.GetRequiredService<IAuditService>(),
+        sp.GetRequiredService<IMeshObservabilityService>(),
+        sp.GetService<Hercules.Offline.IOutboxStore>(),
+        sp.GetService<IBudgetService>(),
+        sp.GetRequiredService<ILogger<SloService>>(),
+        sp.GetService<Hercules.Slo.ISloLatencyTracker>(),
+        sp.GetService<Hercules.Slo.IConnectivityStateProvider>()));
+
 // task_057: Lifecycle management
 builder.Services.AddSingleton<ILifecycleService>(sp =>
     new LifecycleService(
@@ -790,15 +872,12 @@ builder.Services.AddCors(options =>
         }
 
         // Dev fallback: разрешаем только localhost-источники.
-        // 5000 сохранён как legacy-порт (ADR-0003) — некоторые старые установки
-        // ещё крутятся на 5000, и Studio присылает запросы оттуда.
+        // 4322 = Hercules Studio (Vite dev server), 8421 = сам WebApi.
         string[] devOrigins =
         {
-            "http://localhost:3000",
-            "http://localhost:4321",
+            "http://localhost:4322",
             "http://localhost:8421",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:4321",
+            "http://127.0.0.1:4322",
             "http://127.0.0.1:8421"
         };
         policy.WithOrigins(devOrigins)
@@ -915,6 +994,7 @@ else if (builder.Environment.IsDevelopment())
 }
 
 var app = builder.Build();
+var log = app.Services.GetRequiredService<ILogger<Program>>();
 
 // [task_109] OpenAPI document is exposed on /openapi/v1.json and Scalar
 // interactive UI on /scalar. Both paths live outside /api/* so ApiKeyMiddleware
@@ -930,7 +1010,7 @@ app.MapScalarApiReference();
 // ключи в логах при первом старте.
 if (!isBuildTime)
 {
-    var keyStore = app.Services.GetRequiredService<Hercules.WebApi.Auth.ApiKeyStore>();
+    var keyStore = app.Services.GetRequiredService<ApiKeyStore>();
     var resolved = keyStore.LoadOrGenerate(webCfg.ApiKeys);
     if (resolved.Count > 0)
     {
@@ -961,7 +1041,17 @@ app.UseMiddleware<PeerAuthMiddleware>();
 // [task_109] skipped at build-time (touches SQLite via SqliteSessionStore)
 if (!isBuildTime)
 {
-    app.Services.GetRequiredService<WebApiAdapter>().EnsureSessionStarted();
+    try
+    {
+        log.LogInformation("Initializing agent session...");
+        app.Services.GetRequiredService<WebApiAdapter>().EnsureSessionStarted();
+        log.LogInformation("Agent session initialized");
+    }
+    catch (Exception ex)
+    {
+        log.LogError(ex, "Failed to initialize agent session");
+        throw;
+    }
 }
 
 // --- Служебные эндпоинты ---
@@ -1070,20 +1160,20 @@ if (!isBuildTime)
         var errors = manifestService.Validate();
         if (errors.Count > 0)
         {
-            Console.WriteLine($"[Manifest] Опубликован с предупреждениями: {manifestService.ManifestPath}");
-            foreach (var err in errors)
-            {
-                Console.WriteLine($"  ⚠ {err}");
-            }
+                log.LogInformation("Manifest published with warnings: {Path}", manifestService.ManifestPath);
+                foreach (var err in errors)
+                {
+                    log.LogWarning("  ⚠ {Warning}", err);
+                }
         }
         else
         {
-            Console.WriteLine($"[Manifest] Опубликован: {manifestService.ManifestPath}");
+            log.LogInformation("Manifest published: {Path}", manifestService.ManifestPath);
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[Manifest] Publishing failed: {ex.Message}");
+        log.LogError(ex, "Manifest publishing failed");
     }
 }
 
@@ -1098,16 +1188,16 @@ if (!isBuildTime)
         if (a2aConfig.AgentCard.Publish)
         {
             var path = await agentCardService.PublishAsync();
-            Console.WriteLine($"[AgentCard] Published: {path}");
+            log.LogInformation("AgentCard published: {Path}", path);
         }
         else
         {
-            Console.WriteLine("[AgentCard] Publishing disabled (A2A.AgentCard.Publish = false)");
+            log.LogInformation("AgentCard publishing disabled (A2A.AgentCard.Publish = false)");
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[AgentCard] Publishing failed: {ex.Message}");
+        log.LogError(ex, "AgentCard publishing failed");
     }
 }
 
@@ -1135,28 +1225,28 @@ app.MapCache();
 app.MapToolRegistry();
 app.MapMcpEndpoints();
 
-Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:8421");
+log.LogInformation("Hercules Web API started on http://localhost:8421");
 if (webCfg.ApiKeys.Count > 0)
 {
     foreach (var entry in webCfg.ApiKeys)
     {
         var role = entry.Role == ApiKeyRole.System ? "system" : "contribute";
-        Console.WriteLine($"🔑 X-Api-Key [{role}]: {entry.Key}");
+        log.LogInformation("X-Api-Key [{Role}]: {Key}", role, entry.Key);
     }
     if (webCfg.ApiKeys.Count > 0)
     {
         var keyStore = app.Services.GetRequiredService<Hercules.WebApi.Auth.ApiKeyStore>();
         if (File.Exists(keyStore.KeysFilePath))
         {
-            Console.WriteLine($"   (keys.json: {keyStore.KeysFilePath})");
+            log.LogInformation("Keys file: {Path}", keyStore.KeysFilePath);
         }
     }
 }
 else
 {
-    Console.WriteLine("🔑 X-Api-Key: (отключён — auth bypass)");
+    log.LogWarning("X-Api-Key: disabled (auth bypass)");
 }
-Console.WriteLine($"💾 Данные: {appConfig.Storage.DataRoot}");
+log.LogInformation("Data root: {DataRoot}", appConfig.Storage.DataRoot);
 
 // Tool registry discovery (task_024)
 // [task_109] skipped at build-time (filesystem I/O and side effects)
@@ -1168,11 +1258,11 @@ if (!isBuildTime)
         var policyEngine = app.Services.GetService<ToolPolicyEngine>();
         var logger = app.Services.GetService<ILogger<Program>>();
         var discovered = ToolDiscovery.Discover(appConfig, registry, policyEngine, logger);
-        Console.WriteLine($"[ToolRegistry] {discovered} tools discovered from file system");
+        log.LogInformation("[ToolRegistry] {Count} tools discovered from file system", discovered);
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[ToolRegistry] Discovery failed: {ex.Message}");
+        log.LogError(ex, "ToolRegistry discovery failed");
     }
 }
 
@@ -1184,11 +1274,11 @@ if (!isBuildTime)
     {
         var mcpService = app.Services.GetRequiredService<Hercules.Mcp.McpClientService>();
         await mcpService.InitializeAsync();
-        Console.WriteLine($"[MCP] Client initialized: {mcpService.ServerStates.Count} servers configured");
+        log.LogInformation("[MCP] Client initialized: {Count} servers configured", mcpService.ServerStates.Count);
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[MCP] Initialization failed: {ex.Message}");
+        log.LogError(ex, "MCP initialization failed");
     }
 
     // task_108: recover durable tasks (Running/Paused) after a process restart and
@@ -1199,12 +1289,12 @@ if (!isBuildTime)
         var recovered = await taskExec.RecoverIncompleteTasksAsync();
         if (recovered > 0)
         {
-            Console.WriteLine($"[Tasks] Recovered {recovered} incomplete durable task(s) on startup");
+            log.LogInformation("[Tasks] Recovered {Count} incomplete durable task(s) on startup", recovered);
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[Tasks] Startup recovery failed: {ex.Message}");
+        log.LogError(ex, "Tasks startup recovery failed");
     }
 
     app.Run();

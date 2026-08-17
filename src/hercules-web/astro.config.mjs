@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   server: {
     host: true,      // слушать 0.0.0.0 (для доступа из браузера/preview)
-    port: 4321,
+    port: 4322,
   },
   vite: {
     plugins: [tailwindcss()],

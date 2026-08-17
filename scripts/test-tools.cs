@@ -16,7 +16,7 @@ Console.WriteLine("--- ToolRegistry ---");
 // Test 1: Registry with multiple tools
 var httpTool = new HttpTool(new HttpConfig { AllowedDomains = ["api.github.com", "example.com"] });
 var exec = new Hercules.CodeExecution.DotnetFileBasedExecutor(new Hercules.CodeExecution.SandboxOptions { SessionTtlSeconds = 0 });
-var codeTool = new CodeExecutionTool(exec);
+var codeTool = new CodeExecutionTool(new List<Hercules.CodeExecution.ICodeExecutor> { exec });
 var a2a = new A2AClient(new A2AConfig());
 
 var registry = new ToolRegistry(new ITool[] { httpTool, codeTool, a2a });

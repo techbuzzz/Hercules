@@ -1,4 +1,5 @@
 using Hercules.Security;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Hercules.WebApi.Controllers;
 
@@ -106,7 +107,7 @@ public static class SecurityOpsController
         // UI не делает серверной фильтрации, потому что вся фильтрация уже
         // отражена в `from/to/limit`.
         group.MapGet("/events", async (
-            ISecurityAuditExporter exporter,
+            [FromServices] ISecurityAuditExporter exporter,
             DateTime? from = null,
             DateTime? to = null,
             int limit = 100,
@@ -137,7 +138,7 @@ public static class SecurityOpsController
         // GET /api/security/compliance/{standard} — compliance report.
         group.MapGet("/compliance/{standard}", async (
             string standard,
-            ISecurityAuditExporter exporter,
+            [FromServices] ISecurityAuditExporter exporter,
             CancellationToken ct) =>
         {
             if (!Enum.TryParse<ComplianceStandard>(standard, true, out var std))

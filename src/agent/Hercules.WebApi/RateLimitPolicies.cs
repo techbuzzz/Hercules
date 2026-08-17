@@ -1,9 +1,10 @@
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Http;
 
 namespace Hercules.WebApi;
 
 /// <summary>
-///     Stable policy names for the framework <see cref="Microsoft.AspNetCore.RateLimiting.RateLimiter" />.
+///     Stable policy names for the framework <see cref="RateLimiter" />.
 ///     Controllers reference these via <c>.RequireRateLimiting(RateLimitPolicies.Chat)</c>
 ///     so the policy names stay in one place and tests can target them by string.
 ///     Specification: task_081.
@@ -20,16 +21,15 @@ public static class RateLimitPolicies
     public static string GetClientKey(HttpContext context)
     {
         var forwarded = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(forwarded))
+        if (string.IsNullOrEmpty(forwarded))
         {
-            var ip = forwarded.Split(',', StringSplitOptions.TrimEntries)[0];
-            if (!string.IsNullOrEmpty(ip))
-            {
-                return $"ip:{ip}";
-            }
+            return $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
         }
 
-        return $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+        var ip = forwarded.Split(',', StringSplitOptions.TrimEntries)[0];
+        return !string.IsNullOrEmpty(ip)
+            ? $"ip:{ip}"
+            : $"ip:{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
     }
 }
 

@@ -440,3 +440,5 @@ src/hercules-studio/.vite/
 *.db
 src/agent/data/sessions.db-shm
 src/agent/data/sessions.db-wal
+src/agent/data/logs/
+data/logs/

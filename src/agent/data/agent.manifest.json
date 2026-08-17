@@ -1,0 +1,26 @@
+{
+  "agentId": "hercules-main",
+  "version": "1.0.0",
+  "displayName": "Hercules",
+  "description": "Self-improving micro-agent",
+  "endpoint": "http://localhost:8421",
+  "transport": "http",
+  "auth": {
+    "type": "apikey",
+    "header": "X-Api-Key"
+  },
+  "capabilities": [],
+  "models": {
+    "primary": "",
+    "fallback": []
+  },
+  "health": "http://localhost:8421/api/health",
+  "tags": null,
+  "supported_protocol_versions": [
+    "1.0"
+  ],
+  "resourceLimits": null,
+  "trustMetadata": null,
+  "skills": [],
+  "generatedAt": "2026-08-17T17:04:32.4217740Z"
+}

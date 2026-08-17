@@ -1,5 +1,6 @@
 using Hercules.Agent;
 using Hercules.Skills;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Hercules.WebApi.Controllers;
 
@@ -25,7 +26,7 @@ public static class SkillManifestController
 
         // POST /api/skills/{id}/manifest/validate — валидировать совместимость манифеста
         app.MapPost("/api/skills/{id}/manifest/validate", (string id, SkillManager manager,
-            SkillManifestValidator validator, IReadOnlyList<string>? knownTools) =>
+            SkillManifestValidator validator, [FromBody] List<string>? knownTools) =>
         {
             var skill = manager.Get(id);
             if (skill is null)

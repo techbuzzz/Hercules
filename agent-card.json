@@ -1,0 +1,31 @@
+﻿{
+  "name": "hercules-main",
+  "description": "Self-improving micro-agent",
+  "url": "http://localhost:8421",
+  "version": "1.0.0",
+  "provider": {
+    "organization": "Hercules Project"
+  },
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "stateTransitionReports": false,
+    "multipartResponses": false
+  },
+  "authentication": {
+    "schemes": [
+      "apikey"
+    ],
+    "credentials": "Configure via X-Api-Key header"
+  },
+  "skills": [],
+  "defaultInputModes": [
+    "text",
+    "json"
+  ],
+  "defaultOutputModes": [
+    "text",
+    "json"
+  ],
+  "generatedAt": "2026-08-17T15:17:35.5429785Z"
+}

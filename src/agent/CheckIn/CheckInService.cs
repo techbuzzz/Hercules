@@ -33,13 +33,7 @@ public sealed class CheckInService : IDisposable
     public TimeSpan Ttl { get; }
     public TimeSpan CleanupInterval { get; }
 
-    /// <summary>DI-конструктор: извлекает <see cref="IAuditService"/> через <see cref="IServiceProvider"/>.</summary>
-    public CheckInService(ILogger<CheckInService> logger, IServiceProvider sp)
-        : this(logger, sp.GetService(typeof(IAuditService)) as IAuditService, null, null)
-    {
-    }
-
-    /// <summary>Конструктор для прямого использования (в т.ч. в unit-тестах).
+    /// <summary>Конструктор для DI и прямого использования (в т.ч. в unit-тестах).
     /// <paramref name="cleanupInterval"/> = <see cref="TimeSpan.Zero"/> отключает фоновый таймер.</summary>
     public CheckInService(
         ILogger<CheckInService> logger,

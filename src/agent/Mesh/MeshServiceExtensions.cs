@@ -105,6 +105,7 @@ public static class MeshServiceCollectionExtensions
 
         // CapabilityRegistry — singleton с SQLite-хранилищем
         services.AddSingleton(sp => new CapabilityRegistry(registryDbPath));
+        services.AddSingleton<ICapabilityLookup>(sp => sp.GetRequiredService<CapabilityRegistry>());
 
         // ICapabilityRegistryService — DI-friendly обёртка
         services.AddSingleton<ICapabilityRegistryService>(sp =>

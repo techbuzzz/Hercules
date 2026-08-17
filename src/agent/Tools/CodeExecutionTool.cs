@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Hercules.CodeExecution;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Hercules.Tools;
 
@@ -7,6 +8,8 @@ namespace Hercules.Tools;
 ///     Adapter: ICodeExecutor → ITool. Позволяет LLM вызывать code execution через
 ///     стандартный tool-протокол (Stage 4). Automatically selects the appropriate executor:
 ///     SkillSdkExecutor for code referencing Hercules.SkillSdk, otherwise DotnetFileBasedExecutor.
+///     Lazy resolution of executors breaks the circular DI dependency with SkillSdkExecutor
+///     (it depends on ISkillContextFactory, which depends on ToolRegistry).
 /// </summary>
 public sealed class CodeExecutionTool : ITool
 {
@@ -15,36 +18,31 @@ public sealed class CodeExecutionTool : ITool
         PropertyNameCaseInsensitive = true
     };
 
-    private readonly IReadOnlyList<ICodeExecutor> _executors;
+    private readonly IServiceProvider _sp;
+    private IReadOnlyList<ICodeExecutor>? _executors;
 
-    public CodeExecutionTool(IEnumerable<ICodeExecutor> executors)
+    public CodeExecutionTool(IServiceProvider sp)
     {
-        _executors = executors?.ToList() ?? throw new ArgumentNullException(nameof(executors));
+        _sp = sp ?? throw new ArgumentNullException(nameof(sp));
     }
 
-    /// <summary>
-    ///     Convenience ctor for tests/backward compat with a single executor.
-    /// </summary>
-    public CodeExecutionTool(ICodeExecutor executor)
-    {
-        _executors = executor is null
-            ? throw new ArgumentNullException(nameof(executor))
-            : new List<ICodeExecutor> { executor };
-    }
+    private IReadOnlyList<ICodeExecutor> Executors =>
+        _executors ??= _sp.GetRequiredService<IEnumerable<ICodeExecutor>>().ToList();
 
     private ICodeExecutor SelectExecutor(string code)
     {
+        var executors = Executors;
         if (code.Contains("Hercules.SkillSdk", StringComparison.Ordinal))
         {
-            var sdk = _executors.FirstOrDefault(e => e.Name.Equals("skill-sdk-in-process", StringComparison.OrdinalIgnoreCase));
+            var sdk = executors.FirstOrDefault(e => e.Name.Equals("skill-sdk-in-process", StringComparison.OrdinalIgnoreCase));
             if (sdk is not null)
             {
                 return sdk;
             }
         }
 
-        var fallback = _executors.FirstOrDefault(e => e.Name.Equals("dotnet-file-based", StringComparison.OrdinalIgnoreCase));
-        return fallback ?? _executors[0];
+        var fallback = executors.FirstOrDefault(e => e.Name.Equals("dotnet-file-based", StringComparison.OrdinalIgnoreCase));
+        return fallback ?? executors[0];
     }
 
     public string Name => "execute_code";

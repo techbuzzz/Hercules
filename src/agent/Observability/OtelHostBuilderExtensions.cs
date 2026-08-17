@@ -91,6 +91,11 @@ public static class OtelHostBuilderExtensions
                 tracing.AddAspNetCoreInstrumentation(options =>
                 {
                     options.RecordException = true;
+                    options.Filter = ctx =>
+                    {
+                        // Skip browser CORS preflight spans — they create noisy OPTIONS activities.
+                        return !string.Equals(ctx.Request.Method, "OPTIONS", StringComparison.OrdinalIgnoreCase);
+                    };
                 });
 
                 tracing.AddHttpClientInstrumentation(options =>
@@ -103,7 +108,10 @@ public static class OtelHostBuilderExtensions
             })
             .WithMetrics(metrics =>
             {
-                if (consoleEnabled)
+                // Console metrics exporter is disabled by default because runtime/process
+                // instrumentation floods stdout every 10s. Metrics are still exported to OTLP
+                // when OtlpEndpoint is configured, and custom Hercules meters stay registered.
+                if (consoleEnabled && hasOtlp)
                 {
                     metrics.AddConsoleExporter(options =>
                     {
@@ -188,13 +196,23 @@ public static class OtelHostBuilderExtensions
                 {
                     tracing.AddOtlpExporter(options => { options.Endpoint = new Uri(config.OtlpEndpoint!); });
                 }
-                tracing.AddAspNetCoreInstrumentation(o => { o.RecordException = true; });
+                tracing.AddAspNetCoreInstrumentation(o =>
+                {
+                    o.RecordException = true;
+                    o.Filter = ctx =>
+                    {
+                        return !string.Equals(ctx.Request.Method, "OPTIONS", StringComparison.OrdinalIgnoreCase);
+                    };
+                });
                 tracing.AddHttpClientInstrumentation(o => { o.RecordException = true; });
                 tracing.AddSource(OtelSetup.ServiceName);
             })
             .WithMetrics(metrics =>
             {
-                if (consoleEnabled)
+                // Console metrics exporter is disabled by default because runtime/process
+                // instrumentation floods stdout every 10s. Metrics are still exported to OTLP
+                // when OtlpEndpoint is configured, and custom Hercules meters stay registered.
+                if (consoleEnabled && hasOtlp)
                 {
                     metrics.AddConsoleExporter();
                 }

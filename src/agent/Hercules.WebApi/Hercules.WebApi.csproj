@@ -17,6 +17,7 @@
          (not every public member needs OpenAPI docs) -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591;1573</NoWarn>
+    <UserSecretsId>ce26d6d3-3657-4fc3-bc3a-9b72a43f3a7e</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,11 +27,14 @@
 
   <ItemGroup>
     <!-- [task_109] Scalar UI for /scalar endpoint -->
-    <PackageReference Include="Scalar.AspNetCore" Version="2.11.4" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.16.20" />
     <!-- [task_109] Microsoft.AspNetCore.OpenApi (built-in .NET 10) for AddOpenApi/MapOpenApi -->
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
     <!-- [task_109] Build-time OpenAPI document generation via GetDocument.Insider -->
-    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.11">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
