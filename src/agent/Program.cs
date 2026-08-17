@@ -597,6 +597,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<ITaskExecutionService>(sp =>
         new TaskExecutionService(
             sp.GetRequiredService<ITaskRepository>(),
+            sp.GetRequiredService<ISessionStore>(),
             sp.GetRequiredService<TaskConfig>(),
             sp.GetRequiredService<ILogger<TaskExecutionService>>()));
 

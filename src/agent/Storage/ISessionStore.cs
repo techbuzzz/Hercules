@@ -154,6 +154,7 @@ public interface ISessionStore
     Task InitCheckpointSchemaAsync(CancellationToken ct = default);
     Task SaveCheckpointAsync(TaskCheckpoint ckpt, CancellationToken ct = default);
     Task<List<TaskCheckpoint>> ListCheckpointsAsync(string taskId, CancellationToken ct = default);
+    Task<TaskCheckpoint?> LoadCheckpointAsync(string checkpointId, CancellationToken ct = default);
     Task CleanupOldCheckpointsAsync(int retentionDays, CancellationToken ct = default);
 
     // ---- Escalations ----

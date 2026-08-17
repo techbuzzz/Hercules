@@ -507,6 +507,7 @@ builder.Services.AddSingleton<TaskRetryHandler>();
 builder.Services.AddSingleton<ITaskExecutionService>(sp =>
     new TaskExecutionService(
         sp.GetRequiredService<ITaskRepository>(),
+        sp.GetRequiredService<ISessionStore>(),
         sp.GetRequiredService<TaskConfig>(),
         sp.GetRequiredService<ILogger<TaskExecutionService>>()));
 
@@ -1188,6 +1189,22 @@ if (!isBuildTime)
     catch (Exception ex)
     {
         Console.WriteLine($"[MCP] Initialization failed: {ex.Message}");
+    }
+
+    // task_108: recover durable tasks (Running/Paused) after a process restart and
+    // apply checkpoint retention cleanup. Failures are logged but do not block startup.
+    try
+    {
+        var taskExec = app.Services.GetRequiredService<ITaskExecutionService>();
+        var recovered = await taskExec.RecoverIncompleteTasksAsync();
+        if (recovered > 0)
+        {
+            Console.WriteLine($"[Tasks] Recovered {recovered} incomplete durable task(s) on startup");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Tasks] Startup recovery failed: {ex.Message}");
     }
 
     app.Run();

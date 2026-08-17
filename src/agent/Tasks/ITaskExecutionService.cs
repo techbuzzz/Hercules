@@ -21,9 +21,18 @@ public interface ITaskExecutionService
     /// <summary>Get current task status.</summary>
     Task<DurableTask?> GetStatusAsync(TaskId taskId, CancellationToken ct = default);
 
-    /// <summary>Create a checkpoint for a running task.</summary>
+    /// <summary>Create a checkpoint for a running task. Returns the checkpoint ID.</summary>
     Task<string> CreateCheckpointAsync(TaskId taskId, int stepNumber, string stateSnapshot, CancellationToken ct = default);
 
-    /// <summary>List checkpoints for a task.</summary>
+    /// <summary>List checkpoints for a task, ordered by step number ascending.</summary>
     Task<List<TaskCheckpoint>> ListCheckpointsAsync(TaskId taskId, CancellationToken ct = default);
+
+    /// <summary>Load a single checkpoint by ID. Returns null if not found.</summary>
+    Task<TaskCheckpoint?> LoadCheckpointAsync(string checkpointId, CancellationToken ct = default);
+
+    /// <summary>Increment the task step counter and persist the new state.</summary>
+    Task IncrementStepAsync(TaskId taskId, CancellationToken ct = default);
+
+    /// <summary>Find and resume all incomplete tasks (Running/Paused/Failed) — startup recovery.</summary>
+    Task<int> RecoverIncompleteTasksAsync(CancellationToken ct = default);
 }

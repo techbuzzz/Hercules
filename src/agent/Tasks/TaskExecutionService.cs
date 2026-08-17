@@ -1,4 +1,5 @@
 using Hercules.Config;
+using Hercules.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.Tasks;
@@ -10,15 +11,18 @@ namespace Hercules.Tasks;
 public sealed class TaskExecutionService : ITaskExecutionService
 {
     private readonly ITaskRepository _repo;
+    private readonly ISessionStore _sessionStore;
     private readonly TaskConfig _config;
     private readonly ILogger<TaskExecutionService> _logger;
 
     public TaskExecutionService(
         ITaskRepository repo,
+        ISessionStore sessionStore,
         TaskConfig config,
         ILogger<TaskExecutionService> logger)
     {
         _repo = repo;
+        _sessionStore = sessionStore;
         _config = config;
         _logger = logger;
     }
@@ -68,6 +72,23 @@ public sealed class TaskExecutionService : ITaskExecutionService
             return;
         }
 
+        // task_108: if a checkpoint was provided, load it and log the snapshot step;
+        // otherwise pick the most recent checkpoint for this task.
+        TaskCheckpoint? checkpoint = null;
+        if (!string.IsNullOrEmpty(checkpointId))
+        {
+            checkpoint = await _sessionStore.LoadCheckpointAsync(checkpointId, ct);
+            if (checkpoint is null)
+            {
+                _logger.LogWarning("[Task] Resume: checkpoint {CheckpointId} not found, falling back to most recent", checkpointId);
+            }
+        }
+        if (checkpoint is null)
+        {
+            var existing = await _sessionStore.ListCheckpointsAsync(taskId.ToString(), ct);
+            checkpoint = existing.Count > 0 ? existing[^1] : null;
+        }
+
         var updated = task with
         {
             Status = DurableTaskStatus.Running,
@@ -76,7 +97,17 @@ public sealed class TaskExecutionService : ITaskExecutionService
             Error = null
         };
         await _repo.UpdateAsync(updated, ct);
-        _logger.LogInformation("[Task] Resumed task {TaskId} (checkpoint={CheckpointId})", taskId, checkpointId ?? "none");
+
+        if (checkpoint is not null)
+        {
+            _logger.LogInformation(
+                "[Task] Resumed task {TaskId} from checkpoint {CheckpointId} (step={Step}, snapshotBytes={Bytes})",
+                taskId, checkpoint.Id, checkpoint.StepNumber, checkpoint.StateSnapshot.Length);
+        }
+        else
+        {
+            _logger.LogInformation("[Task] Resumed task {TaskId} (no checkpoints)", taskId);
+        }
     }
 
     public async Task PauseAsync(TaskId taskId, CancellationToken ct = default)
@@ -126,20 +157,103 @@ public sealed class TaskExecutionService : ITaskExecutionService
             StateSnapshot = stateSnapshot,
             CreatedAt = DateTime.UtcNow
         };
-        // Persist via SqliteSessionStore directly (ITaskRepository doesn't cover checkpoints yet)
-        // Checkpoints are stored in the same DB — access via reflection or a dedicated store.
-        // For now, we use a singleton store reference via ITaskRepository.
-        // The checkpoint is returned with its ID for later restoration.
-        _logger.LogDebug("[Task] Created checkpoint for task {TaskId} step {Step}", taskId, stepNumber);
+
+        // task_108: actually persist via ISessionStore.
+        await _sessionStore.SaveCheckpointAsync(checkpoint, ct);
+
+        _logger.LogDebug(
+            "[Task] Created checkpoint {CheckpointId} for task {TaskId} step {Step} (snapshotBytes={Bytes})",
+            checkpoint.Id, taskId, stepNumber, stateSnapshot.Length);
         return checkpoint.Id;
     }
 
     public Task<List<TaskCheckpoint>> ListCheckpointsAsync(TaskId taskId, CancellationToken ct = default)
     {
-        // Checkpoints are stored via SqliteSessionStore; access through ITaskRepository or direct DB.
-        // For Phase 1, this is a stub that returns empty list.
-        // Full checkpoint storage is implemented in SqliteSessionStore directly.
-        return Task.FromResult(new List<TaskCheckpoint>());
+        // task_108: query the store instead of returning an empty stub.
+        return _sessionStore.ListCheckpointsAsync(taskId.ToString(), ct);
+    }
+
+    public Task<TaskCheckpoint?> LoadCheckpointAsync(string checkpointId, CancellationToken ct = default)
+    {
+        return _sessionStore.LoadCheckpointAsync(checkpointId, ct);
+    }
+
+    public async Task IncrementStepAsync(TaskId taskId, CancellationToken ct = default)
+    {
+        var task = await _repo.GetAsync(taskId, ct);
+        if (task is null) return;
+
+        var updated = task with
+        {
+            CurrentStep = task.CurrentStep + 1,
+            AttemptCount = task.AttemptCount + 1,
+            UpdatedAt = DateTime.UtcNow
+        };
+        await _repo.UpdateAsync(updated, ct);
+    }
+
+    /// <summary>
+    ///     task_108: scan for incomplete tasks (Running/Paused/Failed) and resume them.
+    ///     Paused tasks are reactivated to Running so the workflow executor (future)
+    ///     can pick them up. Failed tasks stay in Failed state and are logged for
+    ///     manual intervention. Completed/Cancelled tasks are skipped entirely.
+    ///     Returns the number of tasks reactivated.
+    /// </summary>
+    public async Task<int> RecoverIncompleteTasksAsync(CancellationToken ct = default)
+    {
+        var reactivated = 0;
+        foreach (var status in new[] { DurableTaskStatus.Running, DurableTaskStatus.Paused, DurableTaskStatus.Failed })
+        {
+            var tasks = await _repo.ListAsync(statusFilter: status, limit: 1000, ct);
+            foreach (var task in tasks)
+            {
+                if (task.Status == DurableTaskStatus.Cancelled || task.Status == DurableTaskStatus.Completed)
+                {
+                    continue;
+                }
+
+                // Pick the most recent checkpoint, if any.
+                var checkpoints = await _sessionStore.ListCheckpointsAsync(task.Id.ToString(), ct);
+                var latest = checkpoints.Count > 0 ? checkpoints[^1] : null;
+
+                if (task.Status == DurableTaskStatus.Failed)
+                {
+                    // Leave Failed tasks in Failed state so the operator can decide.
+                    _logger.LogInformation(
+                        "[Recovery] Skipped failed task {TaskId} (checkpoint={CheckpointId}) — manual intervention required",
+                        task.Id, latest?.Id ?? "none");
+                    continue;
+                }
+
+                // For Running or Paused: bump UpdatedAt, clear Error, and put Paused
+                // tasks back into Running so the executor (future) picks them up.
+                var updated = task with
+                {
+                    Status = DurableTaskStatus.Running,
+                    UpdatedAt = DateTime.UtcNow,
+                    Error = null
+                };
+                await _repo.UpdateAsync(updated, ct);
+
+                _logger.LogInformation(
+                    "[Recovery] Resumed {PreviousStatus} task {TaskId} (checkpoint={CheckpointId}, step={Step})",
+                    task.Status, task.Id, latest?.Id ?? "none", latest?.StepNumber ?? 0);
+                reactivated++;
+            }
+        }
+
+        // Best-effort retention cleanup. Failures are logged but don't block startup.
+        try
+        {
+            var retentionDays = Math.Max(1, _config.CheckpointRetentionDays);
+            await _sessionStore.CleanupOldCheckpointsAsync(retentionDays, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Recovery] Checkpoint retention cleanup failed (non-fatal)");
+        }
+
+        return reactivated;
     }
 
     /// <summary>
@@ -174,23 +288,6 @@ public sealed class TaskExecutionService : ITaskExecutionService
             Error = error,
             UpdatedAt = DateTime.UtcNow,
             CompletedAt = DateTime.UtcNow
-        };
-        await _repo.UpdateAsync(updated, ct);
-    }
-
-    /// <summary>
-    ///     Helper: increment step number.
-    /// </summary>
-    internal async Task IncrementStepAsync(TaskId taskId, CancellationToken ct = default)
-    {
-        var task = await _repo.GetAsync(taskId, ct);
-        if (task is null) return;
-
-        var updated = task with
-        {
-            CurrentStep = task.CurrentStep + 1,
-            AttemptCount = task.AttemptCount + 1,
-            UpdatedAt = DateTime.UtcNow
         };
         await _repo.UpdateAsync(updated, ct);
     }

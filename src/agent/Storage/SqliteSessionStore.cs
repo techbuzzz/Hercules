@@ -2022,6 +2022,37 @@ public sealed class SqliteSessionStore : IAsyncDisposable, IDisposable, ISession
     }
 
     /// <summary>
+    ///     task_108: Load a single checkpoint by ID.
+    /// </summary>
+    public async Task<TaskCheckpoint?> LoadCheckpointAsync(string checkpointId, CancellationToken ct = default)
+    {
+        await _connLock.WaitAsync(ct);
+        try
+        {
+            using SqliteCommand cmd = _conn.CreateCommand();
+            cmd.CommandText = "SELECT id, task_id, step_number, state_snapshot, created_at FROM task_checkpoints WHERE id = $id";
+            cmd.Parameters.AddWithValue("$id", checkpointId);
+            using var r = await cmd.ExecuteReaderAsync(ct);
+            if (await r.ReadAsync(ct))
+            {
+                return new TaskCheckpoint
+                {
+                    Id = r.GetString(0),
+                    TaskId = new TaskId(Guid.Parse(r.GetString(1))),
+                    StepNumber = r.GetInt32(2),
+                    StateSnapshot = r.GetString(3),
+                    CreatedAt = DateTime.Parse(r.GetString(4))
+                };
+            }
+            return null;
+        }
+        finally
+        {
+            _connLock.Release();
+        }
+    }
+
+    /// <summary>
     ///     task_018: Delete old checkpoints (retention policy).
     /// </summary>
     public async Task CleanupOldCheckpointsAsync(int retentionDays, CancellationToken ct = default)

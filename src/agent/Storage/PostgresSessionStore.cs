@@ -782,6 +782,9 @@ public sealed class PostgresSessionStore : ISessionStore, IAsyncDisposable, IDis
     public Task<List<TaskCheckpoint>> ListCheckpointsAsync(string taskId, CancellationToken ct = default)
         => throw new NotImplementedException("PostgresSessionStore: checkpoint persistence not implemented yet (task_103 follow-up).");
 
+    public Task<TaskCheckpoint?> LoadCheckpointAsync(string checkpointId, CancellationToken ct = default)
+        => throw new NotImplementedException("PostgresSessionStore: checkpoint persistence not implemented yet (task_103 follow-up).");
+
     public Task CleanupOldCheckpointsAsync(int retentionDays, CancellationToken ct = default)
         => throw new NotImplementedException("PostgresSessionStore: checkpoint persistence not implemented yet (task_103 follow-up).");
 
