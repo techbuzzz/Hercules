@@ -55,7 +55,8 @@ src/
 │   ├── MeshDashboard.astro # Mesh topology/traffic/health (task_053)
 │   ├── MeshRouterPanel.astro# Mesh router (task_043)
 │   ├── EscalationPanel.astro# HITL эскалация (task_049)
-│   └── AgentCardPanel.astro# A2A Agent Card view/import/discover (task_088)
+│   ├── AgentCardPanel.astro# A2A Agent Card view/import/discover (task_088)
+│   └── CapabilityRegistryPanel.astro# Peer-агенты: trust/health/capabilities, Touch/Remove (task_089)
 ├── pages/
 │   ├── index.astro         # Чат
 │   ├── skills.astro        # Список + создание/редактирование/улучшение
@@ -99,6 +100,14 @@ UI дёргает следующие эндпоинты (см. `src/lib/api.ts`)
 | GET    | `/api/mesh/denials`             | Policy denials                   |
 | GET    | `/api/mesh/skills/heatmap`      | Heatmap использования навыков    |
 | GET    | `/api/mesh/eval/summary`        | Сводка mesh eval-прогонов        |
+| GET    | `/api/mesh/agents`              | Список всех peer-агентов          |
+| GET    | `/api/mesh/agents/{id}`         | Полная запись peer-агента         |
+| GET    | `/api/mesh/agents/{id}/health`  | Health/trust/cost/latency агента  |
+| POST   | `/api/mesh/agents/{id}/touch`   | Heartbeat (обновить last_seen)    |
+| DELETE | `/api/mesh/agents/{id}`         | Удалить агента из реестра         |
+| GET    | `/api/mesh/capabilities?agentId=X` | Capabilities конкретного агента |
+| GET    | `/api/mesh/capabilities/{name}` | Агенты с заданной capability      |
+| GET    | `/api/mesh/capabilities/search` | Семантический поиск по phrase     |
 | GET    | `/api/a2a/agent-card`           | Локальная A2A Agent Card          |
 | GET    | `/api/a2a/agent-card/from`      | Import remote Agent Card по URL  |
 | POST   | `/api/a2a/discover`             | Batch discover по списку URL     |

@@ -365,6 +365,69 @@ export const api = {
     });
     return handle<{ status: string; path?: string; message?: string }>(res);
   },
+
+  // ---- Capability Registry (Phase 3 task_034 / Phase 7 task_089) ----
+
+  async listMeshAgents(): Promise<MeshAgentEntryDto[]> {
+    const res = await fetch(`${API_BASE}/api/mesh/agents`, { headers: headers(false) });
+    // Backend wraps payload in { count, agents: RegistryAgentFullEntry[] }.
+    const wrapped = await handle<{ count: number; agents: MeshAgentEntryDto[] }>(res);
+    return wrapped.agents ?? [];
+  },
+
+  async getMeshAgent(id: string): Promise<MeshAgentEntryDto> {
+    const res = await fetch(
+      `${API_BASE}/api/mesh/agents/${encodeURIComponent(id)}`,
+      { headers: headers(false) },
+    );
+    return handle<MeshAgentEntryDto>(res);
+  },
+
+  async getMeshAgentHealth(id: string): Promise<MeshAgentHealthDto> {
+    const res = await fetch(
+      `${API_BASE}/api/mesh/agents/${encodeURIComponent(id)}/health`,
+      { headers: headers(false) },
+    );
+    return handle<MeshAgentHealthDto>(res);
+  },
+
+  /**
+   * List capabilities of a specific agent. If `agentId` is omitted the
+   * backend returns the lightweight agent list — use that as a "registry
+   * snapshot" and stay on the full list otherwise.
+   */
+  async listMeshCapabilities(agentId: string): Promise<MeshCapabilityDto[]> {
+    const res = await fetch(
+      `${API_BASE}/api/mesh/capabilities?agentId=${encodeURIComponent(agentId)}`,
+      { headers: headers(false) },
+    );
+    return handle<MeshCapabilityDto[]>(res);
+  },
+
+  /** Server-side semantic search across capability phrase_receivers. */
+  async searchMeshByCapability(phrase: string): Promise<MeshAgentLightDto[]> {
+    const res = await fetch(
+      `${API_BASE}/api/mesh/capabilities/search?phrase=${encodeURIComponent(phrase)}`,
+      { headers: headers(false) },
+    );
+    return handle<MeshAgentLightDto[]>(res);
+  },
+
+  async touchMeshAgent(id: string): Promise<void> {
+    const res = await fetch(
+      `${API_BASE}/api/mesh/agents/${encodeURIComponent(id)}/touch`,
+      { method: "POST", headers: headers(false) },
+    );
+    await handle<{ status: string; agentId: string }>(res);
+  },
+
+  async removeMeshAgent(id: string): Promise<void> {
+    const res = await fetch(
+      `${API_BASE}/api/mesh/agents/${encodeURIComponent(id)}`,
+      { method: "DELETE", headers: headers(false) },
+    );
+    await handle<{ status: string; agentId: string }>(res);
+  },
 };
 
 // ---- Mesh DTOs ----
@@ -559,4 +622,58 @@ export interface DiscoverResultDto {
   discovered: number;
   failed: number;
   cards: DiscoverCardEntryDto[];
+}
+
+// ---- Capability Registry (Phase 3 task_034 / Phase 7 task_089) ----
+
+/**
+ * Mirrors `RegistryAgentFullEntry` (Mesh/CapabilityRegistry.cs).
+ * Backend GET /api/mesh/agents → `{count, agents: MeshAgentEntryDto[]}`.
+ * Note: `supportedProtocolVersionsJson` is serialized as a JSON-encoded string,
+ * not an array — we keep the same name on the wire and parse on the client.
+ */
+export interface MeshAgentEntryDto {
+  agentId: string;
+  displayName: string;
+  description: string;
+  endpoint: string;
+  lastSeen: string;
+  healthStatus: string;
+  lastHealthCheck: string;
+  consecutiveFailures: number;
+  trustLevel: string;
+  costHintUsd: number;
+  latencyHintMs: number;
+  expirySeconds: number;
+  supportedProtocolVersionsJson: string;
+}
+
+/** Lightweight agent — used by capability search and `/api/mesh/capabilities` without agentId. */
+export interface MeshAgentLightDto {
+  agentId: string;
+  displayName: string;
+  description: string;
+  endpoint: string;
+  lastSeen: string;
+}
+
+/**
+ * Mirrors the anonymous payload of GET /api/mesh/agents/{id}/health.
+ */
+export interface MeshAgentHealthDto {
+  consecutiveFailures: number;
+  trustLevel: string;
+  costHintUsd: number;
+  latencyHintMs: number;
+  expirySeconds: number;
+}
+
+/**
+ * Mirrors `RegistryCapabilityEntry` (Mesh/CapabilityRegistry.cs).
+ * Returned by GET /api/mesh/capabilities?agentId=…
+ */
+export interface MeshCapabilityDto {
+  name: string;
+  description: string;
+  phraseReceivers: string[];
 }
