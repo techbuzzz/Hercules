@@ -4,6 +4,7 @@ import MeshRouterPanel from "../components/MeshRouterPanel.astro";
 import EscalationPanel from "../components/EscalationPanel.astro";
 import MeshDashboard from "../components/MeshDashboard.astro";
 import CapabilityRegistryPanel from "../components/CapabilityRegistryPanel.astro";
+import DiscoveryPanel from "../components/DiscoveryPanel.astro";
 ---
 
 <Layout title="Hercules · Mesh" active="mesh">
@@ -19,6 +20,11 @@ import CapabilityRegistryPanel from "../components/CapabilityRegistryPanel.astro
   <div class="mt-6 grid gap-6 lg:grid-cols-2">
     <MeshRouterPanel />
     <EscalationPanel />
+  </div>
+
+  <!-- Discovery mechanisms (Phase 7 task_090) -->
+  <div class="mt-6">
+    <DiscoveryPanel />
   </div>
 
   <!-- Capability registry (Phase 7 task_089) -->

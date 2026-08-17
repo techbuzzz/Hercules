@@ -56,7 +56,8 @@ src/
 │   ├── MeshRouterPanel.astro# Mesh router (task_043)
 │   ├── EscalationPanel.astro# HITL эскалация (task_049)
 │   ├── AgentCardPanel.astro# A2A Agent Card view/import/discover (task_088)
-│   └── CapabilityRegistryPanel.astro# Peer-агенты: trust/health/capabilities, Touch/Remove (task_089)
+│   ├── CapabilityRegistryPanel.astro# Peer-агенты: trust/health/capabilities, Touch/Remove (task_089)
+│   └── DiscoveryPanel.astro# Discovery-источники + discovered peer-агенты, Refresh + diff (task_090)
 ├── pages/
 │   ├── index.astro         # Чат
 │   ├── skills.astro        # Список + создание/редактирование/улучшение
@@ -108,6 +109,9 @@ UI дёргает следующие эндпоинты (см. `src/lib/api.ts`)
 | GET    | `/api/mesh/capabilities?agentId=X` | Capabilities конкретного агента |
 | GET    | `/api/mesh/capabilities/{name}` | Агенты с заданной capability      |
 | GET    | `/api/mesh/capabilities/search` | Семантический поиск по phrase     |
+| GET    | `/api/mesh/discovery/sources`   | Список discovery-источников       |
+| GET    | `/api/mesh/discovery/agents`    | Найденные peer-агенты (с кэшем)   |
+| POST   | `/api/mesh/discovery/refresh`   | Принудительный refresh discovery  |
 | GET    | `/api/a2a/agent-card`           | Локальная A2A Agent Card          |
 | GET    | `/api/a2a/agent-card/from`      | Import remote Agent Card по URL  |
 | POST   | `/api/a2a/discover`             | Batch discover по списку URL     |

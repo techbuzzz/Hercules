@@ -147,7 +147,7 @@
 |---|------------|------|------|--------|
 | 88 | 48 | [A2A Agent Card panel](tasks/task_088.md) | `web-a2a-card-panel` | pending |
 | 89 | 48 | [Capability registry panel](tasks/task_089.md) | `web-capability-registry-panel` | pending |
-| 90 | 48 | [Discovery panel](tasks/task_090.md) | `web-discovery-panel` | pending |
+| 90 | 48 | [Discovery panel](tasks/task_090.md) | `web-discovery-panel` | done |
 | 91 | 48 | [Trust admission policy panel](tasks/task_091.md) | `web-trust-admission-panel` | pending |
 | 92 | 48 | [Mesh profiles & backend health](tasks/task_092.md) | `web-mesh-profiles-health` | pending |
 | 93 | 48 | [Mesh observability & centralized logs](tasks/task_093.md) | `web-mesh-observability` | pending |

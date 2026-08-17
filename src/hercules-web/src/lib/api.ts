@@ -428,6 +428,47 @@ export const api = {
     );
     await handle<{ status: string; agentId: string }>(res);
   },
+
+  // ---- Discovery mechanisms (Phase 3 task_038 / Phase 7 task_090) ----
+
+  /**
+   * List all registered discovery sources (static / registry / mdns) with
+   * their enabled state. Backend does not expose per-source `lastRunAt` or
+   * `lastError`; the `DiscoveryService` records them server-side but does
+   * not surface them through the controller.
+   */
+  async listDiscoverySources(): Promise<DiscoverySourceDto[]> {
+    const res = await fetch(`${API_BASE}/api/mesh/discovery/sources`, { headers: headers(false) });
+    const wrapped = await handle<{ count: number; sources: DiscoverySourceDto[] }>(res);
+    return wrapped.sources ?? [];
+  },
+
+  /**
+   * List agents discovered by all enabled sources. When `source` is provided
+   * the result is filtered to that single source kind (static/registry/mdns).
+   * Cache is served if fresh, otherwise the backend transparently refreshes.
+   */
+  async listDiscoveredAgents(source?: DiscoverySourceKind): Promise<DiscoveredAgentDto[]> {
+    const url = source
+      ? `${API_BASE}/api/mesh/discovery/agents?source=${encodeURIComponent(source)}`
+      : `${API_BASE}/api/mesh/discovery/agents`;
+    const res = await fetch(url, { headers: headers(false) });
+    const wrapped = await handle<{ count: number; cacheFresh: boolean; agents: DiscoveredAgentDto[] }>(res);
+    return wrapped.agents ?? [];
+  },
+
+  /**
+   * Force-refresh all enabled sources. The backend returns the refreshed
+   * list but does NOT return added/removed counters, so the caller diffs the
+   * result against a previously captured snapshot.
+   */
+  async refreshDiscovery(): Promise<{ count: number; agents: DiscoveredAgentDto[] }> {
+    const res = await fetch(`${API_BASE}/api/mesh/discovery/refresh`, {
+      method: "POST",
+      headers: headers(false),
+    });
+    return handle<{ status: string; count: number; agents: DiscoveredAgentDto[] }>(res);
+  },
 };
 
 // ---- Mesh DTOs ----
@@ -676,4 +717,55 @@ export interface MeshCapabilityDto {
   name: string;
   description: string;
   phraseReceivers: string[];
+}
+
+// ---- Discovery mechanisms (Phase 3 task_038 / Phase 7 task_090) ----
+
+/** Source kind matching `Hercules.Mesh.Discovery.DiscoverySourceKind` (static / registry / mdns). */
+export type DiscoverySourceKind = "static" | "registry" | "mdns";
+
+/**
+ * Mirrors the anonymous payload of GET /api/mesh/discovery/sources.
+ * Backend does not expose `lastRunAt` / `lastError` per source; those are
+ * recorded server-side by `DiscoveryService` but not surfaced via the
+ * controller — we keep them out of the DTO to match the wire shape.
+ */
+export interface DiscoverySourceDto {
+  /** Lowercase source kind: "static" | "registry" | "mdns". */
+  kind: DiscoverySourceKind;
+  /** Lowercase kind as returned by the backend; alias of `kind` for convenience. */
+  source: DiscoverySourceKind;
+  /** Human-readable name (e.g. "Static peers"). */
+  name: string;
+  /** Whether this source participates in `GetAgentsAsync` / `RefreshAsync`. */
+  enabled: boolean;
+}
+
+/**
+ * Mirrors the anonymous payload of GET /api/mesh/discovery/agents.
+ * `discoveredAt` is an ISO 8601 UTC timestamp.
+ */
+export interface DiscoveredAgentDto {
+  agentId: string;
+  displayName: string;
+  endpoint: string;
+  /** Source kind that reported this agent. */
+  source: DiscoverySourceKind;
+  /** ISO 8601 UTC timestamp. */
+  discoveredAt: string;
+  capabilities: string[];
+  manifestLoaded: boolean;
+  error: string | null;
+}
+
+/**
+ * Result of POST /api/mesh/discovery/refresh as returned by the backend.
+ * The backend does not compute added/removed counters — `refreshDiscovery()`
+ * returns the refreshed list and the caller (DiscoveryPanel) diffs it
+ * against the previous snapshot to compute these values itself.
+ */
+export interface RefreshDiscoveryRawDto {
+  status: string;
+  count: number;
+  agents: DiscoveredAgentDto[];
 }
