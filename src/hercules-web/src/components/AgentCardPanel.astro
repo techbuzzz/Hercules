@@ -1,0 +1,414 @@
+---
+// A2A Agent Card panel (Phase 7 task_088).
+// Показывает локальный Agent Card, позволяет импортировать remote по URL
+// и batch-discovery по списку URLs. Все ответы рендерятся с secret-redaction.
+---
+
+<div class="flex flex-col gap-5" id="a2a-panel">
+
+  <!-- Header + actions -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">A2A Agent Card</h2>
+      <p class="text-xs text-gray-500">
+        Публикация и discovery A2A-совместимых карт peer-агентов.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="a2a-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+      <button id="a2a-publish" type="button"
+        class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200 transition-colors hover:bg-emerald-500/20">
+        Опубликовать
+      </button>
+    </div>
+  </div>
+
+  <!-- Error banner -->
+  <div id="a2a-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+
+  <!-- Status / last fetched -->
+  <div class="text-xs text-gray-600">
+    <span id="a2a-updated" class="text-gray-500"></span>
+  </div>
+
+  <!-- === LOCAL CARD === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Локальная карта
+        <span class="ml-2 text-xs font-normal text-gray-500">(как видят peer-агенты)</span>
+      </h3>
+      <div class="flex items-center gap-2">
+        <button id="a2a-toggle-json" type="button"
+          class="rounded-md border border-white/10 px-2.5 py-1 text-[11px] text-gray-300 transition-colors hover:bg-white/5">
+          JSON
+        </button>
+        <button id="a2a-copy-json" type="button"
+          class="hidden rounded-md border border-white/10 px-2.5 py-1 text-[11px] text-gray-300 transition-colors hover:bg-white/5">
+          Копировать
+        </button>
+      </div>
+    </div>
+
+    <div id="a2a-card-empty" class="py-6 text-center text-xs text-gray-500">
+      Нет данных. Нажмите «Обновить».
+    </div>
+    <div id="a2a-card-meta" class="hidden flex-col gap-3"></div>
+    <pre id="a2a-card-json" class="mono mt-3 hidden max-h-96 overflow-auto rounded-lg border border-white/10 bg-[#0a0a0b] p-3 text-[11px] text-gray-300"></pre>
+  </section>
+
+  <!-- === IMPORT REMOTE === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-2 text-sm font-medium text-gray-300">Import remote Agent Card</h3>
+    <p class="mb-3 text-xs text-gray-500">
+      Укажите URL <code class="mono text-gray-400">/agent-card.json</code> peer-агента. Backend скачает и провалидирует карту.
+    </p>
+    <form id="a2a-import-form" class="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <input
+        id="a2a-import-url"
+        type="url"
+        required
+        placeholder="https://peer.example.com/agent-card.json"
+        class="mono flex-1 rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none"
+      />
+      <button type="submit"
+        class="rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs text-violet-200 transition-colors hover:bg-violet-500/20">
+        Импортировать
+      </button>
+    </form>
+    <div id="a2a-import-result" class="mt-3 hidden"></div>
+  </section>
+
+  <!-- === DISCOVER === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-2 text-sm font-medium text-gray-300">Discover по списку URLs</h3>
+    <p class="mb-3 text-xs text-gray-500">
+      По одному URL на строку. Backend параллельно дёрнет каждый и вернёт успешно импортированные карты.
+    </p>
+    <form id="a2a-discover-form" class="flex flex-col gap-2">
+      <textarea
+        id="a2a-discover-urls"
+        rows="4"
+        required
+        placeholder={"https://peer1.example.com/agent-card.json\nhttps://peer2.example.com/agent-card.json"}
+        class="mono w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none"
+      ></textarea>
+      <div class="flex items-center justify-between gap-2">
+        <span id="a2a-discover-summary" class="text-xs text-gray-500"></span>
+        <button type="submit"
+          class="rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-200 transition-colors hover:bg-violet-500/20">
+          Discover
+        </button>
+      </div>
+    </form>
+    <div id="a2a-discover-result" class="mt-3 hidden"></div>
+  </section>
+</div>
+
+<script>
+  import { api, type AgentCardDto, type DiscoverCardEntryDto } from "../lib/api";
+
+  const errBanner = document.getElementById("a2a-error")!;
+  const updatedEl = document.getElementById("a2a-updated")!;
+
+  const cardEmpty = document.getElementById("a2a-card-empty")!;
+  const cardMeta = document.getElementById("a2a-card-meta")!;
+  const cardJson = document.getElementById("a2a-card-json")!;
+  const toggleJsonBtn = document.getElementById("a2a-toggle-json")!;
+  const copyJsonBtn = document.getElementById("a2a-copy-json")!;
+
+  const refreshBtn = document.getElementById("a2a-refresh")!;
+  const publishBtn = document.getElementById("a2a-publish")!;
+
+  const importForm = document.getElementById("a2a-import-form") as HTMLFormElement;
+  const importUrl = document.getElementById("a2a-import-url") as HTMLInputElement;
+  const importResult = document.getElementById("a2a-import-result")!;
+
+  const discoverForm = document.getElementById("a2a-discover-form") as HTMLFormElement;
+  const discoverUrls = document.getElementById("a2a-discover-urls") as HTMLTextAreaElement;
+  const discoverSummary = document.getElementById("a2a-discover-summary")!;
+  const discoverResult = document.getElementById("a2a-discover-result")!;
+
+  // Secret redaction — вычищаем известные credential-поля из response body.
+  const SECRET_KEYS = [
+    "apikey", "api_key", "api-key",
+    "token", "access_token", "refreshtoken", "refresh_token",
+    "password", "passwd", "passphrase",
+    "secret", "clientsecret", "client_secret",
+    "authorization", "credential", "credentials",
+    "x-api-key",
+  ];
+  const SECRET_RE = new RegExp(
+    `("?(?:${SECRET_KEYS.join("|")})"?\\s*[:=]\\s*)("([^"\\n]+)"|[^,}\\s\\n]+)`,
+    "gi",
+  );
+  function redact(text: string): string {
+    return text.replace(SECRET_RE, (_m, prefix) => `${prefix}"***"`);
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = redact(message);
+    errBanner.classList.remove("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+
+  // 5-second timeout wrapper — fetch races against AbortController.
+  async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, ms = 5000): Promise<Response> {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), ms);
+    try {
+      return await fetch(input, { ...init, signal: ctrl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  // ---- Render: AgentCard -> HTML ----
+  function capabilityPill(label: string, on: boolean): string {
+    return `<span class="rounded-full px-2 py-0.5 text-[11px] ${
+      on
+        ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+        : "border border-white/10 bg-white/5 text-gray-500"
+    }">${escapeHtml(label)}</span>`;
+  }
+
+  function renderCard(card: AgentCardDto): void {
+    cardEmpty.classList.add("hidden");
+    cardMeta.classList.remove("hidden");
+    cardMeta.classList.add("flex");
+
+    const caps = card.capabilities;
+    const auth = card.authentication;
+    const tags = (card.tags ?? []).map((t) =>
+      `<span class="mono rounded bg-white/5 px-2 py-0.5 text-[11px] text-gray-300">${escapeHtml(t)}</span>`,
+    ).join("");
+
+    const skills = card.skills.map((s) => {
+      const sTags = (s.tags ?? []).map((t) =>
+        `<span class="mono rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-gray-400">${escapeHtml(t)}</span>`,
+      ).join(" ");
+      const modesIn = (s.inputModes ?? []).join(", ");
+      const modesOut = (s.outputModes ?? []).join(", ");
+      return `
+        <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="font-medium text-white">${escapeHtml(s.name)}</div>
+              <div class="mono text-[11px] text-gray-500">${escapeHtml(s.id)}</div>
+            </div>
+            ${s.version ? `<span class="mono shrink-0 rounded bg-violet-500/15 px-2 py-0.5 text-[11px] text-violet-300">v${escapeHtml(s.version)}</span>` : ""}
+          </div>
+          ${s.description ? `<p class="mt-1 text-xs text-gray-400">${escapeHtml(s.description)}</p>` : ""}
+          ${sTags ? `<div class="mt-2 flex flex-wrap gap-1">${sTags}</div>` : ""}
+          ${(modesIn || modesOut) ? `<div class="mt-2 text-[11px] text-gray-500">in: <span class="text-gray-300">${escapeHtml(modesIn || "—")}</span> · out: <span class="text-gray-300">${escapeHtml(modesOut || "—")}</span></div>` : ""}
+        </div>`;
+    }).join("");
+
+    const provider = card.provider
+      ? `<div class="text-xs text-gray-400">Provider: <span class="text-gray-200">${escapeHtml(card.provider.organization)}</span>${card.provider.url ? ` · <a class="text-violet-300 hover:underline" href="${escapeHtml(card.provider.url)}" target="_blank" rel="noreferrer">${escapeHtml(card.provider.url)}</a>` : ""}</div>`
+      : "";
+
+    const authBlock = auth
+      ? `<div class="text-xs text-gray-400">Auth: ${auth.schemes.map((s) => `<span class="mono rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-gray-300">${escapeHtml(s)}</span>`).join(" ")}${auth.credentials ? ` · <span class="text-gray-500">${escapeHtml(auth.credentials)}</span>` : ""}</div>`
+      : "";
+
+    cardMeta.innerHTML = `
+      <div class="flex flex-col gap-1">
+        <div class="flex items-baseline gap-2">
+          <h4 class="text-lg font-semibold text-white">${escapeHtml(card.name)}</h4>
+          <span class="mono text-xs text-gray-500">v${escapeHtml(card.version)}</span>
+        </div>
+        ${card.description ? `<p class="text-sm text-gray-400">${escapeHtml(card.description)}</p>` : ""}
+        ${card.url ? `<div class="text-xs text-gray-500">URL: <a class="text-violet-300 hover:underline mono" href="${escapeHtml(card.url)}" target="_blank" rel="noreferrer">${escapeHtml(card.url)}</a></div>` : ""}
+        ${provider}
+        ${authBlock}
+        ${tags ? `<div class="mt-1 flex flex-wrap gap-1.5">${tags}</div>` : ""}
+        <div class="mt-1 text-[11px] text-gray-600">generated: ${escapeHtml(card.generatedAt)}</div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-1.5">
+        <span class="text-[11px] text-gray-500">capabilities:</span>
+        ${capabilityPill("streaming", caps.streaming)}
+        ${capabilityPill("pushNotifications", caps.pushNotifications)}
+        ${capabilityPill("stateTransitionReports", caps.stateTransitionReports)}
+        ${capabilityPill("multipartResponses", caps.multipartResponses)}
+      </div>
+
+      <div>
+        <div class="mb-1 text-[11px] text-gray-500">default modes: in <span class="text-gray-300">${card.defaultInputModes.map(escapeHtml).join(", ")}</span> · out <span class="text-gray-300">${card.defaultOutputModes.map(escapeHtml).join(", ")}</span></div>
+      </div>
+
+      <div>
+        <div class="mb-2 text-[11px] text-gray-500">skills (${card.skills.length}):</div>
+        ${card.skills.length === 0 ? `<div class="text-xs text-gray-500">Нет навыков.</div>` : `<div class="grid grid-cols-1 gap-2 lg:grid-cols-2">${skills}</div>`}
+      </div>
+    `;
+
+    // Raw JSON view (без секретов, на всякий случай).
+    const safe = redact(JSON.stringify(card, null, 2));
+    cardJson.textContent = safe;
+  }
+
+  // ---- Render: DiscoverResult -> HTML ----
+  function renderDiscoverList(cards: DiscoverCardEntryDto[]): string {
+    if (cards.length === 0) {
+      return `<div class="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">Ни одна карта не импортирована успешно.</div>`;
+    }
+    return cards.map((c) => {
+      const skillList = c.skills.length
+        ? c.skills.map((s) => `<span class="mono rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-gray-300">${escapeHtml(s.name)}</span>`).join(" ")
+        : `<span class="text-[10px] text-gray-500">без навыков</span>`;
+      return `
+        <div class="rounded-lg border border-white/5 bg-[#0a0a0b] p-3">
+          <div class="flex items-baseline justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="font-medium text-white">${escapeHtml(c.name)}</div>
+              <div class="mono text-[11px] text-gray-500 truncate">${escapeHtml(c.url)}</div>
+            </div>
+            <span class="mono shrink-0 rounded bg-violet-500/15 px-2 py-0.5 text-[11px] text-violet-300">v${escapeHtml(c.version)}</span>
+          </div>
+          <div class="mt-1 flex flex-wrap gap-1">${skillList}</div>
+        </div>`;
+    }).join("");
+  }
+
+  // ---- Actions ----
+  let currentCard: AgentCardDto | null = null;
+  let jsonVisible = false;
+
+  async function loadLocalCard(): Promise<void> {
+    clearError();
+    try {
+      const card = await api.getAgentCard();
+      currentCard = card;
+      renderCard(card);
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить локальную Agent Card: ${msg}`);
+      cardEmpty.classList.remove("hidden");
+      cardMeta.classList.add("hidden");
+      cardMeta.classList.remove("flex");
+    }
+  }
+
+  refreshBtn.addEventListener("click", () => {
+    void loadLocalCard();
+  });
+
+  toggleJsonBtn.addEventListener("click", () => {
+    jsonVisible = !jsonVisible;
+    if (jsonVisible) {
+      cardJson.classList.remove("hidden");
+      copyJsonBtn.classList.remove("hidden");
+      toggleJsonBtn.textContent = "Скрыть JSON";
+    } else {
+      cardJson.classList.add("hidden");
+      copyJsonBtn.classList.add("hidden");
+      toggleJsonBtn.textContent = "JSON";
+    }
+  });
+
+  copyJsonBtn.addEventListener("click", async () => {
+    if (!currentCard) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(currentCard, null, 2));
+      copyJsonBtn.textContent = "Скопировано";
+      setTimeout(() => { copyJsonBtn.textContent = "Копировать"; }, 1500);
+    } catch (e) {
+      showError(`Clipboard недоступен: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  });
+
+  publishBtn.addEventListener("click", async () => {
+    clearError();
+    publishBtn.setAttribute("disabled", "true");
+    try {
+      const res = await api.publishAgentCard();
+      const msg = res.status === "published"
+        ? `Опубликовано: ${res.path ?? "—"}`
+        : `Публикация: ${res.message ?? res.status}`;
+      showError(`✓ ${msg}`);
+      errBanner.classList.remove("border-rose-500/30", "bg-rose-500/10", "text-rose-200");
+      errBanner.classList.add("border-emerald-500/30", "bg-emerald-500/10", "text-emerald-200");
+    } catch (e) {
+      showError(`Не удалось опубликовать: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      publishBtn.removeAttribute("disabled");
+    }
+  });
+
+  importForm.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const url = importUrl.value.trim();
+    if (!url) return;
+    clearError();
+    importResult.classList.add("hidden");
+    importResult.innerHTML = `<div class="text-xs text-gray-500">Загрузка…</div>`;
+    importResult.classList.remove("hidden");
+    try {
+      const card = await fetchWithTimeout(
+        `${(import.meta.env.PUBLIC_API_BASE as string) || "http://localhost:5000"}/api/a2a/agent-card/from?url=${encodeURIComponent(url)}`,
+        { headers: { "X-Api-Key": (import.meta.env.PUBLIC_API_KEY as string) || "dev-local-key" } },
+        5000,
+      ).then(async (r) => {
+        if (!r.ok) {
+          let body: unknown = null;
+          try { body = await r.json(); } catch { /* ignore */ }
+          const err = (body as { error?: string } | null)?.error ?? `HTTP ${r.status}`;
+          throw new Error(err);
+        }
+        return r.json() as Promise<AgentCardDto>;
+      });
+      importResult.innerHTML = `
+        <div class="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-emerald-200">
+          ✓ Импортировано: <span class="font-medium">${escapeHtml(card.name)}</span> v${escapeHtml(card.version)} (${card.skills.length} skills)
+          <div class="mono mt-1 text-[11px] text-gray-500 truncate">${escapeHtml(card.url || url)}</div>
+        </div>`;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isTimeout = /abort|timeout/i.test(msg);
+      importResult.innerHTML = `<div class="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">✗ ${isTimeout ? "Timeout (5s)" : escapeHtml(redact(msg))}</div>`;
+    }
+  });
+
+  discoverForm.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const urls = discoverUrls.value
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (urls.length === 0) return;
+    clearError();
+    discoverResult.classList.add("hidden");
+    discoverResult.innerHTML = `<div class="text-xs text-gray-500">Запрос ${urls.length} URL…</div>`;
+    discoverResult.classList.remove("hidden");
+    discoverSummary.textContent = "";
+    try {
+      const res = await api.discoverAgentCards(urls);
+      discoverSummary.textContent = `из ${res.total}: ${res.discovered} ok, ${res.failed} failed`;
+      discoverResult.innerHTML = renderDiscoverList(res.cards);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      discoverResult.innerHTML = `<div class="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">✗ ${escapeHtml(redact(msg))}</div>`;
+    }
+  });
+
+  // Initial load
+  void loadLocalCard();
+</script>

@@ -51,13 +51,19 @@ src/
 │   ├── ConfigEditor.astro  # JSON-редактор конфигурации (PATCH/PUT)
 │   ├── ProfileEditor.astro # Markdown-редактор профиля памяти
 │   ├── SkillCard.astro     # Карточка навыка (статическая, для SSR)
-│   └── StatsDashboard.astro# Дашборд метрик + рефлексия
+│   ├── StatsDashboard.astro# Дашборд метрик + рефлексия
+│   ├── MeshDashboard.astro # Mesh topology/traffic/health (task_053)
+│   ├── MeshRouterPanel.astro# Mesh router (task_043)
+│   ├── EscalationPanel.astro# HITL эскалация (task_049)
+│   └── AgentCardPanel.astro# A2A Agent Card view/import/discover (task_088)
 ├── pages/
 │   ├── index.astro         # Чат
 │   ├── skills.astro        # Список + создание/редактирование/улучшение
 │   ├── profile.astro       # Профиль памяти
 │   ├── config.astro        # Настройки
-│   └── stats.astro         # Статистика
+│   ├── stats.astro         # Статистика
+│   ├── memmesh.astro       # Mesh dashboard + router + escalation
+│   └── a2a.astro           # A2A Agent Card (локальная карта + import/discover)
 ├── lib/
 │   └── api.ts              # Клиент Hercules Web API + DTO
 └── styles/
@@ -84,6 +90,19 @@ UI дёргает следующие эндпоинты (см. `src/lib/api.ts`)
 | GET    | `/api/config`                   | Чтение конфигурации              |
 | PUT    | `/api/config`                   | Полная замена конфигурации       |
 | PATCH  | `/api/config`                   | Частичное обновление             |
+| GET    | `/api/mesh/router/routes`       | Кандидаты mesh-роутера           |
+| GET    | `/api/mesh/router/health`       | Health peer-агентов              |
+| GET    | `/api/mesh/circuits`            | Состояние circuit-breaker'ов     |
+| GET    | `/api/mesh/dashboard`           | Сводный mesh dashboard           |
+| GET    | `/api/mesh/topology`            | Топология mesh                   |
+| GET    | `/api/mesh/health`              | Здоровье mesh-агентов            |
+| GET    | `/api/mesh/denials`             | Policy denials                   |
+| GET    | `/api/mesh/skills/heatmap`      | Heatmap использования навыков    |
+| GET    | `/api/mesh/eval/summary`        | Сводка mesh eval-прогонов        |
+| GET    | `/api/a2a/agent-card`           | Локальная A2A Agent Card          |
+| GET    | `/api/a2a/agent-card/from`      | Import remote Agent Card по URL  |
+| POST   | `/api/a2a/discover`             | Batch discover по списку URL     |
+| POST   | `/api/a2a/agent-card/publish`   | Принудительная публикация        |
 
 Все запросы отправляют заголовок `X-Api-Key: $PUBLIC_API_KEY`. Backend CORS по умолчанию разрешает `http://localhost:4321` и `http://127.0.0.1:4321` (см. `WebApi.AllowedCorsOrigins` в `appsettings.json`).
 

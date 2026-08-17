@@ -333,6 +333,38 @@ export const api = {
     const res = await fetch(`${API_BASE}/api/mesh/eval/summary`, { headers: headers(false) });
     return handle<MeshEvalSummaryDto>(res);
   },
+
+  // ---- A2A Agent Card (Phase 7 task_088) ----
+
+  async getAgentCard(): Promise<AgentCardDto> {
+    const res = await fetch(`${API_BASE}/api/a2a/agent-card`, { headers: headers(false) });
+    return handle<AgentCardDto>(res);
+  },
+
+  async getRemoteAgentCard(url: string): Promise<AgentCardDto> {
+    const res = await fetch(
+      `${API_BASE}/api/a2a/agent-card/from?url=${encodeURIComponent(url)}`,
+      { headers: headers(false) },
+    );
+    return handle<AgentCardDto>(res);
+  },
+
+  async discoverAgentCards(urls: string[]): Promise<DiscoverResultDto> {
+    const res = await fetch(`${API_BASE}/api/a2a/discover`, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(urls),
+    });
+    return handle<DiscoverResultDto>(res);
+  },
+
+  async publishAgentCard(): Promise<{ status: string; path?: string; message?: string }> {
+    const res = await fetch(`${API_BASE}/api/a2a/agent-card/publish`, {
+      method: "POST",
+      headers: headers(false),
+    });
+    return handle<{ status: string; path?: string; message?: string }>(res);
+  },
 };
 
 // ---- Mesh DTOs ----
@@ -467,4 +499,64 @@ export interface MeshEvalRunDto {
   assertionsFailed: number;
   startTimeUtc: string;
   durationMs: number;
+}
+
+// ---- A2A Agent Card (Phase 3 task_033 / Phase 7 task_088) ----
+
+export interface AgentCardSkillDto {
+  id: string;
+  name: string;
+  description: string;
+  tags?: string[] | null;
+  inputModes?: string[] | null;
+  outputModes?: string[] | null;
+  version?: string | null;
+}
+
+export interface AgentCardCapabilitiesDto {
+  streaming: boolean;
+  pushNotifications: boolean;
+  stateTransitionReports: boolean;
+  multipartResponses: boolean;
+}
+
+export interface A2AProviderDto {
+  organization: string;
+  url?: string | null;
+}
+
+export interface A2AAuthenticationDto {
+  schemes: string[];
+  credentials?: string | null;
+}
+
+export interface AgentCardDto {
+  name: string;
+  description: string;
+  url: string;
+  version: string;
+  provider?: A2AProviderDto | null;
+  capabilities: AgentCardCapabilitiesDto;
+  authentication?: A2AAuthenticationDto | null;
+  skills: AgentCardSkillDto[];
+  defaultInputModes: string[];
+  defaultOutputModes: string[];
+  tags?: string[] | null;
+  documentationUrl?: string | null;
+  generatedAt: string;
+}
+
+export interface DiscoverCardEntryDto {
+  url: string;
+  name: string;
+  version: string;
+  url2: string;
+  skills: { id: string; name: string }[];
+}
+
+export interface DiscoverResultDto {
+  total: number;
+  discovered: number;
+  failed: number;
+  cards: DiscoverCardEntryDto[];
 }
