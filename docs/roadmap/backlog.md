@@ -165,7 +165,7 @@
 | 98 | 1 | [CheckIn/CheckOut protocol](tasks/task_098.md) | `checkin-checkout-protocol` | pending |
 | 99 | 6 | [System restart protocol](tasks/task_099.md) | `system-restart-protocol` | done |
 | 100 | 6 | [MCP hot-reload (IConfigReload)](tasks/task_100.md) | `mcp-hot-reload` | done |
-| 101 | 6 | [SkillSdk (Hercules.SkillSdk NuGet)](tasks/task_101.md) | `skill-sdk` | pending |
+| 101 | 6 | [SkillSdk (Hercules.SkillSdk NuGet)](tasks/task_101.md) | `skill-sdk` | done |
 | 102 | 6 | [Context distillation](tasks/task_102.md) | `context-distillation` | pending |
 | 103 | 6 | [PostgreSQL session store](tasks/task_103.md) | `postgres-session-store` | pending |
 | 104 | 8 | [hercules-workflow-server](tasks/task_104.md) | `workflow-server` | pending |

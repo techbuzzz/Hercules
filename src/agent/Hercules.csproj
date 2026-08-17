@@ -11,7 +11,7 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <!-- Вложенные проекты (Web API и фронтенд) исключаем из сборки ядра,
          иначе SDK подхватит их .cs-файлы через стандартный globbing. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);Hercules.WebApi/**;hercules-web/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Hercules.WebApi/**;hercules-web/**;SkillSdk/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,10 +19,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Skill SDK: whitelist API for file-based C# skills (task_101) -->
+    <ProjectReference Include="SkillSdk\Hercules.SkillSdk.csproj" />
+
     <!-- AI-абстракции: единый интерфейс IChatClient для всех LLM-провайдеров -->
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.9.0" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.9.0" />
     <!-- OpenAI-совместимый SDK (используется для YandexGPT и Ollama) -->
+
+    <!-- In-process C# compilation for SkillSdkExecutor (task_101) -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
 
     <!-- Хостинг, DI, конфигурация -->
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />

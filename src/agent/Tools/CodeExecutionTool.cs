@@ -5,7 +5,8 @@ namespace Hercules.Tools;
 
 /// <summary>
 ///     Adapter: ICodeExecutor → ITool. Позволяет LLM вызывать code execution через
-///     стандартный tool-протокол (Stage 4).
+///     стандартный tool-протокол (Stage 4). Automatically selects the appropriate executor:
+///     SkillSdkExecutor for code referencing Hercules.SkillSdk, otherwise DotnetFileBasedExecutor.
 /// </summary>
 public sealed class CodeExecutionTool : ITool
 {
@@ -14,11 +15,36 @@ public sealed class CodeExecutionTool : ITool
         PropertyNameCaseInsensitive = true
     };
 
-    private readonly ICodeExecutor _executor;
+    private readonly IReadOnlyList<ICodeExecutor> _executors;
 
+    public CodeExecutionTool(IEnumerable<ICodeExecutor> executors)
+    {
+        _executors = executors?.ToList() ?? throw new ArgumentNullException(nameof(executors));
+    }
+
+    /// <summary>
+    ///     Convenience ctor for tests/backward compat with a single executor.
+    /// </summary>
     public CodeExecutionTool(ICodeExecutor executor)
     {
-        _executor = executor;
+        _executors = executor is null
+            ? throw new ArgumentNullException(nameof(executor))
+            : new List<ICodeExecutor> { executor };
+    }
+
+    private ICodeExecutor SelectExecutor(string code)
+    {
+        if (code.Contains("Hercules.SkillSdk", StringComparison.Ordinal))
+        {
+            var sdk = _executors.FirstOrDefault(e => e.Name.Equals("skill-sdk-in-process", StringComparison.OrdinalIgnoreCase));
+            if (sdk is not null)
+            {
+                return sdk;
+            }
+        }
+
+        var fallback = _executors.FirstOrDefault(e => e.Name.Equals("dotnet-file-based", StringComparison.OrdinalIgnoreCase));
+        return fallback ?? _executors[0];
     }
 
     public string Name => "execute_code";
@@ -59,12 +85,13 @@ public sealed class CodeExecutionTool : ITool
 
         try
         {
+            var executor = SelectExecutor(req.Code);
             var execReq = new ExecutionRequest(
                 req.Code,
                 "csharp",
                 req.Args?.ToArray(),
                 req.TimeoutMs);
-            ExecutionResult result = await _executor.ExecuteAsync(execReq, ct);
+            ExecutionResult result = await executor.ExecuteAsync(execReq, ct);
 
             var meta = new Dictionary<string, object>
             {

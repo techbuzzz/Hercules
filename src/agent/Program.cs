@@ -276,6 +276,22 @@ builder.ConfigureServices((context, services) =>
     });
     services.AddSingleton<ICodeExecutor, DotnetFileBasedExecutor>();
 
+    // SkillSdk context factory + in-process executor (task_101)
+    services.AddSingleton<ISkillContextFactory>(sp =>
+        new SkillSdkContextFactory(
+            sp.GetRequiredService<HttpConfig>(),
+            sp.GetRequiredService<ILLMClient>(),
+            sp.GetRequiredService<ToolRegistry>(),
+            sp.GetRequiredService<LayeredMemoryManager>(),
+            sp.GetRequiredService<IDurableFactsStore>(),
+            sp.GetRequiredService<ILoggerFactory>(),
+            sp.GetService<IHttpClientFactory>()));
+    services.AddSingleton<SkillSdkExecutor>(sp =>
+        new SkillSdkExecutor(
+            sp.GetRequiredService<SandboxOptions>(),
+            sp.GetRequiredService<ISkillContextFactory>()));
+    services.AddSingleton<ICodeExecutor>(sp => sp.GetRequiredService<SkillSdkExecutor>());
+
     // Tool ecosystem (Stage 3, v2)
     services.AddSingleton<ITool, HttpTool>(sp =>
         new HttpTool(

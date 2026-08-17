@@ -91,11 +91,65 @@ Console.WriteLine($"Primes up to 1000: {count}");
 - Максимум 100 КБ кода
 - Рабочая директория = изолированная temp-папка (создаётся и удаляется автоматически)
 
+## SkillSdk mode (task_101)
+
+Если скиллу нужен доступ к инструментам агента (HTTP, MCP, LLM, память, логирование, сессия),
+используй NuGet-пакет `Hercules.SkillSdk`. В этом режиме код исполняется в процессе агента
+в изолированном `AssemblyLoadContext` и получает `IHerculesSkillContext`.
+
+### Разрешённые using
+
+```csharp
+using Hercules.SkillSdk;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+```
+
+### Entry point
+
+```csharp
+using Hercules.SkillSdk;
+
+public class Program
+{
+    public static async Task Main(IHerculesSkillContext ctx)
+    {
+        ctx.Logger.Info("Skill started");
+        ctx.Session.CancellationToken.ThrowIfCancellationRequested();
+
+        // HTTP к разрешённому домену
+        var resp = await ctx.Http.GetAsync("https://api.example.com/status");
+        ctx.Logger.Info($"HTTP {resp.StatusCode}");
+
+        // LLM
+        var llm = await ctx.Llm.PromptAsync("Привет, агент!");
+        Console.WriteLine(llm.Text);
+
+        // Память
+        await ctx.Memory.SetAsync("last_run", DateTime.UtcNow.ToString("O"), SkillMemoryScope.Session);
+    }
+}
+```
+
+### Безопасность SkillSdk
+
+- ✅ Только API из `Hercules.SkillSdk`
+- ✅ HTTP только на домены из `Http.AllowedDomains`
+- ✅ MCP только зарегистрированные tools
+- ✅ LLM через провайдеров агента
+- ✅ Память: execution/session/durable/episodic
+- ❌ `System.Reflection`, `System.Diagnostics`, `System.Runtime.InteropServices` — запрещены
+- ❌ `unsafe`, `fixed`, `DllImport` — запрещены
+- ❌ `File.Delete`, `Process.Start`, `Registry.*` — запрещены
+
 ## Pitfalls
 
 - ❌ Не используй `File.Delete` — sandbox заблокирует
 - ❌ Не пиши `while(true)` без причины — убьёт по timeout
-- ❌ Не используй `new HttpClient()` — нет сети
+- ❌ Не используй `new HttpClient()` — нет сети (испуй `ctx.Http` в SkillSdk-режиме)
 - ❌ Не пытайся вызвать `Process.Start("rm", "-rf")` — заблокировано
 - ✅ Пиши чистый вычислительный код с `Console.WriteLine` для output
 - ✅ Для больших данных — пиши в `%TEMP%/hercules-output.csv`, потом сообщи пользователю путь
+- ✅ Для доступа к агентским инструментам — используй `Hercules.SkillSdk` и `IHerculesSkillContext`
