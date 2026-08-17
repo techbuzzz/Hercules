@@ -65,7 +65,7 @@ public class CapabilityRegistryTests : IDisposable
    [Fact]
    public void Register_Overwrites_Existing_Agent()
    {
-      _registry.Register(CreateManifest("agent-b", "http://old:5000", ["old"]));
+      _registry.Register(CreateManifest("agent-b", "http://old:8421", ["old"]));
       _registry.Register(CreateManifest("agent-b", "http://new:6000", ["new"]));
 
       var found = _registry.Get("agent-b");

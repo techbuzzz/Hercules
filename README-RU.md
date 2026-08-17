@@ -176,7 +176,7 @@ src/agent/                         # Основной проект агента
 Дополнительные проекты:
 
 ```
-src/agent/Hercules.WebApi/           # ASP.NET Core Minimal API (REST), порт :5000
+src/agent/Hercules.WebApi/           # ASP.NET Core Minimal API (REST), порт :8421
 ├── Program.cs                         # DI + CORS + middleware, переиспользует ядро
 ├── Auth/                              # ApiKeyMiddleware, RateLimitMiddleware,
 │                                      # RequestBodyLimitMiddleware, PeerAuthMiddleware
@@ -282,7 +282,7 @@ dotnet run --project src/agent/Hercules -- --telegram
 dotnet run --project src/agent/Hercules.WebApi
 ```
 
-Сервер поднимается на `http://localhost:5000`. Ядро агента (`AgentCore`) переиспользуется
+Сервер поднимается на `http://localhost:8421`. Ядро агента (`AgentCore`) переиспользуется
 через адаптер `WebApiAdapter` — отдельной логики агента в Web API нет.
 
 ### Запуск CLI через основной проект
@@ -355,7 +355,7 @@ ASP.NET Core Minimal API с 35 контроллерами. Все ответы �
 Пример:
 
 ```bash
-curl -X POST http://localhost:5000/api/chat \
+curl -X POST http://localhost:8421/api/chat \
   -H "X-Api-Key: dev-local-key" -H "Content-Type: application/json" \
   -d '{"message":"какая погода в Москве?"}'
 ```
@@ -399,7 +399,7 @@ npm run dev        # dev-сервер на http://localhost:4321
 Адрес бэкенда и ключ настраиваются через переменные окружения (файл `src/hercules-web/.env`):
 
 ```bash
-PUBLIC_API_BASE=http://localhost:5000
+PUBLIC_API_BASE=http://localhost:8421
 PUBLIC_API_KEY=dev-local-key
 ```
 
@@ -411,7 +411,7 @@ PUBLIC_API_KEY=dev-local-key
 
 ```bash
 # Терминал 1 — бэкенд
-dotnet run --project src/agent/Hercules.WebApi      # → :5000
+dotnet run --project src/agent/Hercules.WebApi      # → :8421
 
 # Терминал 2 — фронтенд
 cd src/hercules-web && npm run dev                  # → :4321

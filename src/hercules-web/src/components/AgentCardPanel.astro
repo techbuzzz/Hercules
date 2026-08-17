@@ -363,7 +363,7 @@
     importResult.classList.remove("hidden");
     try {
       const card = await fetchWithTimeout(
-        `${(import.meta.env.PUBLIC_API_BASE as string) || "http://localhost:5000"}/api/a2a/agent-card/from?url=${encodeURIComponent(url)}`,
+        `${(import.meta.env.PUBLIC_API_BASE as string) || "http://localhost:8421"}/api/a2a/agent-card/from?url=${encodeURIComponent(url)}`,
         { headers: { "X-Api-Key": (import.meta.env.PUBLIC_API_KEY as string) || "dev-local-key" } },
         5000,
       ).then(async (r) => {

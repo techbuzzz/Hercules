@@ -6,6 +6,23 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- **BREAKING: Default agent port 5000 → 8421** (`task_096`, ADR-0003).
+  - `Hercules.WebApi` now binds to `http://localhost:8421` (Development) /
+    `http://0.0.0.0:8421` (Production) instead of port 5000.
+  - `Mesh.Endpoint` default in `appsettings.json` and `AppConfig.MeshConfig.Endpoint`
+    changed to `http://localhost:8421`.
+  - CORS dev-fallback origins updated: `http://localhost:5000` →
+    `http://localhost:8421` (Studio continues to scan 5000 as a legacy
+    fallback; see ADR-0003).
+  - `hercules-web` defaults (`API_BASE`, `PUBLIC_API_BASE`, embedded
+    `MeshRouterPanel`/`AgentCardPanel`) follow the new port.
+  - All documentation, smoke tests and curl examples updated.
+  - **Migration path:** existing installations must set
+    `ASPNETCORE_URLS=http://localhost:8421` (or `--urls …`) or update
+    `Mesh.Endpoint` in `appsettings.json` / `runtime-config.json`. To keep
+    the old port, set `ASPNETCORE_URLS=http://0.0.0.0:5000` explicitly.
+  - Reason: 5000 collides with Flask, Synology DSM, UPnP, Syncthing. See
+    [ADR-0003](docs/EPIC_Hercules_Studio/adr/0003-port-range-8421.md).
 - **Rebranding**: the project has been renamed from `MicroHermes` / "Мини-Хермес" to **Hercules**.
   - Renamed namespaces (`MicroHermes.*` → `Hercules.*`), projects
     (`MicroHermes.csproj` → `Hercules.csproj`, `MicroHermes.WebApi` → `Hercules.WebApi`),

@@ -183,7 +183,7 @@ src/agent/                         # Main agent project
 Additional projects:
 
 ```
-src/agent/Hercules.WebApi/           # ASP.NET Core Minimal API (REST), port :5000
+src/agent/Hercules.WebApi/           # ASP.NET Core Minimal API (REST), port :8421
 ├── Program.cs                         # DI + CORS + middleware, reuses the core
 ├── Auth/                              # ApiKeyMiddleware, RateLimitMiddleware,
 │                                      # RequestBodyLimitMiddleware, PeerAuthMiddleware
@@ -288,7 +288,7 @@ dotnet run --project src/agent/Hercules -- --telegram
 dotnet run --project src/agent/Hercules.WebApi
 ```
 
-The server starts on `http://localhost:5000`. The agent core (`AgentCore`) is reused
+The server starts on `http://localhost:8421`. The agent core (`AgentCore`) is reused
 through the `WebApiAdapter` adapter — there is no separate agent logic in the Web API.
 
 ### Run CLI via the main project
@@ -361,7 +361,7 @@ Every interaction is logged in SQLite (`data/sessions.db`).
 Example:
 
 ```bash
-curl -X POST http://localhost:5000/api/chat \
+curl -X POST http://localhost:8421/api/chat \
   -H "X-Api-Key: dev-local-key" -H "Content-Type: application/json" \
   -d '{"message":"what is the weather in Moscow?"}'
 ```
@@ -405,7 +405,7 @@ npm run dev        # dev server on http://localhost:4321
 The backend address and key are configured via environment variables (`src/hercules-web/.env`):
 
 ```bash
-PUBLIC_API_BASE=http://localhost:5000
+PUBLIC_API_BASE=http://localhost:8421
 PUBLIC_API_KEY=dev-local-key
 ```
 
@@ -417,7 +417,7 @@ PUBLIC_API_KEY=dev-local-key
 
 ```bash
 # Terminal 1 — backend
-dotnet run --project src/agent/Hercules.WebApi      # → :5000
+dotnet run --project src/agent/Hercules.WebApi      # → :8421
 
 # Terminal 2 — frontend
 cd src/hercules-web && npm run dev                  # → :4321

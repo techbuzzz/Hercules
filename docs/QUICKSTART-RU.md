@@ -45,7 +45,7 @@ dotnet run --project Hercules
 
 ## 5. Запуск Web API + фронтенда (plug-and-play конфигурация)
 ```bash
-# Терминал 1 — бэкенд (порт :5000)
+# Терминал 1 — бэкенд (порт :8421)
 dotnet run --project Hercules.WebApi
 
 # Терминал 2 — фронтенд (порт :4321)

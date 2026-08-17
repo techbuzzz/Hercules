@@ -43,7 +43,7 @@ public class AgentCardServiceTests : IDisposable
             "hercules-test",
             "Test Agent",
             "Test agent description",
-            "http://localhost:5000",
+            "http://localhost:8421",
             _manifestDir,
             () => new List<ManifestCapability>
             {
@@ -55,7 +55,7 @@ public class AgentCardServiceTests : IDisposable
             },
             "yandexgpt",
             new List<string> { "ollama-local" },
-            "http://localhost:5000/api/health",
+            "http://localhost:8421/api/health",
             new List<string> { "1.0" },
             null,
             null);
@@ -90,7 +90,7 @@ public class AgentCardServiceTests : IDisposable
 
         Assert.Equal("hercules-test", card.Name);
         Assert.Equal("Test agent description", card.Description);
-        Assert.Equal("http://localhost:5000", card.Url);
+        Assert.Equal("http://localhost:8421", card.Url);
         Assert.Equal("1.0.0", card.Version);
         Assert.NotNull(card.Capabilities);
         Assert.NotNull(card.Authentication);
@@ -160,7 +160,7 @@ public class AgentCardServiceTests : IDisposable
         AgentCard card = await svc.GetAgentCardAsync();
 
         Assert.Equal("hercules-test", card.Name);
-        Assert.Equal("http://localhost:5000", card.Url);
+        Assert.Equal("http://localhost:8421", card.Url);
         Assert.NotEmpty(card.GeneratedAt);
     }
 

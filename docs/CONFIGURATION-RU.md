@@ -26,7 +26,7 @@ HERCULES_Telegram__Enabled=true
 
 Пример PATCH через `curl`:
 ```bash
-curl -X PATCH http://localhost:5000/api/config \
+curl -X PATCH http://localhost:8421/api/config \
   -H "X-Api-Key: dev-local-key" \
   -H "Content-Type: application/json" \
   -d '{"llm":{"provider":"ollama-local"}}'
@@ -102,7 +102,7 @@ LLM-клиентов, роли и инструменты.
 ## Фронтенд (`hercules-web/.env`)
 | Переменная | Описание |
 |------------|----------|
-| `PUBLIC_API_BASE` | Базовый URL Web API (напр. `http://localhost:5000`) |
+| `PUBLIC_API_BASE` | Базовый URL Web API (напр. `http://localhost:8421`) |
 | `PUBLIC_API_KEY` | Значение `X-Api-Key` для запросов |
 
 > ⚠️ Не коммитьте реальные ключи. Используйте переменные окружения, web-конфигурацию или `data/runtime-config.json` и держите `data/` вне репозитория.

@@ -1,6 +1,6 @@
 # Справочник Web API
 
-ASP.NET Core Minimal API. База: `http://localhost:5000`. Все ответы — JSON (UTF-8, camelCase).
+ASP.NET Core Minimal API. База: `http://localhost:8421`. Все ответы — JSON (UTF-8, camelCase).
 
 ## Авторизация
 Все эндпоинты, кроме `/api/health`, требуют заголовок:
@@ -33,7 +33,7 @@ X-Api-Key: <значение WebApi:ApiKey>
 
 ### Чат
 ```bash
-curl -X POST http://localhost:5000/api/chat \
+curl -X POST http://localhost:8421/api/chat \
   -H "X-Api-Key: dev-local-key" \
   -H "Content-Type: application/json" \
   -d '{"message":"какая погода в Москве?"}'
@@ -54,31 +54,31 @@ curl -X POST http://localhost:5000/api/chat \
 
 ### Создание навыка через ИИ
 ```bash
-curl -X POST "http://localhost:5000/api/skills?ai=true" \
+curl -X POST "http://localhost:8421/api/skills?ai=true" \
   -H "X-Api-Key: dev-local-key" -H "Content-Type: application/json" \
   -d '{"name":"Перевод текста","description":"Переводит текст между языками"}'
 ```
 
 ### Улучшение навыка
 ```bash
-curl -X POST http://localhost:5000/api/skills/translate/improve \
+curl -X POST http://localhost:8421/api/skills/translate/improve \
   -H "X-Api-Key: dev-local-key"
 ```
 
 ### Статистика
 ```bash
-curl http://localhost:5000/api/stats -H "X-Api-Key: dev-local-key"
+curl http://localhost:8421/api/stats -H "X-Api-Key: dev-local-key"
 ```
 
 ### Конфигурация (runtime)
 Получить текущую конфигурацию:
 ```bash
-curl http://localhost:5000/api/config -H "X-Api-Key: dev-local-key"
+curl http://localhost:8421/api/config -H "X-Api-Key: dev-local-key"
 ```
 
 Частично обновить провайдера (без перезагрузки сервера):
 ```bash
-curl -X PATCH http://localhost:5000/api/config \
+curl -X PATCH http://localhost:8421/api/config \
   -H "X-Api-Key: dev-local-key" \
   -H "Content-Type: application/json" \
   -d '{"llm":{"provider":"ollama-local","ollamaLocal":{"model":"llama3.1"}}}'
@@ -86,7 +86,7 @@ curl -X PATCH http://localhost:5000/api/config \
 
 Полная замена конфигурации:
 ```bash
-curl -X PUT http://localhost:5000/api/config \
+curl -X PUT http://localhost:8421/api/config \
   -H "X-Api-Key: dev-local-key" \
   -H "Content-Type: application/json" \
   -d @my-config.json

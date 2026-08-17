@@ -6,6 +6,24 @@
 ## [Unreleased]
 
 ### Изменено
+- **BREAKING: дефолтный порт агента 5000 → 8421** (`task_096`, ADR-0003).
+  - `Hercules.WebApi` теперь слушает `http://localhost:8421` (Development) /
+    `http://0.0.0.0:8421` (Production) вместо порта 5000.
+  - `Mesh.Endpoint` по умолчанию в `appsettings.json` и
+    `AppConfig.MeshConfig.Endpoint` заменён на `http://localhost:8421`.
+  - Dev-fallback CORS origins: `http://localhost:5000` →
+    `http://localhost:8421` (Studio продолжает сканировать 5000 как
+    legacy-fallback — см. ADR-0003).
+  - Дефолты `hercules-web` (`API_BASE`, `PUBLIC_API_BASE`,
+    `MeshRouterPanel`/`AgentCardPanel`) следуют новому порту.
+  - Документация, smoke-тесты и curl-примеры обновлены.
+  - **Миграция:** в существующих установках задайте
+    `ASPNETCORE_URLS=http://localhost:8421` (или `--urls …`) либо
+    обновите `Mesh.Endpoint` в `appsettings.json` / `runtime-config.json`.
+    Чтобы сохранить старый порт, укажите явно
+    `ASPNETCORE_URLS=http://0.0.0.0:5000`.
+  - Причина: 5000 конфликтует с Flask, Synology DSM, UPnP, Syncthing. См.
+    [ADR-0003](docs/EPIC_Hercules_Studio/adr/0003-port-range-8421.md).
 - **Ребрендинг**: проект переименован из `MicroHermes` / «Мини-Хермес» в **Hercules**.
   - Переименованы пространства имён (`MicroHermes.*` → `Hercules.*`), проекты
     (`MicroHermes.csproj` → `Hercules.csproj`, `MicroHermes.WebApi` → `Hercules.WebApi`),

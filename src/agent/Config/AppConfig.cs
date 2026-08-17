@@ -813,7 +813,7 @@ public sealed class MeshConfig
     public string AgentId { get; set; } = "hercules-main";
     public string DisplayName { get; set; } = "Hercules";
     public string Description { get; set; } = "Self-improving micro-agent";
-    public string Endpoint { get; set; } = "http://localhost:5000";
+    public string Endpoint { get; set; } = "http://localhost:8421";
     public string RegistryDb { get; set; } = "mesh_registry.db";
     public int IntentTimeoutMs { get; set; } = 30_000;
     public double LocalConfidenceThreshold { get; set; } = 0.5;

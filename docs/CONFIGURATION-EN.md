@@ -78,7 +78,7 @@ HERCULES_Telegram__Enabled=true
 ## Frontend (`hercules-web/.env`)
 | Variable | Description |
 |------------|----------|
-| `PUBLIC_API_BASE` | Web API base URL (e.g. `http://localhost:5000`) |
+| `PUBLIC_API_BASE` | Web API base URL (e.g. `http://localhost:8421`) |
 | `PUBLIC_API_KEY` | `X-Api-Key` value for requests |
 
 > ⚠️ Do not commit real keys. Use environment variables and keep `data/` out of the repository.

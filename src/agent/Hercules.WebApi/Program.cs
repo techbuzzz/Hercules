@@ -59,7 +59,7 @@ using Microsoft.Extensions.Http.Resilience;
 // ============================================================================
 //  Hercules Web API — ASP.NET Core Minimal API поверх ядра агента.
 //  Предоставляет HTTP-доступ к чату, навыкам, памяти, статистике и конфигурации.
-//  Запуск: dotnet run --project Hercules.WebApi   (порт 5000)
+//  Запуск: dotnet run --project Hercules.WebApi   (порт 8421, см. ADR-0003)
 // ============================================================================
 
 var builder = WebApplication.CreateBuilder(args);
@@ -675,14 +675,16 @@ builder.Services.AddCors(options =>
         }
 
         // Dev fallback: разрешаем только localhost-источники.
+        // 5000 сохранён как legacy-порт (ADR-0003) — некоторые старые установки
+        // ещё крутятся на 5000, и Studio присылает запросы оттуда.
         string[] devOrigins =
         {
             "http://localhost:3000",
             "http://localhost:4321",
-            "http://localhost:5000",
+            "http://localhost:8421",
             "http://127.0.0.1:3000",
             "http://127.0.0.1:4321",
-            "http://127.0.0.1:5000"
+            "http://127.0.0.1:8421"
         };
         policy.WithOrigins(devOrigins)
             .AllowAnyHeader()
@@ -781,19 +783,20 @@ builder.Services.AddOutputCache(o =>
 // JSON: не экранировать кириллицу в ответах
 builder.Services.ConfigureHttpJsonOptions(o => { o.SerializerOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping; });
 
-// Порт по умолчанию — 5000 (если не переопределён через --urls / ASPNETCORE_URLS / launchSettings)
+// Порт по умолчанию — 8421 (см. ADR-0003, диапазон 8421-8521).
+// Если не переопределён через --urls / ASPNETCORE_URLS / launchSettings.
 // launchSettings.json в Development может навязать другой URL, поэтому отключаем его влияние.
 if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")) &&
     !args.Any(a => a.StartsWith("--urls")) &&
     builder.Environment.IsProduction())
 {
-    builder.WebHost.UseUrls("http://0.0.0.0:5000");
+    builder.WebHost.UseUrls("http://0.0.0.0:8421");
 }
 else if (builder.Environment.IsDevelopment())
 {
-    // В Development игнорируем launchSettings URL и фиксируем порт 5000,
+    // В Development игнорируем launchSettings URL и фиксируем порт 8421,
     // чтобы не зависеть от случайного порта в Properties/launchSettings.json.
-    builder.WebHost.UseUrls("http://localhost:5000");
+    builder.WebHost.UseUrls("http://localhost:8421");
 }
 
 var app = builder.Build();
@@ -976,7 +979,7 @@ app.MapCache();
 app.MapToolRegistry();
 app.MapMcpEndpoints();
 
-Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
+Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:8421");
 Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");
 Console.WriteLine($"💾 Данные: {appConfig.Storage.DataRoot}");
 

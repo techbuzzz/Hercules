@@ -47,7 +47,7 @@ public class DiscoveryTests : IDisposable
     {
         var meshCfg = new MeshConfig
         {
-            Peers = new List<MeshPeerConfig> { new() { AgentId = "peer1", Endpoint = "http://peer1:5000" } }
+            Peers = new List<MeshPeerConfig> { new() { AgentId = "peer1", Endpoint = "http://peer1:8421" } }
         };
         using var http = new HttpClient();
         var src = new StaticDiscoverySource(meshCfg, http, "self", _staticLogger.Object);
@@ -62,8 +62,8 @@ public class DiscoveryTests : IDisposable
         {
             Peers = new List<MeshPeerConfig>
             {
-                new() { AgentId = "self", Endpoint = "http://self:5000" },
-                new() { AgentId = "peer1", Endpoint = "http://peer1:5000" }
+                new() { AgentId = "self", Endpoint = "http://self:8421" },
+                new() { AgentId = "peer1", Endpoint = "http://peer1:8421" }
             }
         };
         using var http = new HttpClient();
@@ -84,7 +84,7 @@ public class DiscoveryTests : IDisposable
             Peers = new List<MeshPeerConfig>
             {
                 new() { AgentId = "", Endpoint = "" },
-                new() { AgentId = "peer1", Endpoint = "http://peer1:5000" }
+                new() { AgentId = "peer1", Endpoint = "http://peer1:8421" }
             }
         };
         using var http = new HttpClient();
@@ -102,7 +102,7 @@ public class DiscoveryTests : IDisposable
         {
             Peers = new List<MeshPeerConfig>
             {
-                new() { AgentId = "peer1", Endpoint = "http://peer1:5000" }
+                new() { AgentId = "peer1", Endpoint = "http://peer1:8421" }
             }
         };
         using var http = new HttpClient();
@@ -111,7 +111,7 @@ public class DiscoveryTests : IDisposable
         DiscoveryResult result = await src.DiscoverAsync();
 
         Assert.Single(result.Agents);
-        Assert.Equal("http://peer1:5000/agent.manifest.json", result.Agents[0].ManifestUrl);
+        Assert.Equal("http://peer1:8421/agent.manifest.json", result.Agents[0].ManifestUrl);
     }
 
     // === RegistryDiscoverySource tests ===
@@ -119,9 +119,9 @@ public class DiscoveryTests : IDisposable
     [Fact]
     public async Task RegistryDiscoverySource_ReturnsOnlyNonSelfAgents()
     {
-        _registry.Register(CreateManifest("self", "http://self:5000", new List<string> { "self-phrase" }));
-        _registry.Register(CreateManifest("peer1", "http://peer1:5000", new List<string> { "peer1-phrase" }));
-        _registry.Register(CreateManifest("peer2", "http://peer2:5000", new List<string> { "peer2-phrase" }));
+        _registry.Register(CreateManifest("self", "http://self:8421", new List<string> { "self-phrase" }));
+        _registry.Register(CreateManifest("peer1", "http://peer1:8421", new List<string> { "peer1-phrase" }));
+        _registry.Register(CreateManifest("peer2", "http://peer2:8421", new List<string> { "peer2-phrase" }));
 
         var src = new RegistryDiscoverySource(_registry, "self", _registryLogger.Object);
 
@@ -142,14 +142,14 @@ public class DiscoveryTests : IDisposable
     [Fact]
     public async Task RegistryDiscoverySource_ReturnsCorrectProperties()
     {
-        _registry.Register(CreateManifest("peer1", "http://peer1:5000", new List<string> { "phrase" }));
+        _registry.Register(CreateManifest("peer1", "http://peer1:8421", new List<string> { "phrase" }));
 
         var src = new RegistryDiscoverySource(_registry, "self", _registryLogger.Object);
         DiscoveryResult result = await src.DiscoverAsync();
 
         DiscoveredAgent agent = result.Agents.Single();
         Assert.Equal("peer1", agent.AgentId);
-        Assert.Equal("http://peer1:5000", agent.Endpoint);
+        Assert.Equal("http://peer1:8421", agent.Endpoint);
         Assert.Equal(DiscoverySourceKind.Registry, agent.Source);
     }
 
@@ -319,7 +319,7 @@ public class DiscoveryTests : IDisposable
     {
         var config = new DiscoveryConfig { EnableMdns = false };
         var staticSrc = new StaticDiscoverySource(
-            new MeshConfig { Peers = new List<MeshPeerConfig> { new() { AgentId = "peer1", Endpoint = "http://p1:5000" } } },
+            new MeshConfig { Peers = new List<MeshPeerConfig> { new() { AgentId = "peer1", Endpoint = "http://p1:8421" } } },
             new HttpClient(), "self", _staticLogger.Object);
         var registrySrc = new RegistryDiscoverySource(_registry, "self", _registryLogger.Object);
         var mdnsSrc = new MdnsDiscoverySource(

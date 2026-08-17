@@ -5,7 +5,7 @@ Web UI для самообучающегося микро-агента **Hercule
 ## Требования
 
 - Node.js **≥ 22.12**
-- Запущенный [Hercules.WebApi](../agent/Hercules.WebApi) бэкенд (по умолчанию `http://localhost:5000`)
+- Запущенный [Hercules.WebApi](../agent/Hercules.WebApi) бэкенд (по умолчанию `http://localhost:8421`)
 
 ## Установка
 
@@ -28,7 +28,7 @@ cp .env.example .env   # при необходимости отредактир�
 
 | Имя               | Дефолн                       | Назначение                              |
 | ----------------- | ---------------------------- | --------------------------------------- |
-| `PUBLIC_API_BASE` | `http://localhost:5000`      | Базовый URL backend API                 |
+| `PUBLIC_API_BASE` | `http://localhost:8421`      | Базовый URL backend API                 |
 | `PUBLIC_API_KEY`  | `dev-local-key`              | Ключ `X-Api-Key`, должен совпадать с `WebApi.ApiKey` в backend `appsettings.json` |
 
 `PUBLIC_*` — клиентские префиксы Astro: значения встраиваются в JS-бандл и попадают в браузер. Не кладите сюда серверные секреты.

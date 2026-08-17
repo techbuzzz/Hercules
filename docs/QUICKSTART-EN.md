@@ -43,7 +43,7 @@ Enter a query in the REPL. Repeat the same query 3 times — the agent will prop
 
 ## 5. Run the Web API + Frontend (optional)
 ```bash
-# Terminal 1 — backend (port :5000)
+# Terminal 1 — backend (port :8421)
 dotnet run --project Hercules.WebApi
 
 # Terminal 2 — frontend (port :4321)

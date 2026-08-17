@@ -28,7 +28,7 @@ public class SharedMemorySyncTests : IDisposable
          "hercules-test",
          "Test",
          "Test agent",
-         "http://localhost:5000",
+         "http://localhost:8421",
          _tempDir,
          () => new List<ManifestCapability>());
 
