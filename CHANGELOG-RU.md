@@ -47,6 +47,18 @@
   timeout. Сеть запрещена по умолчанию, 30 s timeout, 1024 file descriptors, 100 KB
   лимит кода. Escape hatch через `SandboxOptions.CustomAllowedNamespaces`
   (token-based: `"HttpClient"` разрешает `new HttpClient()`).
+- **NuGet-пакет SkillSdk (`task_101`)**. Новая библиотека `Hercules.SkillSdk` с
+  whitelist-интерфейсами для file-based C#-скиллов:
+  `IHttpClient`, `IMcpClient`, `ILlmClient`, `IMemoryClient`, `ISkillLogger`,
+  `ISessionContext` и агрегат `IHerculesSkillContext`. Агентские адаптеры
+  принудительно применяют разрешённые домены, список MCP-инструментов, скоупы памяти
+  и изоляцию сессии.
+- **In-process SkillSdk executor**. `SkillSdkExecutor` компилирует SkillSdk-скиллы в
+  collectible `AssemblyLoadContext` через Roslyn, внедряет `IHerculesSkillContext`,
+  и автоматически маршрутизирует `execute_code`, если код ссылается на
+  `Hercules.SkillSdk`. Сочетает `DangerousCodeScanner` (чёрный список) и
+  `SkillSdkWhitelistScanner` (белый список пространств имён/ключевых слов) с
+  reference-ассемблисями.
 - **Stage 3: Tool ecosystem**. `Tools/ITool` контракт + `ToolRegistry` для LLM prompt
   injection. Три встроенных tool:
   - `http` — `HttpTool`: GET/POST/PUT/DELETE с allow-list доменов

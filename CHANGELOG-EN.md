@@ -58,6 +58,16 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   Default-deny network, 30 s timeout, 1024 file descriptors, 100 KB code size cap.
   Escape hatch via `SandboxOptions.CustomAllowedNamespaces` (token-based: `"HttpClient"`
   allows `new HttpClient()`).
+- **SkillSdk NuGet package (`task_101`)**. New `Hercules.SkillSdk` class library exposing
+  whitelist interfaces for file-based C# skills:
+  `IHttpClient`, `IMcpClient`, `ILlmClient`, `IMemoryClient`, `ISkillLogger`,
+  `ISessionContext`, and aggregate `IHerculesSkillContext`. Agent-side adapters
+  enforce allowed domains, MCP tool allow-list, memory scopes, and session isolation.
+- **SkillSdk in-process executor**. `SkillSdkExecutor` compiles SkillSdk C# skills in a
+  collectible `AssemblyLoadContext` with Roslyn, injects `IHerculesSkillContext`, and
+  routes `execute_code` calls automatically when code references `Hercules.SkillSdk`.
+  Combines `DangerousCodeScanner` (blacklist) with `SkillSdkWhitelistScanner`
+  (namespace/keyword whitelist) and metadata-only reference assemblies.
 - **Stage 3: Tool ecosystem**. `Tools/ITool` contract + `ToolRegistry` for LLM prompt
   injection of available tools. Three built-in tools:
   - `http` — `HttpTool`: GET/POST/PUT/DELETE with allow-list domains
