@@ -120,7 +120,7 @@
 | 84 | 47 | [ProposalStore caching, async I/O, and hot-path allocations](tasks/task_084.md) | `proposal-store-hotpath-alloc` | done |
 | 85 | 47 | [OpenTelemetry polish: console gating, process instrumentation, histogram buckets, async logging](tasks/task_085.md) | `otel-logging-polish` | done |
 | 86 | 47 | [Backpressure, bounded channels, and DLQ/requeue fixes](tasks/task_086.md) | `backpressure-bounded-channels-dlq` | done |
-| 87 | 47 | [Misc hardening: DelegationBoundary TTL, ResilientTransport trim, CORS, backup passphrase, SLO real metrics](tasks/task_087.md) | `misc-hardening` | pending |
+| 87 | 47 | [Misc hardening: DelegationBoundary TTL, ResilientTransport trim, CORS, backup passphrase, SLO real metrics](tasks/task_087.md) | `misc-hardening` | done |
 
 ## Phase 6 — IoT/edge fleet and mesh operations (Q3 2027)
 
