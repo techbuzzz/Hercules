@@ -219,7 +219,9 @@ public sealed class ResilientTransport : ITransport
             // Record in circuit breaker
             if (result.Response?.IsSuccess == true)
             {
+                var prevState = _circuitBreaker.GetState(targetAgentId);
                 _circuitBreaker.RecordSuccess(targetAgentId);
+                EmitCircuitStateChangeIfChanged(targetAgentId, prevState, _circuitBreaker.GetState(targetAgentId), envelope.Intent);
                 _observability?.RecordMeshEvent(attemptSpan, "transport.success",
                     intent: envelope.Intent, senderAgentId: envelope.Sender,
                     receiverAgentId: targetAgentId, hopCount: attempt + 1,
@@ -229,7 +231,9 @@ public sealed class ResilientTransport : ITransport
                     result.ErrorMessage, sw.ElapsedMilliseconds, _inner.Kind);
             }
 
+            var prevFailureState = _circuitBreaker.GetState(targetAgentId);
             _circuitBreaker.RecordFailure(targetAgentId);
+            EmitCircuitStateChangeIfChanged(targetAgentId, prevFailureState, _circuitBreaker.GetState(targetAgentId), envelope.Intent);
             _observability?.RecordMeshEvent(attemptSpan, "transport.failure",
                 intent: envelope.Intent, senderAgentId: envelope.Sender,
                 receiverAgentId: targetAgentId, hopCount: attempt + 1,
@@ -325,6 +329,33 @@ public sealed class ResilientTransport : ITransport
         }
         _peerSemaphores.Clear();
         _peerLastUsed.Clear();
+    }
+
+    // ── Circuit-breaker state-change metric (task_093) ─────────────────────
+    //
+    // The circuit breaker transitions between Closed / Open / HalfOpen but does
+    // not itself emit telemetry. We capture the state before and after each
+    // RecordSuccess / RecordFailure call and, when it changed, fire a
+    // `circuit_breaker_state_change` counter so the diagnostics service (and
+    // the web UI) can show a meaningful "circuit flipped" signal.
+
+    private void EmitCircuitStateChangeIfChanged(string agentId, CircuitState prev, CircuitState next, string intent)
+    {
+        if (prev == next) return;
+        try
+        {
+            _observability?.RecordMeshMetric(
+                "circuit_breaker_state_change",
+                1,
+                peerAgentId: agentId,
+                intent: intent,
+                outcome: $"{prev}->{next}");
+        }
+        catch (Exception ex)
+        {
+            // Diagnostics is best-effort: never let telemetry failure break the transport.
+            _logger.LogDebug(ex, "[ResilientTransport] circuit_breaker_state_change metric failed");
+        }
     }
 
     // ── Peer-semaphore lifecycle (task_087) ─────────────────────────────────

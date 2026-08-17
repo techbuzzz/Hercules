@@ -60,6 +60,7 @@ src/
 │   ├── DiscoveryPanel.astro# Discovery-источники + discovered peer-агенты, Refresh + diff (task_090)
 │   ├── TrustAdmissionPanel.astro# Trust admission policy status + dry-run (task_091)
 │   └── MeshProfilePanel.astro# Active profile, effective backends, live backend health, degradation policy (task_092)
+│   └── MeshObservabilityPanel.astro# Mesh counters + recent traces/logs (task_093)
 ├── pages/
 │   ├── index.astro         # Чат
 │   ├── skills.astro        # Список + создание/редактирование/улучшение
@@ -67,6 +68,7 @@ src/
 │   ├── config.astro        # Настройки
 │   ├── stats.astro         # Статистика
 │   ├── memmesh.astro       # Mesh dashboard + router + escalation
+│   ├── observability.astro # Mesh counters + recent traces/logs (task_093)
 │   └── a2a.astro           # A2A Agent Card (локальная карта + import/discover)
 ├── lib/
 │   └── api.ts              # Клиент Hercules Web API + DTO
@@ -125,6 +127,11 @@ UI дёргает следующие эндпоинты (см. `src/lib/api.ts`)
 | GET    | `/api/mesh/profiles/{name}/backends` | Effective backends профиля    |
 | GET    | `/api/mesh/backend-status`      | Live health всех mesh-бэкендов    |
 | GET    | `/api/mesh/backend-status/{role}` | Live health конкретного бэкенда |
+| GET    | `/api/mesh/observability/status`   | Mesh observability status + counters |
+| GET    | `/api/mesh/observability/config`   | Mesh observability config (enabled) |
+| GET    | `/api/mesh/observability/counters` | Только counters: totals + byCapability + byPeer |
+| GET    | `/api/mesh/observability/traces?limit=N` | Список последних завершённых traces (task_093) |
+| GET    | `/api/mesh/observability/logs?limit=N&level=info` | Список последних log-entries (task_093) |
 
 Все запросы отправляют заголовок `X-Api-Key: $PUBLIC_API_KEY`. Backend CORS по умолчанию разрешает `http://localhost:4321` и `http://127.0.0.1:4321` (см. `WebApi.AllowedCorsOrigins` в `appsettings.json`).
 

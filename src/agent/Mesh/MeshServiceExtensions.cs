@@ -443,11 +443,23 @@ public static class MeshServiceCollectionExtensions
 
         // Phase 5: Centralized mesh observability (task_054) — trace context propagation, mesh span enrichment, OTLP metrics
         services.AddSingleton(appConfig.CentralizedObservability);
+        // Phase 7: Mesh diagnostics aggregator (task_093) — in-memory counters + recent traces/logs ring buffers.
+        // The diagnostics service is consumed by the controller endpoints, the activity listener and the log sink below.
+        services.AddSingleton<MeshDiagnosticsService>();
+        services.AddSingleton<InMemoryActivityListener>();
+        // Register the in-memory log sink as both a direct service and an ILoggerProvider so the
+        // ASP.NET logging pipeline picks it up alongside the JSON console provider.
+        services.AddSingleton<InMemoryLogSink>(sp =>
+            new InMemoryLogSink(
+                sp.GetRequiredService<MeshDiagnosticsService>(),
+                Microsoft.Extensions.Logging.LogLevel.Information));
+        services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<InMemoryLogSink>());
         services.AddSingleton<IMeshObservabilityService>(sp =>
             new MeshObservabilityService(
                 sp.GetRequiredService<MeshCentralizedObservabilityConfig>(),
                 sp.GetRequiredService<IOtelService>(),
-                sp.GetRequiredService<ILogger<MeshObservabilityService>>()));
+                sp.GetRequiredService<ILogger<MeshObservabilityService>>(),
+                sp.GetRequiredService<MeshDiagnosticsService>()));
 
         // Phase 4: Mesh backend abstractions (task_066) — IMeshBus, ITaskQueue, IMeshStateStore
         // Default: in-process implementation (Channel-based pub/sub, ConcurrentQueue, ConcurrentDictionary)

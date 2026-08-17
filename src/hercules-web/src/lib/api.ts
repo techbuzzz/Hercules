@@ -392,6 +392,54 @@ export const api = {
     return handle<BackendStatusDto>(res);
   },
 
+  // ---- Mesh observability counters / traces / logs (Phase 7 task_093) ----
+
+  /**
+   * Mesh observability status (config + counters since process start).
+   * Wire format: `{enabled, config{...}, counters:{from, to, routingDecision,
+   * retryAttempt, circuitBreakerStateChange, delegation, meshBackendHealth,
+   * byCapability Record, byPeer Record}}`.
+   */
+  async getMeshObservabilityStatus(): Promise<MeshObservabilityStatusDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/observability/status`, { headers: headers(false) });
+    return handle<MeshObservabilityStatusDto>(res);
+  },
+
+  /**
+   * Counters snapshot only (no config payload). Same shape as
+   * `MeshObservabilityStatusDto.counters` plus from/to.
+   */
+  async getMeshObservabilityCounters(): Promise<MeshObservabilityCountersDto> {
+    const res = await fetch(`${API_BASE}/api/mesh/observability/counters`, { headers: headers(false) });
+    return handle<MeshObservabilityCountersDto>(res);
+  },
+
+  /**
+   * Recent completed traces (newest first). Default `limit` is the backend's
+   * default cap (100). TraceSummaryDto carries the trace id, root operation
+   * name, start timestamp, duration, status and span count.
+   */
+  async getRecentTraces(limit = 50): Promise<MeshTracesResponseDto> {
+    const res = await fetch(
+      `${API_BASE}/api/mesh/observability/traces?limit=${encodeURIComponent(limit)}`,
+      { headers: headers(false) },
+    );
+    return handle<MeshTracesResponseDto>(res);
+  },
+
+  /**
+   * Recent log entries (newest first). `level` is a min-level filter
+   * ("trace" | "debug" | "info" | "warning" | "error" | "critical").
+   * Unknown levels are returned as-is.
+   */
+  async getRecentLogs(limit = 100, level?: string): Promise<MeshLogsResponseDto> {
+    const url = level
+      ? `${API_BASE}/api/mesh/observability/logs?limit=${encodeURIComponent(limit)}&level=${encodeURIComponent(level)}`
+      : `${API_BASE}/api/mesh/observability/logs?limit=${encodeURIComponent(limit)}`;
+    const res = await fetch(url, { headers: headers(false) });
+    return handle<MeshLogsResponseDto>(res);
+  },
+
   // ---- A2A Agent Card (Phase 7 task_088) ----
 
   async getAgentCard(): Promise<AgentCardDto> {
@@ -1032,4 +1080,96 @@ export interface BackendStatusDto {
 export interface MeshBackendStatusListDto {
   overall: string;
   backends: BackendStatusDto[];
+}
+
+// ---- Mesh observability (Phase 7 task_093) ----
+
+/**
+ * Mesh observability counters snapshot.
+ * `from`/`to` are the process-start time and current time (ISO 8601 UTC).
+ * `byCapability` aggregates `routing_decision` events per intent.
+ * `byPeer` aggregates `delegation` events per peer agent id.
+ */
+export interface MeshObservabilityCountersDto {
+  from: string;
+  to: string;
+  routingDecision: number;
+  retryAttempt: number;
+  circuitBreakerStateChange: number;
+  delegation: number;
+  meshBackendHealth: number;
+  byCapability: Record<string, number>;
+  byPeer: Record<string, number>;
+}
+
+/**
+ * Full mesh observability status — counters + observability config + enabled flag.
+ * Mirrors the GET /api/mesh/observability/status response.
+ */
+export interface MeshObservabilityStatusDto {
+  enabled: boolean;
+  config: {
+    enabled: boolean;
+    propagationFormat: string;
+    enableSpanEnrichment: boolean;
+    enableMetrics: boolean;
+    enableStructuredLogs: boolean;
+    enableTraceContextPropagation: boolean;
+    enableTraceContextExtraction: boolean;
+    maxTagValueLength: number;
+    redactedAttributes: string[];
+    otlpEndpoints: string[];
+  };
+  counters: MeshObservabilityCountersDto;
+}
+
+/**
+ * Mirrors `TraceSummary` (Mesh/Observability/MeshDiagnosticsService.cs).
+ * `startedAt` is ISO 8601 UTC. `status` is one of: "Ok" | "Error" | "Unset".
+ */
+export interface TraceSummaryDto {
+  traceId: string;
+  rootName: string;
+  startedAt: string;
+  durationMs: number;
+  status: string;
+  spanCount: number;
+}
+
+/**
+ * Wire payload of GET /api/mesh/observability/traces.
+ * `count` is the number of traces actually returned; `limit` echoes the
+ * request limit (or the backend default if no `?limit=` was provided).
+ */
+export interface MeshTracesResponseDto {
+  count: number;
+  limit: number;
+  traces: TraceSummaryDto[];
+}
+
+/**
+ * Mirrors `LogEntrySummary`. `level` is the normalized level name
+ * (Trace | Debug | Info | Warning | Error | Critical).
+ * `structuredFields` is the original log scope / template parameters,
+ * captured verbatim for the UI to render as a key/value table.
+ */
+export interface LogEntryDto {
+  timestamp: string;
+  level: string;
+  source: string;
+  requestId: string | null;
+  traceId: string | null;
+  message: string;
+  structuredFields: Record<string, unknown>;
+}
+
+/**
+ * Wire payload of GET /api/mesh/observability/logs.
+ * `level` is the filter that was applied (or "all" when no filter).
+ */
+export interface MeshLogsResponseDto {
+  count: number;
+  limit: number;
+  level: string;
+  logs: LogEntryDto[];
 }
