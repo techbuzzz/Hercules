@@ -10,8 +10,7 @@
     <InvariantGlobalization>true</InvariantGlobalization>
 
     <!-- [task_109] OpenAPI build-time generation: emits openapi.json in project root on `dotnet build` -->
-    <OpenApiDocumentsDirectory>.</OpenApiDocumentsDirectory>
-    <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
+    <OpenApiDocumentFile>$(MSBuildProjectDirectory)/openapi.json</OpenApiDocumentFile>
 
     <!-- [task_109] XML doc comments → OpenAPI descriptions; suppress missing-doc warnings
          (not every public member needs OpenAPI docs) -->
@@ -30,12 +29,30 @@
     <PackageReference Include="Scalar.AspNetCore" Version="2.16.20" />
     <!-- [task_109] Microsoft.AspNetCore.OpenApi (built-in .NET 10) for AddOpenApi/MapOpenApi -->
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
-    <!-- [task_109] Build-time OpenAPI document generation via GetDocument.Insider -->
-    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.11">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
   </ItemGroup>
+
+  <!-- [task_109] Build-time OpenAPI document generation.
+
+       Replaces Microsoft.Extensions.ApiDescription.Server, whose `dotnet-getdocument`
+       tool resolves the document through MVC's action-descriptor provider. This API
+       surface is 100% minimal API, so the tool logged "No action descriptors found" and
+       wrote a document with `paths: {}` — 210 endpoints missing from the committed file.
+
+       Instead we launch the app itself with the `openapi-output` command-line flag
+       (see ReadOpenApiOutputPath in Program.cs). Program.cs then resolves
+       IOpenApiDocumentProvider — the same provider backing the runtime
+       /openapi/v1.json endpoint — so the committed document cannot drift from the
+       document the server actually serves.
+
+       Skipped for design-time builds and when OpenApiGenerateDocumentOnBuild=false. -->
+  <Target Name="GenerateOpenApiDocument"
+          AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true' AND '$(TargetFramework)' != '' AND '$(OpenApiGenerateDocumentOnBuild)' != 'false'">
+    <Message Importance="high" Text="GenerateOpenApiDocument: writing $(OpenApiDocumentFile)" />
+    <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(TargetPath)&quot; --openapi-output &quot;$(OpenApiDocumentFile)&quot;"
+          WorkingDirectory="$(MSBuildProjectDirectory)"
+          StandardOutputImportance="low" />
+  </Target>
 
   <ItemGroup>
     <None Update="appsettings.json">

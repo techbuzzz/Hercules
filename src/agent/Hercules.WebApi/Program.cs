@@ -58,10 +58,12 @@ using HerculesBus;
 using HerculesBus.Core;
 using HerculesBus.InMemory;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Http.Resilience;
+using Microsoft.OpenApi;
 
 // ============================================================================
 //  Hercules Web API — ASP.NET Core Minimal API поверх ядра агента.
@@ -69,13 +71,39 @@ using Microsoft.Extensions.Http.Resilience;
 //  Запуск: dotnet run --project Hercules.WebApi   (порт 8421, см. ADR-0003)
 // ============================================================================
 
-// [task_109] Build-time detection: when MSBuild invokes GetDocument.Insider
-// for OpenAPI document generation, skip side-effecting service registration
-// (DB-touching singletons, OpenTelemetry exporters, file I/O) and post-build
-// bootstrap (key generation, manifest publishing, MCP init). The build target
-// only needs `app.MapOpenApi()` to expose the document via DI; it never
-// serves HTTP requests.
-var isBuildTime = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
+// [task_109] Build-time detection: when the document is generated at build time we must
+// skip side-effecting service registration (DB-touching singletons, OpenTelemetry
+// exporters, file I/O) and post-build bootstrap (key generation, manifest publishing,
+// MCP init). Generation never serves HTTP requests.
+//
+// Two triggers, both of which must skip the side effects below:
+//   1. `GetDocument.Insider` entry assembly — the legacy
+//      Microsoft.Extensions.ApiDescription.Server build tool. Kept for compatibility;
+//      see the csproj for why it is no longer the primary path.
+//   2. `--openapi-output <path>` — our own deterministic generator, invoked by the
+//      `GenerateOpenApiDocument` MSBuild target. This resolves the very same
+//      IOpenApiDocumentProvider that backs the runtime `/openapi/v1.json` endpoint,
+//      so the committed artifact cannot drift from the document we actually serve.
+var openApiOutputPath = ReadOpenApiOutputPath(args);
+var isBuildTime = openApiOutputPath is not null
+    || System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
+
+// [task_109] Reads `--openapi-output <path>` / `--openapi-output=<path>` from the command
+// line. Returns null when the flag is absent (normal runtime mode).
+static string? ReadOpenApiOutputPath(string[] args)
+{
+    const string flag = "--openapi-output";
+    for (var i = 0; i < args.Length; i++)
+    {
+        var arg = args[i];
+        if (arg.StartsWith(flag + "=", StringComparison.Ordinal))
+            return arg[(flag.Length + 1)..];
+        if (string.Equals(arg, flag, StringComparison.Ordinal) && i + 1 < args.Length)
+            return args[i + 1];
+    }
+
+    return null;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -977,7 +1005,14 @@ builder.Services.ConfigureHttpJsonOptions(o => { o.SerializerOptions.Encoder = J
 // Порт по умолчанию — 8421 (см. ADR-0003, диапазон 8421-8521).
 // Если не переопределён через --urls / ASPNETCORE_URLS / launchSettings.
 // launchSettings.json в Development может навязать другой URL, поэтому отключаем его влияние.
-if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")) &&
+if (openApiOutputPath is not null)
+{
+    // [task_109] Build-time document generation. StartAsync below needs a live listener,
+    // so bind an ephemeral loopback port: a build must never fail because 8421 is already
+    // taken by a running dev server, and must never expose the real port while doing so.
+    builder.WebHost.UseUrls("http://127.0.0.1:0");
+}
+else if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")) &&
     !args.Any(a => a.StartsWith("--urls")) &&
     builder.Environment.IsProduction())
 {
@@ -1295,6 +1330,49 @@ if (!isBuildTime)
     {
         log.LogError(ex, "Tasks startup recovery failed");
     }
+}
 
+// [task_109] Build-time document emission. Placed at the very end of the program, after
+// every MapXxx() call and OUTSIDE the `if (!isBuildTime)` bootstrap block above, so the
+// endpoint data sources are fully populated and the block is not skipped in build mode.
+//
+// Why not the Microsoft.Extensions.ApiDescription.Server build tool: it resolves the
+// document through MVC's action-descriptor provider, and this API surface is 100%
+// minimal API, so it logged "No action descriptors found" and emitted a document with
+// `paths: {}` (210 paths missing). Resolving IOpenApiDocumentProvider directly uses the
+// same code path as the runtime /openapi/v1.json endpoint, so the committed file and the
+// served document are produced identically.
+if (openApiOutputPath is not null)
+{
+    // The OpenAPI service reads the app's EndpointDataSource, which is only finalised
+    // once the host has started. Without StartAsync the document serialises with
+    // `paths: {}` even though every MapXxx() call above already ran.
+    await app.StartAsync();
+
+    // AddOpenApi registers the provider as a KEYED service ("v1" is the default
+    // document name used by both AddOpenApi() and MapOpenApi()). Unkeyed
+    // resolution returns null, hence GetRequiredKeyedService here.
+    var documentProvider = app.Services.GetRequiredKeyedService<IOpenApiDocumentProvider>("v1");
+    var document = await documentProvider.GetOpenApiDocumentAsync(CancellationToken.None);
+    var json = await document.SerializeAsJsonAsync(OpenApiSpecVersion.OpenApi3_1);
+
+    var fullPath = Path.GetFullPath(openApiOutputPath);
+    var directory = Path.GetDirectoryName(fullPath);
+    if (!string.IsNullOrEmpty(directory))
+        Directory.CreateDirectory(directory);
+
+    // UTF-8 without BOM: the file is committed to git and consumed by Orval/Spectral,
+    // both of which choke on a BOM when parsing JSON.
+    await File.WriteAllTextAsync(fullPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+    log.LogInformation("[OpenApi] Wrote {Path} ({Paths} paths, {Schemas} schemas)",
+        fullPath, document.Paths?.Count ?? 0, document.Components?.Schemas?.Count ?? 0);
+    return;
+}
+
+// Serve HTTP. Guarded so the legacy GetDocument.Insider path (kept for compatibility,
+// no longer wired by the csproj) can never block the build on a listening socket.
+if (!isBuildTime)
+{
     app.Run();
 }

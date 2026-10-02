@@ -69,9 +69,21 @@ The task description's acceptance criteria were therefore impossible to satisfy 
 - **`DisableAntiforgery()` on multipart endpoints**: required because minimal API endpoints don't have the implicit antiforgery skip that `[ApiController]`-bound actions get. This matches the pattern already used in `SkillsController.ImportSkill`.
 - **Anonymous `string` error bodies → `{ error = "..." }`**: cosmetic but necessary for task_111 — when `Produces<T>()` is added, the spec needs a consistent object schema.
 
-### Known limitations (carried over from task_109)
+### Known limitations (carried over from task_109 — RESOLVED)
 
-- The build-time `openapi.json` is still a skeleton (`paths: {}`) because `Microsoft.Extensions.ApiDescription.Server`'s MVC discovery doesn't enumerate minimal API routes in this project. The 13 new routes ARE enumerated in the runtime document at `/openapi/v1.json` when the agent is running — but the runtime cannot be smoke-tested in this environment because of a pre-existing `CodeExecutionTool` constructor ambiguity (out of scope for task_112, tracked separately). All 13 `WithName` calls compile and will appear as `operationId` in the runtime document.
+> **Updated 2026-10-02:** the limitation recorded here no longer holds. `openapi.json` is now
+> fully populated (210 paths / 61 schemas) and is byte-identical in composition to the runtime
+> document. The two blockers described below were both misdiagnosed and are fixed:
+> build-time generation now runs through a custom MSBuild target (see
+> [completed/task_109.md](completed/task_109.md)), and the `CodeExecutionTool` "constructor
+> ambiguity" does not exist — that type has a single `IServiceProvider` constructor and the
+> agent starts normally.
+>
+> Original (superseded) text: "The build-time `openapi.json` is still a skeleton (`paths: {}`)
+> because `Microsoft.Extensions.ApiDescription.Server`'s MVC discovery doesn't enumerate minimal
+> API routes in this project. The 13 new routes ARE enumerated in the runtime document at
+> `/openapi/v1.json` when the agent is running — but the runtime cannot be smoke-tested in this
+> environment because of a pre-existing `CodeExecutionTool` constructor ambiguity."
 
 ## Validation
 - `dotnet build src\agent\Hercules.WebApi\Hercules.WebApi.csproj` → 0 errors

@@ -4,5 +4,6714 @@
     "title": "Hercules.WebApi | v1",
     "version": "1.0.0"
   },
-  "paths": { }
+  "paths": {
+    "/": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/agent-card.json": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/chat": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "summary": "Отправить сообщение агенту и получить ответ",
+        "operationId": "Chat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListSkills",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "CreateSkill",
+        "parameters": [
+          {
+            "name": "ai",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "topic",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSkillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetSkill",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "UpdateSkill",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSkillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/improve": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ImproveSkillLifecycle",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/export": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ExportSkill",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/import": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ImportSkill",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/evaluate": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "EvaluateSkill",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/deprecate": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "DeprecateSkill",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeprecateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/rollback": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RollbackSkill",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/undeprecate": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "UndeprecateSkill",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/deprecated": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListDeprecatedSkills",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/quality": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetSkillQuality",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/quality/history": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetSkillQualityHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/quality/record": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RecordSkillQualityEvent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordQualityEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/quality/score": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetSkillQualityScore",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/memory/profile": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetProfile",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "UpdateProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/memory/reset": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ResetMemory",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "Stats",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/reflect": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "Reflect",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/health/detailed": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "HealthDetailed",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/config": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetConfig",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "UpdateConfig",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "PatchConfig",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/agent.manifest.json": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetAgentManifest",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/agents": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListMeshAgents",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/agents/{id}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetMeshAgentFull",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RemoveMeshAgent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/agents/{id}/health": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetMeshAgentHealth",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/agents/{id}/touch": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "TouchMeshAgent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/agents/cleanup": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "CleanupExpiredAgents",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/agents/register": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RegisterMeshAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentManifest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/capabilities": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListMeshCapabilities",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/capabilities/{name}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "FindMeshByCapability",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/capabilities/search": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SearchMeshByPhrase",
+        "parameters": [
+          {
+            "name": "phrase",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/intent": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SendMeshIntent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntentEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/fanout": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "MeshFanOut",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IntentEnvelope"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/circuits": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetCircuitBreakers",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/circuits/{id}/reset": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ResetCircuitBreaker",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/reflect": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "DistributedReflection",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/reflect/recommendations": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ReflectionRecommendations",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/shared-memory": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListSharedMemory",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "PublishSharedMemory",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedMemoryPublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/shared-memory/for/{agentId}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetSharedMemoryForAgent",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/shared-memory/sync": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SyncSharedMemory",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/shared-memory/{factId}": {
+      "delete": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RemoveSharedMemory",
+        "parameters": [
+          {
+            "name": "factId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/accept": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "AcceptDelegatedTask",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegatedTaskAcceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/{id}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetDelegatedTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/{id}/state": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "UpdateDelegatedTaskState",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegatedTaskStateUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/{id}/await-input": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "AwaitDelegatedTaskInput",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AwaitInputRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/{id}/complete": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "CompleteDelegatedTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegatedTaskCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/{id}/fail": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "FailDelegatedTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegatedTaskFailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "CancelDelegatedTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegatedTaskCancelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/{id}/callback": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "DelegatedTaskCallback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DelegatedTaskCallbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/{id}/poll": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "PollDelegatedTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timeoutMs",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/{id}/expire-check": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "CheckDelegatedTaskExpired",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/tasks/{id}/notify": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "NotifyDelegatedTaskState",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/discovery/sources": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListDiscoverySources",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/discovery/agents": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListDiscoveredAgents",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/discovery/refresh": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RefreshDiscovery",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/policy/status": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetTrustPolicyStatus",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/policy/dry-run": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "TrustPolicyDryRun",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrustAdmissionDryRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/router/routes": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "MeshRouterRoutes",
+        "parameters": [
+          {
+            "name": "capability",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxCostUsd",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/router/health": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "MeshRouterHealth",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/dashboard": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "MeshDashboard",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/topology": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "MeshTopology",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/health": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "MeshHealth",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/denials": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "MeshPolicyDenials",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/skills/heatmap": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "MeshSkillHeatmap",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/eval/summary": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "MeshEvalSummary",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/profiles": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListMeshProfiles",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/profiles/{name}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetMeshProfile",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/profiles/{name}/backends": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetMeshProfileBackends",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/backend-status": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetMeshBackendStatus",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/backend-status/{role}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetMeshBackendStatusByRole",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/observability/status": {
+      "get": {
+        "tags": [
+          "Mesh.Observability"
+        ],
+        "operationId": "MeshObservabilityStatus",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/observability/config": {
+      "get": {
+        "tags": [
+          "Mesh.Observability"
+        ],
+        "operationId": "MeshObservabilityConfig",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/observability/counters": {
+      "get": {
+        "tags": [
+          "Mesh.Observability"
+        ],
+        "operationId": "MeshObservabilityCounters",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/observability/traces": {
+      "get": {
+        "tags": [
+          "Mesh.Observability"
+        ],
+        "operationId": "MeshObservabilityTraces",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mesh/observability/logs": {
+      "get": {
+        "tags": [
+          "Mesh.Observability"
+        ],
+        "operationId": "MeshObservabilityLogs",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/inventory": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecycleInventory",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/health": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecycleHealth",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/agent/{agentId}/start": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecycleAgentStart",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/agent/{agentId}/stop": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecycleAgentStop",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/agent/{agentId}/drain": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecycleAgentDrain",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/agent/{agentId}/decommission": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecycleAgentDecommission",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/agent/{agentId}/rollback": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecycleAgentRollback",
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/packages/{packageId}/update": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecyclePackageUpdate",
+        "parameters": [
+          {
+            "name": "packageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePackageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/packages/{packageId}/canary": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecyclePackageCanary",
+        "parameters": [
+          {
+            "name": "packageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CanaryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/packages/{packageId}/promote": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecyclePackagePromote",
+        "parameters": [
+          {
+            "name": "packageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoteCanaryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/lifecycle/packages/{packageId}/rollback": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LifecyclePackageRollback",
+        "parameters": [
+          {
+            "name": "packageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackPackageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/budget": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "BudgetSummary",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 30
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/budget/monthly": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "BudgetMonthly",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/budget/guardrails": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "BudgetGuardrails",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/budget/guardrails/{type}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "BudgetGuardrailType",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/quotas": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "QuotaStatus",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scopeId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/quotas/{scope}/{scopeId}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "QuotaStatusByScope",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scopeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/quotas/{scope}/{scopeId}/{type}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "QuotaStatusByType",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scopeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/quotas/rate-limit": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RateLimitInfo",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scopeId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/audit": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "AuditLog",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/audit/search": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "AuditSearch",
+        "parameters": [
+          {
+            "name": "actor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "toolName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/audit/export": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "AuditExport",
+        "parameters": [
+          {
+            "name": "actor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/audit/{target}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "AuditLogByTarget",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/llm/health": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LlmHealthAll",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/llm/health/{provider}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LlmHealthByProvider",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/llm/capabilities": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LlmCapabilitiesAll",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/llm/capabilities/{provider}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LlmCapabilitiesByProvider",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/llm/config": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "LlmConfig",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/a2a/agent-card": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetAgentCard",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/a2a/agent-card/from": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ImportAgentCardFromUrl",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/a2a/discover": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "DiscoverAgentCards",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/a2a/agent-card/publish": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "PublishAgentCard",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/a2a/agent-card/fresh": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "AgentCardIsFresh",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/backups": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "CreateBackup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CreateBackupRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListBackups",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/backups/{backupId}/restore": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RestoreBackup",
+        "parameters": [
+          {
+            "name": "backupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RestoreBackupRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/backups/{backupId}/verify": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "VerifyBackup",
+        "parameters": [
+          {
+            "name": "backupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "passphrase",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/backups/{backupId}": {
+      "delete": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "DeleteBackup",
+        "parameters": [
+          {
+            "name": "backupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/fleet-templates": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListFleetTemplates",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/fleet-templates/{fileName}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetFleetTemplate",
+        "parameters": [
+          {
+            "name": "fileName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/fleet-templates/{fileName}/apply": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ApplyFleetTemplate",
+        "parameters": [
+          {
+            "name": "fileName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ApplyFleetTemplateRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/grants/{skillId}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetGrants",
+        "parameters": [
+          {
+            "name": "skillId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RevokeGrants",
+        "parameters": [
+          {
+            "name": "skillId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "permission",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/grants": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GrantSkill",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/grants/by-id/{grantId}": {
+      "delete": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RevokeGrantById",
+        "parameters": [
+          {
+            "name": "grantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/grants/{skillId}/check": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "CheckGrant",
+        "parameters": [
+          {
+            "name": "skillId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "permission",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/simulation/templates": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListSimulationTemplates",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/simulation/templates/{templateName}/available": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SimulationAvailability",
+        "parameters": [
+          {
+            "name": "templateName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/simulation/sessions": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "StartSimulationSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/simulation/sessions/{templateName}/replay": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SimulationReplay",
+        "parameters": [
+          {
+            "name": "templateName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/simulation/sessions/{templateName}": {
+      "delete": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "StopSimulationSession",
+        "parameters": [
+          {
+            "name": "templateName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetSimulationSession",
+        "parameters": [
+          {
+            "name": "templateName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/slos": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SloSummary",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/slos/{vertical}/definition": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SloDefinition",
+        "parameters": [
+          {
+            "name": "vertical",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/slos/{vertical}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SloStatus",
+        "parameters": [
+          {
+            "name": "vertical",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/slos/{vertical}/report": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SloReport",
+        "parameters": [
+          {
+            "name": "vertical",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/slos/{vertical}/ack/{violationId}": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SloAcknowledgeViolation",
+        "parameters": [
+          {
+            "name": "vertical",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "violationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "acknowledgedBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/slos/{vertical}/ack": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SloAcknowledgeAll",
+        "parameters": [
+          {
+            "name": "vertical",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "acknowledgedBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/approvals/pending": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListPendingApprovals",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetApproval",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/approve": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ApproveTool",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/approvals/{id}/deny": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "DenyTool",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/approvals": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListAllApprovals",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/escalations/pending": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListPendingEscalations",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minSeverity",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/escalations/{id}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetEscalation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/escalations/{id}/approve": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ApproveEscalation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resolvedBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/escalations/{id}/deny": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "DenyEscalation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resolvedBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/escalations/batch-approve": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "BatchApproveEscalations",
+        "parameters": [
+          {
+            "name": "resolvedBy",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchApproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/observability/telemetry": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ObservabilityTelemetry",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/eval/harness": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RunSkillHarness",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/eval/baseline": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RecordSkillBaseline",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RecordBaselineRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetSkillBaseline",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/eval/history": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetSkillEvalHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/eval/baselines": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListAllBaselines",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/maintenance/run": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RunMaintenance",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RunMaintenanceRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/maintenance/run-all": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RunMaintenanceAll",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RunMaintenanceRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/maintenance/proposals": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListProposals",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "skillId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/maintenance/proposals/{id}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetProposal",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/maintenance/proposals/{id}/approve": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ApproveProposal",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ApproveRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/maintenance/proposals/{id}/reject": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "RejectProposal",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RejectRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/manifest": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetSkillManifest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/{id}/manifest/validate": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ValidateSkillManifest",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/skills/manifest/validate-all": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ValidateAllSkillManifests",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "operationId": "CreateTask",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "operationId": "ListTasks",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "operationId": "GetTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/pause": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "operationId": "PauseTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/resume": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "operationId": "ResumeTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "checkpointId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "operationId": "CancelTask",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/checkpoints": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "operationId": "CreateTaskCheckpoint",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCheckpointRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "operationId": "ListTaskCheckpoints",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tasks/{id}/checkpoints/{ckptId}": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "operationId": "GetTaskCheckpoint",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ckptId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/context/budget": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ContextBudget",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/context/summary": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ContextSummary",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxTokens",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/context/distill": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ContextDistill",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DistillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/context/trace/compress": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ContextTraceCompress",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ToolTraceEntry"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/cache/stats": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "CacheStats",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/cache/invalidate": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "CacheInvalidate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CacheInvalidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tools": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "operationId": "ListTools",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tools/{name}": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "operationId": "GetTool",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tools/{name}/health": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "operationId": "GetToolHealth",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tools/categories": {
+      "get": {
+        "tags": [
+          "Tools"
+        ],
+        "operationId": "GetToolsByCategory",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tools/{name}/enable": {
+      "post": {
+        "tags": [
+          "Tools"
+        ],
+        "operationId": "EnableTool",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/tools/{name}/disable": {
+      "post": {
+        "tags": [
+          "Tools"
+        ],
+        "operationId": "DisableTool",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/marketplace": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListMarketplace",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/marketplace/search": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "SearchMarketplace",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/marketplace/{file}/verify": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "VerifyMarketplacePackage",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/marketplace/{file}/deps": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetMarketplacePackageDeps",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/marketplace/install": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "InstallMarketplacePackage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/marketplace/install-with-deps": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "InstallMarketplacePackageWithDeps",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/marketplace/{file}": {
+      "delete": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "DeleteMarketplacePackage",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/marketplace/publish": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "PublishMarketplacePackage",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/marketplace/import": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ImportMarketplacePackage",
+        "parameters": [
+          {
+            "name": "conflict",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/marketplace/import-url": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ImportMarketplacePackageFromUrl",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/templates": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ListTemplates",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/templates/{fileName}": {
+      "get": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "GetTemplate",
+        "parameters": [
+          {
+            "name": "fileName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/templates/{fileName}/apply": {
+      "post": {
+        "tags": [
+          "Hercules.WebApi"
+        ],
+        "operationId": "ApplyTemplate",
+        "parameters": [
+          {
+            "name": "fileName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ApplyTemplateRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/rollout/state": {
+      "get": {
+        "tags": [
+          "Rollout"
+        ],
+        "operationId": "GetRolloutState",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/rollout/apply": {
+      "post": {
+        "tags": [
+          "Rollout"
+        ],
+        "operationId": "ApplyRolloutBundle",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/rollout/promote": {
+      "post": {
+        "tags": [
+          "Rollout"
+        ],
+        "operationId": "PromoteRolloutStage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/rollout/rollback": {
+      "post": {
+        "tags": [
+          "Rollout"
+        ],
+        "operationId": "RollbackRollout",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RollbackRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/rollout/bundle/{id}": {
+      "get": {
+        "tags": [
+          "Rollout"
+        ],
+        "operationId": "GetRolloutBundle",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/security/vulnerabilities": {
+      "get": {
+        "tags": [
+          "Security"
+        ],
+        "operationId": "ListVulnerabilities",
+        "parameters": [
+          {
+            "name": "minSeverity",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "component",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/security/vulnerabilities/summary": {
+      "get": {
+        "tags": [
+          "Security"
+        ],
+        "operationId": "VulnerabilitySummary",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/security/vulnerabilities/{id}": {
+      "get": {
+        "tags": [
+          "Security"
+        ],
+        "operationId": "GetVulnerability",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/security/vulnerabilities/{id}/status": {
+      "patch": {
+        "tags": [
+          "Security"
+        ],
+        "operationId": "UpdateVulnerabilityStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateVulnerabilityStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/security/events": {
+      "get": {
+        "tags": [
+          "Security"
+        ],
+        "operationId": "SecurityEvents",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/security/compliance/{standard}": {
+      "get": {
+        "tags": [
+          "Security"
+        ],
+        "operationId": "SecurityCompliance",
+        "parameters": [
+          {
+            "name": "standard",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/system/checkin": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "SystemCheckIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckInRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/system/checkout": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "SystemCheckOut",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckInRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/system/checkin/heartbeat": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "SystemCheckInHeartbeat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckInRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/system/checkin/status": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "SystemCheckInStatus",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/system/checkin/force": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "SystemCheckInForce",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ForceCheckOutRequestDto"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/system/restart": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "SystemRestart",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RestartRequestDto"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/system/restart-pending": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "SystemRestartPending",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/system/restart/clear": {
+      "post": {
+        "tags": [
+          "System"
+        ],
+        "operationId": "SystemRestartClear",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RestartClearRequestDto"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mcp/servers": {
+      "get": {
+        "tags": [
+          "MCP"
+        ],
+        "operationId": "ListMcpServers",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mcp/servers/{name}": {
+      "get": {
+        "tags": [
+          "MCP"
+        ],
+        "operationId": "GetMcpServer",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/mcp/servers/reload": {
+      "post": {
+        "tags": [
+          "MCP"
+        ],
+        "operationId": "ReloadMcpServers",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AgentManifest": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "auth": {
+            "$ref": "#/components/schemas/ManifestAuth"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManifestCapability"
+            }
+          },
+          "models": {
+            "$ref": "#/components/schemas/ManifestModels"
+          },
+          "health": {
+            "type": "string"
+          },
+          "tags": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "supported_protocol_versions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "resourceLimits": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ManifestResourceLimits"
+              }
+            ]
+          },
+          "trustMetadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ManifestTrustMetadata"
+              }
+            ]
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManifestSkillEntry"
+            }
+          },
+          "generatedAt": {
+            "type": "string"
+          }
+        }
+      },
+      "ApplyFleetTemplateRequest": {
+        "type": "object",
+        "properties": {
+          "conflictResolution": {
+            "$ref": "#/components/schemas/FleetConflictResolution"
+          }
+        }
+      },
+      "ApplyTemplateRequest": {
+        "type": "object",
+        "properties": {
+          "conflictResolution": {
+            "$ref": "#/components/schemas/ConflictResolution"
+          }
+        }
+      },
+      "ApproveRequest": {
+        "type": "object",
+        "properties": {
+          "approvedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AuthContext": {
+        "type": "object",
+        "properties": {
+          "auth_type": {
+            "type": "string"
+          },
+          "token": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "claims": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "delegation_depth": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "root_request_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "AwaitInputRequest": {
+        "required": [
+          "inputType"
+        ],
+        "type": "object",
+        "properties": {
+          "inputType": {
+            "type": "string"
+          },
+          "question": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "choices": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Запрос на ожидание ввода (task_036)."
+      },
+      "BatchApproveRequest": {
+        "required": [
+          "ids"
+        ],
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Request body for batch approve."
+      },
+      "CacheInvalidateRequest": {
+        "type": "object",
+        "properties": {
+          "all": {
+            "type": "boolean",
+            "description": "Invalidate all cache classes."
+          },
+          "class": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Cache class to invalidate (e.g. \"Embedding\", \"RoutingDecision\")."
+          },
+          "key": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Specific key to invalidate (requires 'class')."
+          },
+          "pattern": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Key pattern to invalidate (requires 'class')."
+          }
+        },
+        "description": "Request body for cache invalidation."
+      },
+      "CanaryRequest": {
+        "required": [
+          "targetAgentId"
+        ],
+        "type": "object",
+        "properties": {
+          "targetAgentId": {
+            "type": "string"
+          },
+          "trafficPercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 10
+          }
+        },
+        "description": "Request to deploy a canary package."
+      },
+      "ChatRequest": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "CheckInRequestDto": {
+        "type": "object",
+        "properties": {
+          "studioId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "studioName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "DTO для checkin / checkout / heartbeat."
+      },
+      "ConflictResolution": {
+        "type": "integer",
+        "default": 2
+      },
+      "CreateBackupRequest": {
+        "required": [
+          "passphrase"
+        ],
+        "type": "object",
+        "properties": {
+          "passphrase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CreateCheckpointRequest": {
+        "required": [
+          "stepNumber",
+          "stateSnapshot"
+        ],
+        "type": "object",
+        "properties": {
+          "stepNumber": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "stateSnapshot": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Request body for `POST /api/tasks/{id}/checkpoints`."
+      },
+      "CreateSkillRequest": {
+        "required": [
+          "name",
+          "phraseReceivers",
+          "trigger",
+          "prompt",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "phraseReceivers": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "trigger": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "triggers": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CreateTaskRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DurableTaskMetadata"
+              }
+            ]
+          },
+          "retryPolicy": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TaskRetryPolicy"
+              }
+            ]
+          },
+          "isDurable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DelegatedTaskAcceptRequest": {
+        "required": [
+          "parentRequestId",
+          "callerAgentId",
+          "intent",
+          "payload"
+        ],
+        "type": "object",
+        "properties": {
+          "parentRequestId": {
+            "type": "string"
+          },
+          "callerAgentId": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "string"
+          },
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuthContext"
+              }
+            ]
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "Запрос на accept delegated задачи (task_036)."
+      },
+      "DelegatedTaskCallbackRequest": {
+        "required": [
+          "input"
+        ],
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "description": "Callback payload от вызывающего агента (task_036)."
+      },
+      "DelegatedTaskCancelRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Запрос на cancel delegated задачи (task_036)."
+      },
+      "DelegatedTaskCompleteRequest": {
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "string"
+          }
+        },
+        "description": "Запрос на завершение delegated задачи (task_036)."
+      },
+      "DelegatedTaskFailRequest": {
+        "required": [
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "description": "Запрос на fail delegated задачи (task_036)."
+      },
+      "DelegatedTaskStateUpdateRequest": {
+        "required": [
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          }
+        },
+        "description": "Запрос на обновление состояния delegated задачи (task_036)."
+      },
+      "DeprecateRequest": {
+        "required": [
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "description": "Запрос на депрекацию навыка."
+      },
+      "DistillRequest": {
+        "required": [
+          "sessionId",
+          "mode"
+        ],
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "mode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Request body для `POST /api/context/distill` (task_102)."
+      },
+      "DurableTaskMetadata": {
+        "type": "object",
+        "properties": {
+          "skillId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sessionId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "priority": {
+            "type": "string"
+          },
+          "createdBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ownerAgentId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "FleetConflictResolution": {
+        "type": "integer",
+        "default": 1
+      },
+      "ForceCheckOutRequestDto": {
+        "type": "object",
+        "properties": {
+          "by": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "DTO для force-checkout (опциональный `by` — actor для audit-лога)."
+      },
+      "GrantRequestDto": {
+        "type": "object",
+        "properties": {
+          "skillId": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "durationMinutes": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "grantor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ImportUrlRequest": {
+        "required": [
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "InstallRequest": {
+        "required": [
+          "fileName"
+        ],
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string"
+          },
+          "conflictResolution": {
+            "$ref": "#/components/schemas/ConflictResolution"
+          }
+        }
+      },
+      "IntentEnvelope": {
+        "type": "object",
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "idempotency_key": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sender": {
+            "type": "string"
+          },
+          "recipient": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "intent": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "string"
+          },
+          "response_schema": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ResponseSchema"
+              }
+            ]
+          },
+          "reply_to": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "deadline": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "auth": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuthContext"
+              }
+            ]
+          },
+          "version": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isExpired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "JsonElement": { },
+      "ManifestAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "header": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ManifestCapability": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "phrase_receivers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tools": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ManifestModels": {
+        "type": "object",
+        "properties": {
+          "primary": {
+            "type": "string"
+          },
+          "fallback": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ManifestResourceLimits": {
+        "type": "object",
+        "properties": {
+          "max_tokens_per_request": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "max_concurrent_requests": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "max_tool_calls_per_request": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "max_wall_clock_seconds_per_request": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "max_cost_per_day_usd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "max_tokens_per_day": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ManifestSkillEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "risk_level": {
+            "type": "string"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "phrase_receivers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ManifestTrustMetadata": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "string"
+          },
+          "identityProvider": {
+            "type": "string"
+          },
+          "identityClaims": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "verifiedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "verifiedAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PromoteCanaryRequest": {
+        "required": [
+          "targetAgentId"
+        ],
+        "type": "object",
+        "properties": {
+          "targetAgentId": {
+            "type": "string"
+          }
+        },
+        "description": "Request to promote a canary to full deployment."
+      },
+      "PromoteRequest": {
+        "type": "object",
+        "properties": {
+          "bundleId": {
+            "type": "string"
+          }
+        }
+      },
+      "RecordBaselineRequest": {
+        "type": "object",
+        "properties": {
+          "recordedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Request body для POST /api/skills/{id}/eval/baseline."
+      },
+      "RecordQualityEventRequest": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Event type: fallback, usercorrection, safetydenial, latencysample."
+          },
+          "latencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Latency in milliseconds (for latencysample event).",
+            "format": "int32"
+          },
+          "costUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Cost in USD (for latencysample event).",
+            "format": "double"
+          }
+        },
+        "description": "Request body для POST /api/skills/{id}/quality/record."
+      },
+      "RejectRequest": {
+        "type": "object",
+        "properties": {
+          "rejectedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ReplayRequest": {
+        "type": "object",
+        "properties": {
+          "withFailures": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "ResponseSchema": {
+        "type": "object",
+        "properties": {
+          "schema_type": {
+            "type": "string"
+          },
+          "json_schema": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "content_type": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "RestartClearRequestDto": {
+        "type": "object",
+        "properties": {
+          "by": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Опциональный actor для audit-лога (по умолчанию берётся из ApiKeyMiddleware)."
+          }
+        },
+        "description": "DTO для `POST /api/system/restart/clear` (task_099, опциональный body)."
+      },
+      "RestartRequestDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Опциональная причина рестарта (operator-supplied), попадает в audit и status response."
+          }
+        },
+        "description": "DTO для `POST /api/system/restart` (task_099)."
+      },
+      "RestoreBackupRequest": {
+        "required": [
+          "passphrase",
+          "targetDir"
+        ],
+        "type": "object",
+        "properties": {
+          "passphrase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetDir": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RollbackPackageRequest": {
+        "required": [
+          "targetAgentId"
+        ],
+        "type": "object",
+        "properties": {
+          "targetAgentId": {
+            "type": "string"
+          }
+        },
+        "description": "Request to rollback a skill package."
+      },
+      "RollbackRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RunMaintenanceRequest": {
+        "type": "object",
+        "properties": {
+          "skillId": {
+            "type": "string"
+          },
+          "triggeredBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "SharedMemoryPublishRequest": {
+        "required": [
+          "category",
+          "content"
+        ],
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "allowedAgents": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Запрос на публикацию shared-факта памяти."
+      },
+      "StartSessionRequest": {
+        "required": [
+          "templateName"
+        ],
+        "type": "object",
+        "properties": {
+          "templateName": {
+            "type": "string"
+          }
+        }
+      },
+      "TaskRetryPolicy": {
+        "type": "object",
+        "properties": {
+          "maxRetries": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "retryDelayMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "backoffMultiplier": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "useJitter": {
+            "type": "boolean"
+          },
+          "nonRetryableErrors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ToolTraceEntry": {
+        "required": [
+          "toolName",
+          "input",
+          "output",
+          "durationMs",
+          "timestamp",
+          "success"
+        ],
+        "type": "object",
+        "properties": {
+          "toolName": {
+            "type": "string"
+          },
+          "input": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "durationMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TrustAdmissionDryRunCallerIdentity": {
+        "required": [
+          "subject",
+          "authMethod"
+        ],
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "authMethod": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "audience": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "scopes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "delegationDepth": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32",
+            "default": 0
+          },
+          "rootRequestId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "claims": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Caller identity for dry-run evaluation (task_040)."
+      },
+      "TrustAdmissionDryRunRequest": {
+        "required": [
+          "envelope"
+        ],
+        "type": "object",
+        "properties": {
+          "envelope": {
+            "$ref": "#/components/schemas/IntentEnvelope"
+          },
+          "targetAgentId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "callerTrustLevel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dataClassification": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "callerSchemaVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestedRiskLevel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "callerIdentity": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TrustAdmissionDryRunCallerIdentity"
+              }
+            ]
+          }
+        },
+        "description": "Request для dry-run evaluation of trust admission policy (task_040).\r\nAllows callers to test a policy decision without actually sending an intent."
+      },
+      "UpdatePackageRequest": {
+        "required": [
+          "targetAgentId"
+        ],
+        "type": "object",
+        "properties": {
+          "targetAgentId": {
+            "type": "string"
+          }
+        },
+        "description": "Request to update a skill package on target agent(s)."
+      },
+      "UpdateProfileRequest": {
+        "required": [
+          "content"
+        ],
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateSkillRequest": {
+        "required": [
+          "phraseReceivers",
+          "prompt",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "phraseReceivers": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "prompt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "triggers": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UpdateVulnerabilityStatusRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Hercules.WebApi"
+    },
+    {
+      "name": "Mesh.Observability"
+    },
+    {
+      "name": "Tasks"
+    },
+    {
+      "name": "Tools"
+    },
+    {
+      "name": "Rollout"
+    },
+    {
+      "name": "Security"
+    },
+    {
+      "name": "System"
+    },
+    {
+      "name": "MCP"
+    }
+  ]
 }

@@ -173,7 +173,7 @@
 | 106 | 8 | [DelegatedTask persistence](tasks/task_106.md) | `delegated-task-persistence` | done |
 | 107 | 8 | [Parent/child task relationships](tasks/task_107.md) | `parent-child-tasks` | pending |
 | 108 | 8 | [DurableTask checkpoint persistence](tasks/task_108.md) | `checkpoint-persistence` | pending |
-| 109 | 0 (pre-req) | [AddOpenApi() в Program.cs](tasks/task_109.md) | `add-openapi-producer` | pending |
+| 109 | 0 (pre-req) | [AddOpenApi() в Program.cs](tasks/completed/task_109.md) | `add-openapi-producer` | done |
 | 110 | 0 (pre-req) | [WithTags на все контроллеры](tasks/task_110.md) | `withtags-all-controllers` | pending |
 | 111 | 0 (pre-req) | [Produces\<T\>() + DTO рефакторинг](tasks/task_111.md) | `produces-dto-refactor` | pending |
 | 112 | 0 (pre-req) | [WithName на Marketplace + Template](tasks/task_112.md) | `withname-marketplace-template` | pending |

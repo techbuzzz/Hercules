@@ -139,4 +139,4 @@ npm install --save-dev @stoplight/spectral-cli
 
 ## Links
 - Backlog: [../backlog.md](../backlog.md)
-- task_109: [task_109.md](task_109.md) (openapi.json source)
+- task_109: [completed/task_109.md](completed/task_109.md) (openapi.json source)

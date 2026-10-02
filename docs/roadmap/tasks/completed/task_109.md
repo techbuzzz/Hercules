@@ -1,7 +1,7 @@
 # Task 109 — OpenAPI producer + Scalar UI + Build-Time Generation
 
 **Phase:** 8
-**Status:** in_progress
+**Status:** done
 **Owner:** —
 **Slug:** `add-openapi-producer`
 **Studio Stage:** 0 (pre-req для task_113/115)
@@ -150,13 +150,16 @@ Both produce the same document. Build-time is preferred for CI, runtime for dev 
 - New: `src/agent/Hercules.WebApi/openapi.json` — generated at build time, committed to git
 
 ## Notes
-- `Microsoft.AspNetCore.OpenApi` встроен в .NET 10 SDK, NuGet не нужен для core OpenAPI
+- `Microsoft.AspNetCore.OpenApi` — NuGet-ссылка (не только встроен в .NET 10 SDK)
 - `Scalar.AspNetCore` — отдельный NuGet для Scalar UI
-- `Microsoft.Extensions.ApiDescription.Server` — отдельный NuGet для build-time generation
+- ~~`Microsoft.Extensions.ApiDescription.Server`~~ — **удалён**: его `dotnet-getdocument`
+  не умеет обходить minimal-API-поверхность этого проекта. Build-time генерация выполняется
+  собственным MSBuild-таргетом, запускающим приложение с флагом `openapi-output`.
 - OpenAPI 3.1 (built-in), не 3.0 (Swashbuckle)
 - Без `Produces<T>()` (task_111) response schemas будут пустыми/`object` — это нормально для старта, task_111 добавит типы
 - `openapi.json` в корне проекта — не в `bin/`, не в `.gitignore`
-- Build-time detection (`GetDocument.Insider`) — официальная рекомендация от Microsoft
+- Удаление `ApiDescription.Server` заодно сняло предупреждение NU1903: `Microsoft.OpenApi`
+  обновился 2.0.0 → 2.7.5
 - CS1591 (missing XML doc on public member) и CS1573 (missing param tag) — подавляем, т.к. не все public members нуждаются в OpenAPI docs
 
 ## Acceptance criteria (current state)
@@ -173,13 +176,25 @@ Both produce the same document. Build-time is preferred for CI, runtime for dev 
 ### Build-Time Generation
 - [x] `Scalar.AspNetCore` NuGet package (`Hercules.WebApi.csproj`)
 - [x] `Microsoft.AspNetCore.OpenApi` NuGet package
-- [x] `Microsoft.Extensions.ApiDescription.Server` NuGet package
-- [x] `<OpenApiDocumentsDirectory>.</OpenApiDocumentsDirectory>` в `.csproj`
-- [x] `<OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>` в `.csproj`
+- [x] **Removed** `Microsoft.Extensions.ApiDescription.Server` — its `dotnet-getdocument`
+      tool resolves the document through MVC action descriptors and cannot enumerate this
+      project's minimal-API surface (writes `paths: {}`); see [Root cause and fix](#root-cause-and-fix-verified)
+- [x] Custom MSBuild target `GenerateOpenApiDocument` (`AfterTargets="Build"`) launches the
+      app with the `openapi-output` flag
+- [x] `<OpenApiDocumentFile>$(MSBuildProjectDirectory)/openapi.json</OpenApiDocumentFile>` в `.csproj`
 - [x] `dotnet build` генерирует `openapi.json` в корне `Hercules.WebApi/` проекта
-- [x] Build-time detection: `var isBuildTime = Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";` в Program.cs
+- [x] Build-time detection в Program.cs: флаг `openapi-output` **или** legacy
+      `Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider"`
+- [x] `await app.StartAsync()` перед генерацией — иначе `EndpointDataSource` не финализирован
+      и документ сериализуется пустым
+- [x] `GetRequiredKeyedService<IOpenApiDocumentProvider>("v1")` — провайдер зарегистрирован
+      как keyed-сервис, unkeyed-резолв бросает исключение
+- [x] Сериализация `SerializeAsJsonAsync(OpenApi3_1)`, запись UTF-8 **без BOM**
+- [x] В build-режиме хотят на эфемерный порт `http://127.0.0.1:0` — сборка не падает,
+      если 8421 занят dev-сервером
+- [x] Генерация детерминирована: SHA-256 совпадает между двумя `--no-incremental` сборками
 - [x] Условное исключение сервисов требующих config при build-time:
-  - `CodeExecutionTool` registration (ambiguous constructors trip DI validation)
+  - `CodeExecutionTool` registration
   - ApiKeyStore key generation
   - `WebApiAdapter.EnsureSessionStarted()` (DB touch)
   - Agent manifest publishing
@@ -195,11 +210,11 @@ Both produce the same document. Build-time is preferred for CI, runtime for dev 
 
 ### Validation
 - [x] `dotnet build src/agent/Hercules.WebApi/Hercules.WebApi.csproj` → 0 errors
-- [x] `dotnet build` writes `openapi.json` (build-time target runs successfully)
-- [~] `openapi.json` содержит все ~195 endpoints — **НЕ выполнено** (см. [Known limitations](#known-limitations))
-- [ ] JSON валиден: `npx @redocly/cli lint` или Spectral (task_117) — deferred until document is populated
-- [ ] Manual smoke: `curl http://localhost:8421/openapi/v1.json` → 200 OK — **blocked** by pre-existing `CodeExecutionTool` constructor ambiguity (см. [Known limitations](#known-limitations))
-- [ ] Manual smoke: Scalar UI на `http://localhost:8421/scalar` — same blocker
+- [x] `dotnet build` writes `openapi.json` (custom `GenerateOpenApiDocument` target runs successfully)
+- [x] **`openapi.json` содержит 210 paths / 61 schemas** — identical to the runtime document
+- [x] Manual smoke: `curl http://localhost:8421/openapi/v1.json` → **200 OK**, 210 paths, 61 schemas
+- [x] Manual smoke: Scalar UI на `http://localhost:8421/scalar` → **200 OK**
+- [ ] JSON валиден: Spectral (task_117) — deferred, document is now populated so task_117 can run
 
 ## Sub-tasks
 - [x] Добавить NuGet packages: `Scalar.AspNetCore`, `Microsoft.AspNetCore.OpenApi`, `Microsoft.Extensions.ApiDescription.Server`
@@ -217,45 +232,96 @@ Both produce the same document. Build-time is preferred for CI, runtime for dev 
 - [x] `app.MapOpenApi()` + `app.MapScalarApiReference()` после всех `app.MapXxx()` (route order)
 - [x] Build verified: `dotnet build` writes `openapi.json` successfully
 
-## Known limitations
+## Root cause and fix (verified)
 
-### Build-time document is empty
-The build-time `openapi.json` is a valid OpenAPI 3.1 skeleton but contains `paths: {}` — the `Microsoft.Extensions.ApiDescription.Server` build target's `dotnet-getdocument` tool does not enumerate minimal API routes in this project. Reproduction in a clean `dotnet new web` test project shows the tool works (4/4 routes found), so the issue is specific to the Hercules host (large service graph, side-effecting startup, mixed minimal-API + `[ApiController]` controllers that aren't registered via `AddControllers()`).
+The empty build-time document was **not** an MVC-vs-minimal-API discovery problem in the
+narrow sense, and it was **not** caused by the `CodeExecutionTool` DI ambiguity that the
+previous revision of this file claimed. Both of those diagnoses were wrong; re-verified
+against the running agent below.
 
-This blocks the acceptance criterion "Документ содержит все ~195 endpoints". The runtime document at `/openapi/v1.json` would be populated (route table is correct, `ShouldInclude` opts every endpoint in), but the runtime cannot be smoke-tested in this environment because of a **pre-existing** `CodeExecutionTool` constructor ambiguity (out of scope for this task — tracked separately).
+### What was actually wrong
 
-**Workarounds investigated:**
-- `OpenApiOptions.ShouldInclude = _ => true` — applied, doesn't help (tool uses MVC discovery, not the OpenAPI service)
-- `AddEndpointsApiExplorer()` — applied, doesn't help (same)
-- Reordering `MapOpenApi()` after all `MapXxx()` — doesn't help
-- `.WithOpenApi()` on individual routes — doesn't help (tool uses MVC discovery, ignores this)
+`Microsoft.Extensions.ApiDescription.Server`'s `dotnet-getdocument` tool boots the app with
+the `GetDocument.Insider` entry assembly and asks the host to emit its registered documents.
+Running that tool by hand against the real assembly printed:
 
-**Follow-up (next tick or new task):** Either (a) register the `[ApiController]`-based controllers via `AddControllers() + MapControllers()` and debug why MVC discovery still misses minimal API routes, or (b) replace `Microsoft.Extensions.ApiDescription.Server` with a custom MSBuild target that invokes `dotnet run -- --getdocument` and our program writes the document via `IOpenApiDocumentProvider`.
+```
+Generating document named 'v1'.
+Using discovered `GenerateAsync` overload with version parameter.
+"No action descriptors found. This may indicate an incorrectly configured application..."
+Writing document named 'v1' to ...\openapi.json.
+```
 
-### Pre-existing `CodeExecutionTool` constructor ambiguity
-`Hercules.Tools.CodeExecutionTool` has two constructors (`IEnumerable<ICodeExecutor>` and `ICodeExecutor`). With two `ICodeExecutor` registrations (DotnetFileBasedExecutor + SkillSdkExecutor) DI cannot disambiguate, so `app.Build()` throws on validation. This is unrelated to task_109 — it predates this change. Workaround at build-time: skip the registration. Workaround at runtime (out of scope for this task): use a factory `sp => new CodeExecutionTool(sp.GetServices<ICodeExecutor>())`.
+and produced a 117-byte skeleton with `paths: {}`. The same tool against a clean
+`dotnet new web` probe project failed outright with
+`Unable to find service type 'Microsoft.Extensions.ApiDescriptions.IDocumentProvider'`,
+i.e. the tool's discovery is not reliable for this host at all.
 
-### `Microsoft.OpenApi 2.0.0` vulnerability warning
-`Microsoft.Extensions.ApiDescription.Server 10.0.0` brings in `Microsoft.OpenApi 2.0.0` (NU1903 — known high severity, GHSA-v5pm-xwqc-g5wc). The newer `Microsoft.OpenApi 2.x` from `Microsoft.AspNetCore.OpenApi 10.0.10+` should fix this; pinned to `10.0.0` for now because the .NET 10 SDK 10.0.400 ships with ApiDescription.Server 10.0.0. Tracked as a dependency upgrade follow-up.
+### The fix
+
+Dropped `Microsoft.Extensions.ApiDescription.Server` and generate the document from the app
+itself via a custom `GenerateOpenApiDocument` MSBuild target that launches
+`Hercules.WebApi.dll` with the `openapi-output` flag. `Program.cs` then:
+
+1. `await app.StartAsync()` — required. Without a started host the `EndpointDataSource` is
+   not finalised and the document serialises with `paths: {}` even though every `MapXxx()`
+   call has already run. This was the single decisive step.
+2. Resolves the document provider. `AddOpenApi()` registers it as a **keyed** service under
+   the key `"v1"`, so unkeyed `GetRequiredService<IOpenApiDocumentProvider>()` throws
+   `No service for type ... has been registered`. `GetRequiredKeyedService<...>("v1")` is
+   the correct call.
+3. Serialises via `document.SerializeAsJsonAsync(OpenApiSpecVersion.OpenApi3_1)` and writes
+   UTF-8 **without BOM** (Orval and Spectral both fail to parse a BOM).
+
+Because this goes through the very same `IOpenApiDocumentProvider` that backs the runtime
+`/openapi/v1.json` endpoint, the committed file and the served document cannot drift.
+
+In build mode the host binds an ephemeral loopback port (`http://127.0.0.1:0`) instead of
+8421: `StartAsync()` opens a real listener, and a build must not fail because a dev server
+already holds 8421, nor expose the production port while doing so. `app.Run()` stays behind
+`if (!isBuildTime)` so no path can block on a listening socket.
+
+### `CodeExecutionTool` DI ambiguity — resolved, not pre-existing
+
+The previous revision of this file claimed `app.Build()` threw on constructor ambiguity
+because `CodeExecutionTool` had two constructors. That is stale: the type now has a single
+`IServiceProvider` constructor (`src/agent/Tools/CodeExecutionTool.cs:24`) and is registered
+through an explicit factory (`Program.cs:426`). The agent starts, serves the runtime
+document, and serves Scalar. No workaround is needed for it.
+
+### `Microsoft.OpenApi 2.0.0` vulnerability — resolved
+
+`Microsoft.Extensions.ApiDescription.Server 10.0.0` pulled in `Microsoft.OpenApi 2.0.0`
+(NU1903, GHSA-v5pm-xwqc-g5wc). Removing that package drops the warning; the project now
+resolves `Microsoft.OpenApi 2.7.5` via `Microsoft.AspNetCore.OpenApi 10.0.11`.
 
 ## Implementation notes
-- `OpenApiOptions.ShouldInclude` lives in `Microsoft.AspNetCore.OpenApi` 10.0.0+ — it's a `Func<Endpoint, bool>?` predicate that opts endpoints into the default document. With `_ => true`, all registered endpoints are included without per-route `.WithOpenApi()` calls.
-- `AddEndpointsApiExplorer()` is a no-op for the runtime OpenAPI service (which has its own minimal-API descriptor provider) but is required for the build-time `dotnet-getdocument` tool's MVC-based discovery.
-- `MapOpenApi()` and `MapScalarApiReference()` must be called AFTER all `app.MapXxx()` calls so the route table is finalised before the document provider snapshots it.
-- The `isBuildTime` check matches `Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider"` — the package's build target sets this when it boots a special host to extract the document.
+- `OpenApiOptions.ShouldInclude` is a `Func<Endpoint, bool>?` predicate that opts endpoints
+  into the default document. With `_ => true`, all registered endpoints are included without
+  per-route `.WithOpenApi()` calls.
+- `AddEndpointsApiExplorer()` is a no-op for the runtime OpenAPI service and was only ever
+  needed by the removed build tool. It is retained (harmless) but no longer load-bearing.
+- `MapOpenApi()` and `MapScalarApiReference()` must be called after all `app.MapXxx()` calls
+  so the route table is complete before the document provider snapshots it.
+- The `isBuildTime` check accepts two triggers: the legacy `GetDocument.Insider` entry
+  assembly (kept for compatibility, no longer wired by the csproj) and the presence of the
+  `openapi-output` argument.
 
-## Validation
-- `dotnet build src/agent/Hercules.WebApi/Hercules.WebApi.csproj` → **0 errors, 1 expected warning** (`Microsoft.OpenApi 2.0.0` vulnerability, transitive)
-- Build target runs and writes `src/agent/Hercules.WebApi/openapi.json` (skeleton — see Known limitations)
-- `dotnet test` not run in this tick (pre-existing constructor ambiguity blocks the runtime; the build-time path doesn't exercise the test suite)
+## Validation (this revision)
+- `dotnet build src/agent/Hercules.slnx` → 0 errors
+- `dotnet build src/agent/Hercules.WebApi/Hercules.WebApi.csproj` → 0 errors, and the
+  `GenerateOpenApiDocument` target runs automatically
+- Committed `openapi.json`: 145 081 bytes, **210 paths / 61 schemas**, OpenAPI 3.1.1
+- Runtime `GET /openapi/v1.json` → 200, 144 788 bytes, **210 paths / 61 schemas** — matches
+- Runtime `GET /scalar` → 200
 
 ## Dependencies
 - нет (стартовая задача для OpenAPI pipeline)
 
 ## Scope / Likely files
-- `src/agent/Hercules.WebApi/Program.cs` — AddOpenApi, MapOpenApi, MapScalarApiReference, isBuildTime, AddEndpointsApiExplorer, build-time guards
-- `src/agent/Hercules.WebApi/Hercules.WebApi.csproj` — packages, properties, OpenApiGenerateDocuments
-- New: `src/agent/Hercules.WebApi/openapi.json` — generated at build time, committed to git (skeleton; population blocked — see Known limitations)
+- `src/agent/Hercules.WebApi/Program.cs` — AddOpenApi, MapOpenApi, MapScalarApiReference, isBuildTime, AddEndpointsApiExplorer, build-time guards, `ReadOpenApiOutputPath`, document emission
+- `src/agent/Hercules.WebApi/Hercules.WebApi.csproj` — packages, `OpenApiDocumentFile`, `GenerateOpenApiDocument` target
+- `src/agent/Hercules.WebApi/openapi.json` — generated at build time, committed to git (210 paths / 61 schemas)
 
 ## Reference
 - Article: https://dev.to/nausaf/openapi-in-net-from-setup-to-build-time-generation-with-scalar-ui-1bio
@@ -265,10 +331,10 @@ This blocks the acceptance criterion "Документ содержит все ~
 - MS Docs metadata: https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/include-metadata
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Epic Studio: [../EPIC_Hercules_Studio/README.md](../EPIC_Hercules_Studio/README.md)
-- task_110 (WithTags): [task_110.md](task_110.md)
-- task_111 (Produces+DTO): [task_111.md](task_111.md)
-- task_112 (WithName): [task_112.md](task_112.md)
-- task_113 (Studio codegen): [task_113.md](task_113.md)
-- task_117 (Spectral lint): [task_117.md](task_117.md)
+- Backlog: [../../backlog.md](../../backlog.md)
+- Epic Studio: [../../../EPIC_Hercules_Studio/README.md](../../../EPIC_Hercules_Studio/README.md)
+- task_110 (WithTags): [../task_110.md](../task_110.md)
+- task_111 (Produces+DTO): [../task_111.md](../task_111.md)
+- task_112 (WithName): [../task_112.md](../task_112.md)
+- task_113 (Studio codegen): [../task_113.md](../task_113.md)
+- task_117 (Spectral lint): [../task_117.md](../task_117.md)
