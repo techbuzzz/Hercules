@@ -17,7 +17,7 @@ public static class SkillsController
         app.MapGet("/api/skills", (WebApiAdapter adapter) =>
                 Results.Ok(adapter.ListSkills()))
             .WithName("ListSkills")
-            .CacheOutput(OutputCachePolicies.Skills);
+            .CacheOutput(OutputCachePolicies.Skills).WithTags("Skills");
 
         // GET /api/skills/{id} — получить навык
         app.MapGet("/api/skills/{id}", (string id, WebApiAdapter adapter) =>
@@ -27,7 +27,7 @@ public static class SkillsController
                 ? Results.NotFound(new { error = "Навык не найден." })
                 : Results.Ok(s);
         }).WithName("GetSkill")
-          .CacheOutput(OutputCachePolicies.Skills);
+          .CacheOutput(OutputCachePolicies.Skills).WithTags("Skills");
 
         // POST /api/skills — создать навык.
         // По умолчанию создаётся вручную (trigger + prompt).
@@ -58,7 +58,7 @@ public static class SkillsController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("CreateSkill");
+        }).WithName("CreateSkill").WithTags("Skills");
 
         // PUT /api/skills/{id} — обновить навык (новая версия)
         app.MapPut("/api/skills/{id}", (string id, UpdateSkillRequest req, WebApiAdapter adapter) =>
@@ -67,7 +67,7 @@ public static class SkillsController
             return updated is null
                 ? Results.NotFound(new { error = "Навык не найден." })
                 : Results.Ok(updated);
-        }).WithName("UpdateSkill");
+        }).WithName("UpdateSkill").WithTags("Skills");
 
         // POST /api/skills/{id}/improve — улучшить навык через LLM
         app.MapPost("/api/skills/{id}/improve", async (string id, WebApiAdapter adapter, CancellationToken ct) =>
@@ -76,7 +76,7 @@ public static class SkillsController
             return improved is null
                 ? Results.NotFound(new { error = "Навык не найден." })
                 : Results.Ok(improved);
-        }).WithName("ImproveSkill");
+        }).WithName("ImproveSkill").WithTags("Skills");
 
         // GET /api/skills/{id}/export — экспортировать навык в .skillpkg (ZIP)
         // Возвращает файл application/octet-stream.
@@ -93,7 +93,7 @@ public static class SkillsController
             {
                 return Results.NotFound(new { error = ex.Message });
             }
-        }).WithName("ExportSkill");
+        }).WithName("ExportSkill").WithTags("Skills");
 
         // POST /api/skills/import — импортировать навык из загруженного .skillpkg файла.
         // Параметр conflict = "replace" | "skip" | "rename" (default: rename).
@@ -148,7 +148,7 @@ public static class SkillsController
                     /* best effort */
                 }
             }
-        }).WithName("ImportSkill").DisableAntiforgery();
+        }).WithName("ImportSkill").DisableAntiforgery().WithTags("Skills");
     }
 
     private static SkillDto ToDto(Skill s)

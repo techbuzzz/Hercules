@@ -27,7 +27,7 @@ public static class BudgetController
                 },
                 daily = daily.Select(d => new { date = d.Date, calls = d.Calls, costUsd = d.CostUsd })
             });
-        }).WithName("BudgetSummary");
+        }).WithName("BudgetSummary").WithTags("Budget");
 
         // GET /api/budget/monthly — месячная сводка
         app.MapGet("/api/budget/monthly", async (IBudgetService budget, decimal? limit, CancellationToken ct = default) =>
@@ -45,7 +45,7 @@ public static class BudgetController
                 limitUsd = limit,
                 isOverBudget = isOver
             });
-        }).WithName("BudgetMonthly");
+        }).WithName("BudgetMonthly").WithTags("Budget");
 
         // GET /api/budget/guardrails — статус всех guardrail-лимитов
         app.MapGet("/api/budget/guardrails", (IGuardrailService guardrails, string? sessionId) =>
@@ -73,7 +73,7 @@ public static class BudgetController
                     isHardCap = s.IsHardCap
                 })
             });
-        }).WithName("BudgetGuardrails");
+        }).WithName("BudgetGuardrails").WithTags("Budget");
 
         // GET /api/budget/guardrails/{type} — статус конкретного лимита
         app.MapGet("/api/budget/guardrails/{type}", (IGuardrailService guardrails, string type, string? sessionId) =>
@@ -99,6 +99,6 @@ public static class BudgetController
                 isExceeded = status.IsExceeded,
                 isHardCap = status.IsHardCap
             });
-        }).WithName("BudgetGuardrailType");
+        }).WithName("BudgetGuardrailType").WithTags("Budget");
     }
 }

@@ -17,7 +17,7 @@ public static class SloController
         {
             var summary = await slo.GetSummaryAsync(ct);
             return Results.Ok(summary);
-        }).WithName("SloSummary").RequireRateLimiting(RateLimitPolicies.Expensive);
+        }).WithName("SloSummary").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SLOs");
 
         // GET /api/slos/{vertical}/definition — SLO-определение для вертикали.
         app.MapGet("/api/slos/{vertical}/definition", (string vertical, ISloService slo) =>
@@ -29,21 +29,21 @@ public static class SloController
             }
 
             return Results.Ok(def);
-        }).WithName("SloDefinition").RequireRateLimiting(RateLimitPolicies.Expensive);
+        }).WithName("SloDefinition").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SLOs");
 
         // GET /api/slos/{vertical} — текущий SLO-статус для вертикали.
         app.MapGet("/api/slos/{vertical}", async (string vertical, ISloService slo, CancellationToken ct) =>
         {
             var status = await slo.GetStatusAsync(vertical, ct);
             return Results.Ok(status);
-        }).WithName("SloStatus").RequireRateLimiting(RateLimitPolicies.Expensive);
+        }).WithName("SloStatus").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SLOs");
 
         // GET /api/slos/{vertical}/report — полный SLO-отчёт по вертикали.
         app.MapGet("/api/slos/{vertical}/report", async (string vertical, ISloService slo, CancellationToken ct) =>
         {
             var report = await slo.GetReportAsync(vertical, ct);
             return Results.Ok(report);
-        }).WithName("SloReport").RequireRateLimiting(RateLimitPolicies.Expensive);
+        }).WithName("SloReport").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SLOs");
 
         // POST /api/slos/{vertical}/ack/{violationId}?acknowledgedBy=xxx —
         // подтвердить конкретное нарушение (подавляет повторные алерты).
@@ -52,7 +52,7 @@ public static class SloController
             var who = acknowledgedBy ?? "operator";
             slo.AcknowledgeViolation(vertical, violationId, who);
             return Results.Ok(new { acknowledged = true, violationId, by = who });
-        }).WithName("SloAcknowledgeViolation").RequireRateLimiting(RateLimitPolicies.Expensive);
+        }).WithName("SloAcknowledgeViolation").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SLOs");
 
         // POST /api/slos/{vertical}/ack?acknowledgedBy=xxx —
         // подтвердить все активные нарушения для вертикали.
@@ -61,6 +61,6 @@ public static class SloController
             var who = acknowledgedBy ?? "operator";
             slo.AcknowledgeAll(vertical, who);
             return Results.Ok(new { acknowledgedAll = true, vertical, by = who });
-        }).WithName("SloAcknowledgeAll").RequireRateLimiting(RateLimitPolicies.Expensive);
+        }).WithName("SloAcknowledgeAll").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SLOs");
     }
 }

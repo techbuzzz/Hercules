@@ -32,7 +32,7 @@
     "/api/chat": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Chat"
         ],
         "summary": "Отправить сообщение агенту и получить ответ",
         "operationId": "Chat",
@@ -56,7 +56,7 @@
     "/api/skills": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Skills"
         ],
         "operationId": "ListSkills",
         "responses": {
@@ -67,7 +67,7 @@
       },
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Skills"
         ],
         "operationId": "CreateSkill",
         "parameters": [
@@ -106,7 +106,7 @@
     "/api/skills/{id}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Skills"
         ],
         "operationId": "GetSkill",
         "parameters": [
@@ -127,7 +127,7 @@
       },
       "put": {
         "tags": [
-          "Hercules.WebApi"
+          "Skills"
         ],
         "operationId": "UpdateSkill",
         "parameters": [
@@ -160,7 +160,7 @@
     "/api/skills/{id}/improve": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillLifecycle"
         ],
         "operationId": "ImproveSkillLifecycle",
         "parameters": [
@@ -183,7 +183,7 @@
     "/api/skills/{id}/export": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Skills"
         ],
         "operationId": "ExportSkill",
         "parameters": [
@@ -206,7 +206,7 @@
     "/api/skills/import": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Skills"
         ],
         "operationId": "ImportSkill",
         "responses": {
@@ -219,7 +219,7 @@
     "/api/skills/{id}/evaluate": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillLifecycle"
         ],
         "operationId": "EvaluateSkill",
         "parameters": [
@@ -242,7 +242,7 @@
     "/api/skills/{id}/deprecate": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillLifecycle"
         ],
         "operationId": "DeprecateSkill",
         "parameters": [
@@ -275,7 +275,7 @@
     "/api/skills/{id}/rollback": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillLifecycle"
         ],
         "operationId": "RollbackSkill",
         "parameters": [
@@ -298,7 +298,7 @@
     "/api/skills/{id}/undeprecate": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillLifecycle"
         ],
         "operationId": "UndeprecateSkill",
         "parameters": [
@@ -321,7 +321,7 @@
     "/api/skills/deprecated": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillLifecycle"
         ],
         "operationId": "ListDeprecatedSkills",
         "responses": {
@@ -334,7 +334,7 @@
     "/api/skills/{id}/quality": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillQuality"
         ],
         "operationId": "GetSkillQuality",
         "parameters": [
@@ -357,7 +357,7 @@
     "/api/skills/{id}/quality/history": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillQuality"
         ],
         "operationId": "GetSkillQualityHistory",
         "parameters": [
@@ -380,7 +380,7 @@
     "/api/skills/{id}/quality/record": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillQuality"
         ],
         "operationId": "RecordSkillQualityEvent",
         "parameters": [
@@ -413,7 +413,7 @@
     "/api/skills/{id}/quality/score": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillQuality"
         ],
         "operationId": "GetSkillQualityScore",
         "parameters": [
@@ -436,7 +436,7 @@
     "/api/memory/profile": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Memory"
         ],
         "operationId": "GetProfile",
         "responses": {
@@ -447,7 +447,7 @@
       },
       "put": {
         "tags": [
-          "Hercules.WebApi"
+          "Memory"
         ],
         "operationId": "UpdateProfile",
         "requestBody": {
@@ -470,7 +470,7 @@
     "/api/memory/reset": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Memory"
         ],
         "operationId": "ResetMemory",
         "responses": {
@@ -483,7 +483,7 @@
     "/api/stats": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Stats"
         ],
         "operationId": "Stats",
         "responses": {
@@ -496,7 +496,7 @@
     "/api/reflect": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Stats"
         ],
         "operationId": "Reflect",
         "responses": {
@@ -509,7 +509,7 @@
     "/api/health/detailed": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Stats"
         ],
         "operationId": "HealthDetailed",
         "responses": {
@@ -522,7 +522,7 @@
     "/api/config": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Config"
         ],
         "operationId": "GetConfig",
         "responses": {
@@ -533,7 +533,7 @@
       },
       "put": {
         "tags": [
-          "Hercules.WebApi"
+          "Config"
         ],
         "operationId": "UpdateConfig",
         "requestBody": {
@@ -554,7 +554,7 @@
       },
       "patch": {
         "tags": [
-          "Hercules.WebApi"
+          "Config"
         ],
         "operationId": "PatchConfig",
         "requestBody": {
@@ -577,7 +577,7 @@
     "/agent.manifest.json": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "GetAgentManifest",
         "responses": {
@@ -590,7 +590,7 @@
     "/api/mesh/agents": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "ListMeshAgents",
         "responses": {
@@ -603,7 +603,7 @@
     "/api/mesh/agents/{id}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "GetMeshAgentFull",
         "parameters": [
@@ -624,7 +624,7 @@
       },
       "delete": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "RemoveMeshAgent",
         "parameters": [
@@ -647,7 +647,7 @@
     "/api/mesh/agents/{id}/health": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "GetMeshAgentHealth",
         "parameters": [
@@ -670,7 +670,7 @@
     "/api/mesh/agents/{id}/touch": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "TouchMeshAgent",
         "parameters": [
@@ -693,7 +693,7 @@
     "/api/mesh/agents/cleanup": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "CleanupExpiredAgents",
         "responses": {
@@ -706,7 +706,7 @@
     "/api/mesh/agents/register": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "RegisterMeshAgent",
         "requestBody": {
@@ -729,7 +729,7 @@
     "/api/mesh/capabilities": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "ListMeshCapabilities",
         "parameters": [
@@ -751,7 +751,7 @@
     "/api/mesh/capabilities/{name}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "FindMeshByCapability",
         "parameters": [
@@ -774,7 +774,7 @@
     "/api/mesh/capabilities/search": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "SearchMeshByPhrase",
         "parameters": [
@@ -797,7 +797,7 @@
     "/api/mesh/intent": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "SendMeshIntent",
         "requestBody": {
@@ -820,7 +820,7 @@
     "/api/mesh/fanout": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "MeshFanOut",
         "requestBody": {
@@ -843,7 +843,7 @@
     "/api/mesh/circuits": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "GetCircuitBreakers",
         "responses": {
@@ -856,7 +856,7 @@
     "/api/mesh/circuits/{id}/reset": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "ResetCircuitBreaker",
         "parameters": [
@@ -879,7 +879,7 @@
     "/api/mesh/reflect": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "DistributedReflection",
         "responses": {
@@ -892,7 +892,7 @@
     "/api/mesh/reflect/recommendations": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "ReflectionRecommendations",
         "responses": {
@@ -905,7 +905,7 @@
     "/api/mesh/shared-memory": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "ListSharedMemory",
         "responses": {
@@ -916,7 +916,7 @@
       },
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "PublishSharedMemory",
         "requestBody": {
@@ -939,7 +939,7 @@
     "/api/mesh/shared-memory/for/{agentId}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "GetSharedMemoryForAgent",
         "parameters": [
@@ -962,7 +962,7 @@
     "/api/mesh/shared-memory/sync": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "SyncSharedMemory",
         "responses": {
@@ -975,7 +975,7 @@
     "/api/mesh/shared-memory/{factId}": {
       "delete": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "RemoveSharedMemory",
         "parameters": [
@@ -998,7 +998,7 @@
     "/api/mesh/tasks/accept": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "AcceptDelegatedTask",
         "requestBody": {
@@ -1021,7 +1021,7 @@
     "/api/mesh/tasks/{id}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "GetDelegatedTask",
         "parameters": [
@@ -1044,7 +1044,7 @@
     "/api/mesh/tasks/{id}/state": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "UpdateDelegatedTaskState",
         "parameters": [
@@ -1077,7 +1077,7 @@
     "/api/mesh/tasks/{id}/await-input": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "AwaitDelegatedTaskInput",
         "parameters": [
@@ -1110,7 +1110,7 @@
     "/api/mesh/tasks/{id}/complete": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "CompleteDelegatedTask",
         "parameters": [
@@ -1143,7 +1143,7 @@
     "/api/mesh/tasks/{id}/fail": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "FailDelegatedTask",
         "parameters": [
@@ -1176,7 +1176,7 @@
     "/api/mesh/tasks/{id}/cancel": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "CancelDelegatedTask",
         "parameters": [
@@ -1209,7 +1209,7 @@
     "/api/mesh/tasks/{id}/callback": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "DelegatedTaskCallback",
         "parameters": [
@@ -1242,7 +1242,7 @@
     "/api/mesh/tasks/{id}/poll": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "PollDelegatedTask",
         "parameters": [
@@ -1278,7 +1278,7 @@
     "/api/mesh/tasks/{id}/expire-check": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "CheckDelegatedTaskExpired",
         "parameters": [
@@ -1301,7 +1301,7 @@
     "/api/mesh/tasks/{id}/notify": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "NotifyDelegatedTaskState",
         "parameters": [
@@ -1324,7 +1324,7 @@
     "/api/mesh/discovery/sources": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "ListDiscoverySources",
         "responses": {
@@ -1337,7 +1337,7 @@
     "/api/mesh/discovery/agents": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "ListDiscoveredAgents",
         "parameters": [
@@ -1359,7 +1359,7 @@
     "/api/mesh/discovery/refresh": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "RefreshDiscovery",
         "responses": {
@@ -1372,7 +1372,7 @@
     "/api/mesh/policy/status": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "GetTrustPolicyStatus",
         "responses": {
@@ -1385,7 +1385,7 @@
     "/api/mesh/policy/dry-run": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "TrustPolicyDryRun",
         "requestBody": {
@@ -1408,7 +1408,7 @@
     "/api/mesh/router/routes": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "MeshRouterRoutes",
         "parameters": [
@@ -1443,7 +1443,7 @@
     "/api/mesh/router/health": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "MeshRouterHealth",
         "responses": {
@@ -1456,7 +1456,7 @@
     "/api/mesh/dashboard": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "MeshDashboard",
         "responses": {
@@ -1469,7 +1469,7 @@
     "/api/mesh/topology": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "MeshTopology",
         "responses": {
@@ -1482,7 +1482,7 @@
     "/api/mesh/health": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "MeshHealth",
         "responses": {
@@ -1495,7 +1495,7 @@
     "/api/mesh/denials": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "MeshPolicyDenials",
         "parameters": [
@@ -1523,7 +1523,7 @@
     "/api/mesh/skills/heatmap": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "MeshSkillHeatmap",
         "responses": {
@@ -1536,7 +1536,7 @@
     "/api/mesh/eval/summary": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Mesh"
         ],
         "operationId": "MeshEvalSummary",
         "responses": {
@@ -1549,7 +1549,7 @@
     "/api/mesh/profiles": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "MeshProfiles"
         ],
         "operationId": "ListMeshProfiles",
         "responses": {
@@ -1562,7 +1562,7 @@
     "/api/mesh/profiles/{name}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "MeshProfiles"
         ],
         "operationId": "GetMeshProfile",
         "parameters": [
@@ -1585,7 +1585,7 @@
     "/api/mesh/profiles/{name}/backends": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "MeshProfiles"
         ],
         "operationId": "GetMeshProfileBackends",
         "parameters": [
@@ -1608,7 +1608,7 @@
     "/api/mesh/backend-status": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "MeshProfiles"
         ],
         "operationId": "GetMeshBackendStatus",
         "responses": {
@@ -1621,7 +1621,7 @@
     "/api/mesh/backend-status/{role}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "MeshProfiles"
         ],
         "operationId": "GetMeshBackendStatusByRole",
         "parameters": [
@@ -1644,7 +1644,7 @@
     "/api/mesh/observability/status": {
       "get": {
         "tags": [
-          "Mesh.Observability"
+          "MeshObservability"
         ],
         "operationId": "MeshObservabilityStatus",
         "responses": {
@@ -1657,7 +1657,7 @@
     "/api/mesh/observability/config": {
       "get": {
         "tags": [
-          "Mesh.Observability"
+          "MeshObservability"
         ],
         "operationId": "MeshObservabilityConfig",
         "responses": {
@@ -1670,7 +1670,7 @@
     "/api/mesh/observability/counters": {
       "get": {
         "tags": [
-          "Mesh.Observability"
+          "MeshObservability"
         ],
         "operationId": "MeshObservabilityCounters",
         "responses": {
@@ -1683,7 +1683,7 @@
     "/api/mesh/observability/traces": {
       "get": {
         "tags": [
-          "Mesh.Observability"
+          "MeshObservability"
         ],
         "operationId": "MeshObservabilityTraces",
         "parameters": [
@@ -1710,7 +1710,7 @@
     "/api/mesh/observability/logs": {
       "get": {
         "tags": [
-          "Mesh.Observability"
+          "MeshObservability"
         ],
         "operationId": "MeshObservabilityLogs",
         "parameters": [
@@ -1744,7 +1744,7 @@
     "/api/lifecycle/inventory": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecycleInventory",
         "parameters": [
@@ -1766,7 +1766,7 @@
     "/api/lifecycle/health": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecycleHealth",
         "parameters": [
@@ -1788,7 +1788,7 @@
     "/api/lifecycle/agent/{agentId}/start": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecycleAgentStart",
         "parameters": [
@@ -1811,7 +1811,7 @@
     "/api/lifecycle/agent/{agentId}/stop": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecycleAgentStop",
         "parameters": [
@@ -1834,7 +1834,7 @@
     "/api/lifecycle/agent/{agentId}/drain": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecycleAgentDrain",
         "parameters": [
@@ -1857,7 +1857,7 @@
     "/api/lifecycle/agent/{agentId}/decommission": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecycleAgentDecommission",
         "parameters": [
@@ -1880,7 +1880,7 @@
     "/api/lifecycle/agent/{agentId}/rollback": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecycleAgentRollback",
         "parameters": [
@@ -1903,7 +1903,7 @@
     "/api/lifecycle/packages/{packageId}/update": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecyclePackageUpdate",
         "parameters": [
@@ -1936,7 +1936,7 @@
     "/api/lifecycle/packages/{packageId}/canary": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecyclePackageCanary",
         "parameters": [
@@ -1969,7 +1969,7 @@
     "/api/lifecycle/packages/{packageId}/promote": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecyclePackagePromote",
         "parameters": [
@@ -2002,7 +2002,7 @@
     "/api/lifecycle/packages/{packageId}/rollback": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Lifecycle"
         ],
         "operationId": "LifecyclePackageRollback",
         "parameters": [
@@ -2035,7 +2035,7 @@
     "/api/budget": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Budget"
         ],
         "operationId": "BudgetSummary",
         "parameters": [
@@ -2063,7 +2063,7 @@
     "/api/budget/monthly": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Budget"
         ],
         "operationId": "BudgetMonthly",
         "parameters": [
@@ -2090,7 +2090,7 @@
     "/api/budget/guardrails": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Budget"
         ],
         "operationId": "BudgetGuardrails",
         "parameters": [
@@ -2112,7 +2112,7 @@
     "/api/budget/guardrails/{type}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Budget"
         ],
         "operationId": "BudgetGuardrailType",
         "parameters": [
@@ -2142,7 +2142,7 @@
     "/api/quotas": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Quotas"
         ],
         "operationId": "QuotaStatus",
         "parameters": [
@@ -2172,7 +2172,7 @@
     "/api/quotas/{scope}/{scopeId}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Quotas"
         ],
         "operationId": "QuotaStatusByScope",
         "parameters": [
@@ -2203,7 +2203,7 @@
     "/api/quotas/{scope}/{scopeId}/{type}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Quotas"
         ],
         "operationId": "QuotaStatusByType",
         "parameters": [
@@ -2242,7 +2242,7 @@
     "/api/quotas/rate-limit": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Quotas"
         ],
         "operationId": "RateLimitInfo",
         "parameters": [
@@ -2279,7 +2279,7 @@
     "/api/audit": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Audit"
         ],
         "operationId": "AuditLog",
         "parameters": [
@@ -2307,7 +2307,7 @@
     "/api/audit/search": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Audit"
         ],
         "operationId": "AuditSearch",
         "parameters": [
@@ -2384,7 +2384,7 @@
     "/api/audit/export": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Audit"
         ],
         "operationId": "AuditExport",
         "parameters": [
@@ -2433,7 +2433,7 @@
     "/api/audit/{target}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Audit"
         ],
         "operationId": "AuditLogByTarget",
         "parameters": [
@@ -2469,7 +2469,7 @@
     "/api/llm/health": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "LLM"
         ],
         "operationId": "LlmHealthAll",
         "responses": {
@@ -2482,7 +2482,7 @@
     "/api/llm/health/{provider}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "LLM"
         ],
         "operationId": "LlmHealthByProvider",
         "parameters": [
@@ -2505,7 +2505,7 @@
     "/api/llm/capabilities": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "LLM"
         ],
         "operationId": "LlmCapabilitiesAll",
         "responses": {
@@ -2518,7 +2518,7 @@
     "/api/llm/capabilities/{provider}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "LLM"
         ],
         "operationId": "LlmCapabilitiesByProvider",
         "parameters": [
@@ -2541,7 +2541,7 @@
     "/api/llm/config": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "LLM"
         ],
         "operationId": "LlmConfig",
         "responses": {
@@ -2554,7 +2554,7 @@
     "/api/a2a/agent-card": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "A2A"
         ],
         "operationId": "GetAgentCard",
         "responses": {
@@ -2567,7 +2567,7 @@
     "/api/a2a/agent-card/from": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "A2A"
         ],
         "operationId": "ImportAgentCardFromUrl",
         "parameters": [
@@ -2590,7 +2590,7 @@
     "/api/a2a/discover": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "A2A"
         ],
         "operationId": "DiscoverAgentCards",
         "requestBody": {
@@ -2616,7 +2616,7 @@
     "/api/a2a/agent-card/publish": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "A2A"
         ],
         "operationId": "PublishAgentCard",
         "responses": {
@@ -2629,7 +2629,7 @@
     "/api/a2a/agent-card/fresh": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "A2A"
         ],
         "operationId": "AgentCardIsFresh",
         "responses": {
@@ -2642,7 +2642,7 @@
     "/api/backups": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Backups"
         ],
         "operationId": "CreateBackup",
         "requestBody": {
@@ -2669,7 +2669,7 @@
       },
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Backups"
         ],
         "operationId": "ListBackups",
         "responses": {
@@ -2682,7 +2682,7 @@
     "/api/backups/{backupId}/restore": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Backups"
         ],
         "operationId": "RestoreBackup",
         "parameters": [
@@ -2721,7 +2721,7 @@
     "/api/backups/{backupId}/verify": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Backups"
         ],
         "operationId": "VerifyBackup",
         "parameters": [
@@ -2751,7 +2751,7 @@
     "/api/backups/{backupId}": {
       "delete": {
         "tags": [
-          "Hercules.WebApi"
+          "Backups"
         ],
         "operationId": "DeleteBackup",
         "parameters": [
@@ -2774,7 +2774,7 @@
     "/api/fleet-templates": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "FleetTemplates"
         ],
         "operationId": "ListFleetTemplates",
         "responses": {
@@ -2787,7 +2787,7 @@
     "/api/fleet-templates/{fileName}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "FleetTemplates"
         ],
         "operationId": "GetFleetTemplate",
         "parameters": [
@@ -2810,7 +2810,7 @@
     "/api/fleet-templates/{fileName}/apply": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "FleetTemplates"
         ],
         "operationId": "ApplyFleetTemplate",
         "parameters": [
@@ -2849,7 +2849,7 @@
     "/api/grants/{skillId}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Grants"
         ],
         "operationId": "GetGrants",
         "parameters": [
@@ -2877,7 +2877,7 @@
       },
       "delete": {
         "tags": [
-          "Hercules.WebApi"
+          "Grants"
         ],
         "operationId": "RevokeGrants",
         "parameters": [
@@ -2907,7 +2907,7 @@
     "/api/grants": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Grants"
         ],
         "operationId": "GrantSkill",
         "requestBody": {
@@ -2930,7 +2930,7 @@
     "/api/grants/by-id/{grantId}": {
       "delete": {
         "tags": [
-          "Hercules.WebApi"
+          "Grants"
         ],
         "operationId": "RevokeGrantById",
         "parameters": [
@@ -2953,7 +2953,7 @@
     "/api/grants/{skillId}/check": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Grants"
         ],
         "operationId": "CheckGrant",
         "parameters": [
@@ -2991,7 +2991,7 @@
     "/api/simulation/templates": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Simulation"
         ],
         "operationId": "ListSimulationTemplates",
         "responses": {
@@ -3004,7 +3004,7 @@
     "/api/simulation/templates/{templateName}/available": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Simulation"
         ],
         "operationId": "SimulationAvailability",
         "parameters": [
@@ -3027,7 +3027,7 @@
     "/api/simulation/sessions": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Simulation"
         ],
         "operationId": "StartSimulationSession",
         "requestBody": {
@@ -3050,7 +3050,7 @@
     "/api/simulation/sessions/{templateName}/replay": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Simulation"
         ],
         "operationId": "SimulationReplay",
         "parameters": [
@@ -3083,7 +3083,7 @@
     "/api/simulation/sessions/{templateName}": {
       "delete": {
         "tags": [
-          "Hercules.WebApi"
+          "Simulation"
         ],
         "operationId": "StopSimulationSession",
         "parameters": [
@@ -3104,7 +3104,7 @@
       },
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Simulation"
         ],
         "operationId": "GetSimulationSession",
         "parameters": [
@@ -3127,7 +3127,7 @@
     "/api/slos": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SLOs"
         ],
         "operationId": "SloSummary",
         "responses": {
@@ -3140,7 +3140,7 @@
     "/api/slos/{vertical}/definition": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SLOs"
         ],
         "operationId": "SloDefinition",
         "parameters": [
@@ -3163,7 +3163,7 @@
     "/api/slos/{vertical}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SLOs"
         ],
         "operationId": "SloStatus",
         "parameters": [
@@ -3186,7 +3186,7 @@
     "/api/slos/{vertical}/report": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SLOs"
         ],
         "operationId": "SloReport",
         "parameters": [
@@ -3209,7 +3209,7 @@
     "/api/slos/{vertical}/ack/{violationId}": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SLOs"
         ],
         "operationId": "SloAcknowledgeViolation",
         "parameters": [
@@ -3247,7 +3247,7 @@
     "/api/slos/{vertical}/ack": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SLOs"
         ],
         "operationId": "SloAcknowledgeAll",
         "parameters": [
@@ -3277,7 +3277,7 @@
     "/api/approvals/pending": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Approvals"
         ],
         "operationId": "ListPendingApprovals",
         "parameters": [
@@ -3299,7 +3299,7 @@
     "/api/approvals/{id}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Approvals"
         ],
         "operationId": "GetApproval",
         "parameters": [
@@ -3322,7 +3322,7 @@
     "/api/approvals/{id}/approve": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Approvals"
         ],
         "operationId": "ApproveTool",
         "parameters": [
@@ -3345,7 +3345,7 @@
     "/api/approvals/{id}/deny": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Approvals"
         ],
         "operationId": "DenyTool",
         "parameters": [
@@ -3368,7 +3368,7 @@
     "/api/approvals": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Approvals"
         ],
         "operationId": "ListAllApprovals",
         "parameters": [
@@ -3390,7 +3390,7 @@
     "/api/escalations/pending": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Escalations"
         ],
         "operationId": "ListPendingEscalations",
         "parameters": [
@@ -3419,7 +3419,7 @@
     "/api/escalations/{id}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Escalations"
         ],
         "operationId": "GetEscalation",
         "parameters": [
@@ -3442,7 +3442,7 @@
     "/api/escalations/{id}/approve": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Escalations"
         ],
         "operationId": "ApproveEscalation",
         "parameters": [
@@ -3472,7 +3472,7 @@
     "/api/escalations/{id}/deny": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Escalations"
         ],
         "operationId": "DenyEscalation",
         "parameters": [
@@ -3502,7 +3502,7 @@
     "/api/escalations/batch-approve": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Escalations"
         ],
         "operationId": "BatchApproveEscalations",
         "parameters": [
@@ -3534,7 +3534,7 @@
     "/api/observability/telemetry": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Observability"
         ],
         "operationId": "ObservabilityTelemetry",
         "responses": {
@@ -3547,7 +3547,7 @@
     "/api/skills/{id}/eval/harness": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillHarness"
         ],
         "operationId": "RunSkillHarness",
         "parameters": [
@@ -3570,7 +3570,7 @@
     "/api/skills/{id}/eval/baseline": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillHarness"
         ],
         "operationId": "RecordSkillBaseline",
         "parameters": [
@@ -3607,7 +3607,7 @@
       },
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillHarness"
         ],
         "operationId": "GetSkillBaseline",
         "parameters": [
@@ -3630,7 +3630,7 @@
     "/api/skills/{id}/eval/history": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillHarness"
         ],
         "operationId": "GetSkillEvalHistory",
         "parameters": [
@@ -3653,7 +3653,7 @@
     "/api/eval/baselines": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillHarness"
         ],
         "operationId": "ListAllBaselines",
         "responses": {
@@ -3666,7 +3666,7 @@
     "/api/maintenance/run": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SelfImprovement"
         ],
         "operationId": "RunMaintenance",
         "requestBody": {
@@ -3695,7 +3695,7 @@
     "/api/maintenance/run-all": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SelfImprovement"
         ],
         "operationId": "RunMaintenanceAll",
         "requestBody": {
@@ -3724,7 +3724,7 @@
     "/api/maintenance/proposals": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SelfImprovement"
         ],
         "operationId": "ListProposals",
         "parameters": [
@@ -3759,7 +3759,7 @@
     "/api/maintenance/proposals/{id}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SelfImprovement"
         ],
         "operationId": "GetProposal",
         "parameters": [
@@ -3782,7 +3782,7 @@
     "/api/maintenance/proposals/{id}/approve": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SelfImprovement"
         ],
         "operationId": "ApproveProposal",
         "parameters": [
@@ -3821,7 +3821,7 @@
     "/api/maintenance/proposals/{id}/reject": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SelfImprovement"
         ],
         "operationId": "RejectProposal",
         "parameters": [
@@ -3860,7 +3860,7 @@
     "/api/skills/{id}/manifest": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillManifest"
         ],
         "operationId": "GetSkillManifest",
         "parameters": [
@@ -3883,7 +3883,7 @@
     "/api/skills/{id}/manifest/validate": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillManifest"
         ],
         "operationId": "ValidateSkillManifest",
         "parameters": [
@@ -3925,7 +3925,7 @@
     "/api/skills/manifest/validate-all": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "SkillManifest"
         ],
         "operationId": "ValidateAllSkillManifests",
         "responses": {
@@ -4185,7 +4185,7 @@
     "/api/context/budget": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Context"
         ],
         "operationId": "ContextBudget",
         "responses": {
@@ -4198,7 +4198,7 @@
     "/api/context/summary": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Context"
         ],
         "operationId": "ContextSummary",
         "parameters": [
@@ -4233,7 +4233,7 @@
     "/api/context/distill": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Context"
         ],
         "operationId": "ContextDistill",
         "requestBody": {
@@ -4256,7 +4256,7 @@
     "/api/context/trace/compress": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Context"
         ],
         "operationId": "ContextTraceCompress",
         "parameters": [
@@ -4292,7 +4292,7 @@
     "/api/cache/stats": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Cache"
         ],
         "operationId": "CacheStats",
         "responses": {
@@ -4305,7 +4305,7 @@
     "/api/cache/invalidate": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Cache"
         ],
         "operationId": "CacheInvalidate",
         "requestBody": {
@@ -4446,7 +4446,7 @@
     "/api/marketplace": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Marketplace"
         ],
         "operationId": "ListMarketplace",
         "responses": {
@@ -4459,7 +4459,7 @@
     "/api/marketplace/search": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Marketplace"
         ],
         "operationId": "SearchMarketplace",
         "parameters": [
@@ -4481,7 +4481,7 @@
     "/api/marketplace/{file}/verify": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Marketplace"
         ],
         "operationId": "VerifyMarketplacePackage",
         "parameters": [
@@ -4504,7 +4504,7 @@
     "/api/marketplace/{file}/deps": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Marketplace"
         ],
         "operationId": "GetMarketplacePackageDeps",
         "parameters": [
@@ -4527,7 +4527,7 @@
     "/api/marketplace/install": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Marketplace"
         ],
         "operationId": "InstallMarketplacePackage",
         "requestBody": {
@@ -4550,7 +4550,7 @@
     "/api/marketplace/install-with-deps": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Marketplace"
         ],
         "operationId": "InstallMarketplacePackageWithDeps",
         "requestBody": {
@@ -4573,7 +4573,7 @@
     "/api/marketplace/{file}": {
       "delete": {
         "tags": [
-          "Hercules.WebApi"
+          "Marketplace"
         ],
         "operationId": "DeleteMarketplacePackage",
         "parameters": [
@@ -4596,7 +4596,7 @@
     "/api/marketplace/publish": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Marketplace"
         ],
         "operationId": "PublishMarketplacePackage",
         "responses": {
@@ -4609,7 +4609,7 @@
     "/api/marketplace/import": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Marketplace"
         ],
         "operationId": "ImportMarketplacePackage",
         "parameters": [
@@ -4631,7 +4631,7 @@
     "/api/marketplace/import-url": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Marketplace"
         ],
         "operationId": "ImportMarketplacePackageFromUrl",
         "requestBody": {
@@ -4654,7 +4654,7 @@
     "/api/templates": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Templates"
         ],
         "operationId": "ListTemplates",
         "responses": {
@@ -4667,7 +4667,7 @@
     "/api/templates/{fileName}": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Templates"
         ],
         "operationId": "GetTemplate",
         "parameters": [
@@ -4690,7 +4690,7 @@
     "/api/templates/{fileName}/apply": {
       "post": {
         "tags": [
-          "Hercules.WebApi"
+          "Templates"
         ],
         "operationId": "ApplyTemplate",
         "parameters": [
@@ -6693,13 +6693,103 @@
       "name": "Hercules.WebApi"
     },
     {
-      "name": "Mesh.Observability"
+      "name": "Chat"
+    },
+    {
+      "name": "Skills"
+    },
+    {
+      "name": "SkillLifecycle"
+    },
+    {
+      "name": "SkillQuality"
+    },
+    {
+      "name": "Memory"
+    },
+    {
+      "name": "Stats"
+    },
+    {
+      "name": "Config"
+    },
+    {
+      "name": "Mesh"
+    },
+    {
+      "name": "MeshProfiles"
+    },
+    {
+      "name": "MeshObservability"
+    },
+    {
+      "name": "Lifecycle"
+    },
+    {
+      "name": "Budget"
+    },
+    {
+      "name": "Quotas"
+    },
+    {
+      "name": "Audit"
+    },
+    {
+      "name": "LLM"
+    },
+    {
+      "name": "A2A"
+    },
+    {
+      "name": "Backups"
+    },
+    {
+      "name": "FleetTemplates"
+    },
+    {
+      "name": "Grants"
+    },
+    {
+      "name": "Simulation"
+    },
+    {
+      "name": "SLOs"
+    },
+    {
+      "name": "Approvals"
+    },
+    {
+      "name": "Escalations"
+    },
+    {
+      "name": "Observability"
+    },
+    {
+      "name": "SkillHarness"
+    },
+    {
+      "name": "SelfImprovement"
+    },
+    {
+      "name": "SkillManifest"
     },
     {
       "name": "Tasks"
     },
     {
+      "name": "Context"
+    },
+    {
+      "name": "Cache"
+    },
+    {
       "name": "Tools"
+    },
+    {
+      "name": "Marketplace"
+    },
+    {
+      "name": "Templates"
     },
     {
       "name": "Rollout"

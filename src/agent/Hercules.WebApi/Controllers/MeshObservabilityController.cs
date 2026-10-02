@@ -39,7 +39,7 @@ public static class MeshObservabilityController
             },
             counters = BuildCounters(diagnostics.Snapshot())
         })).WithName("MeshObservabilityStatus")
-          .WithTags("Mesh.Observability");
+          .WithTags("MeshObservability");
 
         // GET /api/mesh/observability/config — raw config
         app.MapGet("/api/mesh/observability/config", (
@@ -47,7 +47,7 @@ public static class MeshObservabilityController
         {
             enabled = observability.IsEnabled
         })).WithName("MeshObservabilityConfig")
-          .WithTags("Mesh.Observability");
+          .WithTags("MeshObservability");
 
         // GET /api/mesh/observability/counters — totals + by-capability + by-peer
         app.MapGet("/api/mesh/observability/counters", (MeshDiagnosticsService diagnostics) =>
@@ -55,7 +55,7 @@ public static class MeshObservabilityController
             var snapshot = diagnostics.Snapshot();
             return Results.Ok(BuildCounters(snapshot));
         }).WithName("MeshObservabilityCounters")
-          .WithTags("Mesh.Observability");
+          .WithTags("MeshObservability");
 
         // GET /api/mesh/observability/traces?limit=N — recent completed traces
         app.MapGet("/api/mesh/observability/traces", (
@@ -79,7 +79,7 @@ public static class MeshObservabilityController
                 }).ToList()
             });
         }).WithName("MeshObservabilityTraces")
-          .WithTags("Mesh.Observability");
+          .WithTags("MeshObservability");
 
         // GET /api/mesh/observability/logs?limit=N&level=info — recent log entries
         app.MapGet("/api/mesh/observability/logs", (
@@ -107,7 +107,7 @@ public static class MeshObservabilityController
                 }).ToList()
             });
         }).WithName("MeshObservabilityLogs")
-          .WithTags("Mesh.Observability");
+          .WithTags("MeshObservability");
     }
 
     private static int NormalizeLimit(int? limit)

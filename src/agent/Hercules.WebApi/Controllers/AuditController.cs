@@ -22,7 +22,7 @@ public static class AuditController
                 count = entries.Count,
                 entries = entries.Select(MapEntry)
             });
-        }).WithName("AuditLog");
+        }).WithName("AuditLog").WithTags("Audit");
 
         // GET /api/audit/search — поиск с фильтрами (task_014)
         app.MapGet("/api/audit/search", async (
@@ -64,7 +64,7 @@ public static class AuditController
                 count = entries.Count,
                 entries = entries.Select(MapEntry)
             });
-        }).WithName("AuditSearch");
+        }).WithName("AuditSearch").WithTags("Audit");
 
         // GET /api/audit/export — экспорт в CSV (task_014, task_015: redaction)
         app.MapGet("/api/audit/export", async (
@@ -102,7 +102,7 @@ public static class AuditController
             }
 
             return Results.Text(csv.ToString(), "text/csv");
-        }).WithName("AuditExport");
+        }).WithName("AuditExport").WithTags("Audit");
 
         // GET /api/audit/{target} — записи по target
         app.MapGet("/api/audit/{target}", async (IAuditService audit, string target, int limit = 50, CancellationToken ct = default) =>
@@ -114,7 +114,7 @@ public static class AuditController
                 count = entries.Count,
                 entries = entries.Select(MapEntry)
             });
-        }).WithName("AuditLogByTarget");
+        }).WithName("AuditLogByTarget").WithTags("Audit");
     }
 
     private static object MapEntry(AuditLogEntry e) => new

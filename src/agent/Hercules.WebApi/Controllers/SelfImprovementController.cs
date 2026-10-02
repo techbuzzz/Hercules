@@ -30,7 +30,7 @@ public static class SelfImprovementController
                 }
 
                 return Results.Created($"/api/maintenance/proposals/{proposal.Id}", proposal);
-            }).WithName("RunMaintenance").RequireRateLimiting(RateLimitPolicies.Expensive);
+            }).WithName("RunMaintenance").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SelfImprovement");
 
         // POST /api/maintenance/run-all — запустить для всех навыков
         app.MapPost("/api/maintenance/run-all",
@@ -38,7 +38,7 @@ public static class SelfImprovementController
             {
                 var proposals = await service.RunMaintenanceAllAsync(req?.TriggeredBy ?? "user", ct);
                 return Results.Ok(new { count = proposals.Count, proposals });
-            }).WithName("RunMaintenanceAll").RequireRateLimiting(RateLimitPolicies.Expensive);
+            }).WithName("RunMaintenanceAll").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SelfImprovement");
 
         // GET /api/maintenance/proposals — список proposals
         app.MapGet("/api/maintenance/proposals",
@@ -54,7 +54,7 @@ public static class SelfImprovementController
                     proposals = service.GetProposals(limit);
                 }
                 return Results.Ok(new { count = proposals.Count, proposals });
-            }).WithName("ListProposals");
+            }).WithName("ListProposals").WithTags("SelfImprovement");
 
         // GET /api/maintenance/proposals/{id} — один proposal
         app.MapGet("/api/maintenance/proposals/{id}",
@@ -64,7 +64,7 @@ public static class SelfImprovementController
                 return proposal is null
                     ? Results.NotFound(new { error = "Proposal not found" })
                     : Results.Ok(proposal);
-            }).WithName("GetProposal");
+            }).WithName("GetProposal").WithTags("SelfImprovement");
 
         // POST /api/maintenance/proposals/{id}/approve — применить proposal
         app.MapPost("/api/maintenance/proposals/{id}/approve",
@@ -90,7 +90,7 @@ public static class SelfImprovementController
                     scoreGain = result.ScoreGain,
                     evalResult = result.EvalResult
                 });
-            }).WithName("ApproveProposal").RequireRateLimiting(RateLimitPolicies.Expensive);
+            }).WithName("ApproveProposal").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SelfImprovement");
 
         // POST /api/maintenance/proposals/{id}/reject — отклонить proposal
         app.MapPost("/api/maintenance/proposals/{id}/reject",
@@ -100,7 +100,7 @@ public static class SelfImprovementController
                 return ok
                     ? Results.Ok(new { success = true, proposalId = id })
                     : Results.BadRequest(new { error = "Proposal not found or already resolved" });
-            }).WithName("RejectProposal");
+            }).WithName("RejectProposal").WithTags("SelfImprovement");
     }
 }
 

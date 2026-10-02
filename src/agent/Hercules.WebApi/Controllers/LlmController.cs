@@ -15,28 +15,28 @@ public static class LlmController
         {
             var results = await healthChecker.CheckAllAsync(ct);
             return Results.Ok(results);
-        }).WithName("LlmHealthAll");
+        }).WithName("LlmHealthAll").WithTags("LLM");
 
         // GET /api/llm/health/{provider} — health-check конкретного провайдера.
         app.MapGet("/api/llm/health/{provider}", async (string provider, ProviderHealthChecker healthChecker, CancellationToken ct) =>
         {
             var result = await healthChecker.CheckAsync(provider, ct);
             return Results.Ok(result);
-        }).WithName("LlmHealthByProvider");
+        }).WithName("LlmHealthByProvider").WithTags("LLM");
 
         // GET /api/llm/capabilities — общие capabilities по всем провайдерам.
         app.MapGet("/api/llm/capabilities", async (ProviderCapabilityDetector capabilityDetector, CancellationToken ct) =>
         {
             var results = await capabilityDetector.DetectAllAsync(ct);
             return Results.Ok(results);
-        }).WithName("LlmCapabilitiesAll");
+        }).WithName("LlmCapabilitiesAll").WithTags("LLM");
 
         // GET /api/llm/capabilities/{provider} — capabilities конкретного провайдера.
         app.MapGet("/api/llm/capabilities/{provider}", async (string provider, ProviderCapabilityDetector capabilityDetector, CancellationToken ct) =>
         {
             var result = await capabilityDetector.DetectAsync(provider, ct);
             return Results.Ok(result);
-        }).WithName("LlmCapabilitiesByProvider");
+        }).WithName("LlmCapabilitiesByProvider").WithTags("LLM");
 
         // GET /api/llm/config — публичный конфиг (без секретов).
         app.MapGet("/api/llm/config", (LlmConfig cfg) =>
@@ -52,7 +52,7 @@ public static class LlmController
                 OpenAICompatibleModel = cfg.OpenAICompatible.Model,
                 OpenAICompatibleDisplayName = cfg.OpenAICompatible.DisplayName
             });
-        }).WithName("LlmConfig");
+        }).WithName("LlmConfig").WithTags("LLM");
     }
 }
 

@@ -24,14 +24,14 @@ public static class MeshController
         {
             var manifest = manifestService.Current;
             return Results.Ok(manifest);
-        }).WithName("GetAgentManifest");
+        }).WithName("GetAgentManifest").WithTags("Mesh");
 
         // GET /api/mesh/agents — список известных агентов в реестре (полная запись с health/trust/cost)
         app.MapGet("/api/mesh/agents", (ICapabilityRegistryService registry) =>
         {
             var agents = registry.ListAll();
             return Results.Ok(new { count = agents.Count, agents });
-        }).WithName("ListMeshAgents");
+        }).WithName("ListMeshAgents").WithTags("Mesh");
 
         // GET /api/mesh/agents/{id} — полная запись агента по ID (health, trust, cost/latency, TTL)
         app.MapGet("/api/mesh/agents/{id}", (string id, ICapabilityRegistryService registry) =>
@@ -40,7 +40,7 @@ public static class MeshController
             return entry is null
                 ? Results.NotFound(new { error = $"Агент '{id}' не найден в реестре." })
                 : Results.Ok(entry);
-        }).WithName("GetMeshAgentFull");
+        }).WithName("GetMeshAgentFull").WithTags("Mesh");
 
         // GET /api/mesh/agents/{id}/health — health status агента
         app.MapGet("/api/mesh/agents/{id}/health", (string id, ICapabilityRegistryService registry) =>
@@ -62,7 +62,7 @@ public static class MeshController
                 latencyHintMs = entry.LatencyHintMs,
                 expirySeconds = entry.ExpirySeconds
             });
-        }).WithName("GetMeshAgentHealth");
+        }).WithName("GetMeshAgentHealth").WithTags("Mesh");
 
         // POST /api/mesh/agents/{id}/touch — heartbeat (обновить last_seen)
         app.MapPost("/api/mesh/agents/{id}/touch", (string id, ICapabilityRegistryService registry) =>
@@ -75,14 +75,14 @@ public static class MeshController
 
             registry.Touch(id);
             return Results.Ok(new { status = "touched", agentId = id });
-        }).WithName("TouchMeshAgent");
+        }).WithName("TouchMeshAgent").WithTags("Mesh");
 
         // POST /api/mesh/agents/cleanup — cleanup просроченных агентов
         app.MapPost("/api/mesh/agents/cleanup", (ICapabilityRegistryService registry) =>
         {
             var removed = registry.CleanupExpired();
             return Results.Ok(new { status = "cleaned", removedCount = removed });
-        }).WithName("CleanupExpiredAgents");
+        }).WithName("CleanupExpiredAgents").WithTags("Mesh");
 
         // POST /api/mesh/agents/register — зарегистрировать peer-агента
         app.MapPost("/api/mesh/agents/register", (AgentManifest manifest, CapabilityRegistry registry) =>
@@ -101,7 +101,7 @@ public static class MeshController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("RegisterMeshAgent");
+        }).WithName("RegisterMeshAgent").WithTags("Mesh");
 
         // DELETE /api/mesh/agents/{id} — удалить агента из реестра
         app.MapDelete("/api/mesh/agents/{id}", (string id, CapabilityRegistry registry) =>
@@ -110,21 +110,21 @@ public static class MeshController
             return removed
                 ? Results.Ok(new { status = "removed", agentId = id })
                 : Results.NotFound(new { error = $"Агент '{id}' не найден." });
-        }).WithName("RemoveMeshAgent");
+        }).WithName("RemoveMeshAgent").WithTags("Mesh");
 
         // GET /api/mesh/capabilities — список capabilities
         app.MapGet("/api/mesh/capabilities", (string? agentId, CapabilityRegistry registry) => !string.IsNullOrWhiteSpace(agentId)
             ? Results.Ok((object?)registry.ListCapabilities(agentId))
-            : Results.Ok((object?)registry.ListAgents())).WithName("ListMeshCapabilities");
+            : Results.Ok((object?)registry.ListAgents())).WithName("ListMeshCapabilities").WithTags("Mesh");
 
         // GET /api/mesh/capabilities/{name} — найти агентов по имени capability
         app.MapGet("/api/mesh/capabilities/{name}", (string name, CapabilityRegistry registry) =>
-            Results.Ok(registry.FindByCapability(name))).WithName("FindMeshByCapability");
+            Results.Ok(registry.FindByCapability(name))).WithName("FindMeshByCapability").WithTags("Mesh");
 
         // GET /api/mesh/capabilities/search?phrase=... — semantic lookup
         app.MapGet("/api/mesh/capabilities/search", (string phrase, CapabilityRegistry registry) => string.IsNullOrWhiteSpace(phrase)
             ? Results.BadRequest(new { error = "Параметр 'phrase' обязателен." })
-            : Results.Ok((object?)registry.FindByPhrase(phrase))).WithName("SearchMeshByPhrase");
+            : Results.Ok((object?)registry.FindByPhrase(phrase))).WithName("SearchMeshByPhrase").WithTags("Mesh");
 
         // POST /api/mesh/intent — отправить intent на маршрутизацию (IntentRouter, single-peer)
         // Trust admission policy is evaluated before routing.
@@ -179,7 +179,7 @@ public static class MeshController
             {
                 return Results.Problem(ex.Message, statusCode: 500, title: "Intent routing error");
             }
-        }).WithName("SendMeshIntent");
+        }).WithName("SendMeshIntent").WithTags("Mesh");
 
         // === Phase 4: Fan-out + Circuit Breaker + Reflection + Shared Memory ===
 
@@ -195,35 +195,35 @@ public static class MeshController
             {
                 return Results.Problem(ex.Message, statusCode: 500, title: "Fan-out error");
             }
-        }).WithName("MeshFanOut");
+        }).WithName("MeshFanOut").WithTags("Mesh");
 
         // GET /api/mesh/circuits — состояние circuit breakers всех peer'ов
         app.MapGet("/api/mesh/circuits", (CircuitBreaker breaker) =>
-            Results.Ok(breaker.GetAllStates())).WithName("GetCircuitBreakers");
+            Results.Ok(breaker.GetAllStates())).WithName("GetCircuitBreakers").WithTags("Mesh");
 
         // POST /api/mesh/circuits/{id}/reset — сбросить circuit breaker для peer'а
         app.MapPost("/api/mesh/circuits/{id}/reset", (string id, CircuitBreaker breaker) =>
         {
             breaker.Reset(id);
             return Results.Ok(new { status = "reset", agentId = id });
-        }).WithName("ResetCircuitBreaker");
+        }).WithName("ResetCircuitBreaker").WithTags("Mesh");
 
         // GET /api/mesh/reflect — distributed reflection (производительность mesh)
         app.MapGet("/api/mesh/reflect", async (DistributedReflection reflection, CancellationToken ct) =>
         {
             var result = await reflection.ReflectAsync(ct);
             return Results.Ok(result);
-        }).WithName("DistributedReflection");
+        }).WithName("DistributedReflection").WithTags("Mesh");
 
         // GET /api/mesh/reflect/recommendations — рекомендации по новым локальным навыкам
         app.MapGet("/api/mesh/reflect/recommendations", (DistributedReflection reflection) =>
-            Results.Ok(reflection.GetLocalSkillRecommendations())).WithName("ReflectionRecommendations");
+            Results.Ok(reflection.GetLocalSkillRecommendations())).WithName("ReflectionRecommendations").WithTags("Mesh");
 
         // === Phase 4: Shared Memory Sync ===
 
         // GET /api/mesh/shared-memory — список локальных shared-фактов
         app.MapGet("/api/mesh/shared-memory", (SharedMemorySync sync) =>
-            Results.Ok(sync.GetLocalFacts())).WithName("ListSharedMemory");
+            Results.Ok(sync.GetLocalFacts())).WithName("ListSharedMemory").WithTags("Mesh");
 
         // POST /api/mesh/shared-memory — опубликовать факт для синхронизации
         app.MapPost("/api/mesh/shared-memory", async (SharedMemoryPublishRequest req,
@@ -236,18 +236,18 @@ public static class MeshController
 
             var fact = await sync.PublishFactAsync(req.Category, req.Content, req.AllowedAgents, ct: ct);
             return Results.Created($"/api/mesh/shared-memory/{fact.Id}", fact);
-        }).WithName("PublishSharedMemory");
+        }).WithName("PublishSharedMemory").WithTags("Mesh");
 
         // GET /api/mesh/shared-memory/for/{agentId} — факты, доступные указанному агенту
         app.MapGet("/api/mesh/shared-memory/for/{agentId}", (string agentId, SharedMemorySync sync) =>
-            Results.Ok(sync.GetFactsForAgent(agentId))).WithName("GetSharedMemoryForAgent");
+            Results.Ok(sync.GetFactsForAgent(agentId))).WithName("GetSharedMemoryForAgent").WithTags("Mesh");
 
         // POST /api/mesh/shared-memory/sync — синхронизировать факты с peer'ами
         app.MapPost("/api/mesh/shared-memory/sync", async (SharedMemorySync sync, CancellationToken ct) =>
         {
             var received = await sync.SyncFromPeersAsync(ct);
             return Results.Ok(new { status = "synced", receivedCount = received });
-        }).WithName("SyncSharedMemory");
+        }).WithName("SyncSharedMemory").WithTags("Mesh");
 
         // DELETE /api/mesh/shared-memory/{factId} — удалить shared-факт
         app.MapDelete("/api/mesh/shared-memory/{factId}", (string factId, SharedMemorySync sync) =>
@@ -256,7 +256,7 @@ public static class MeshController
             return removed
                 ? Results.Ok(new { status = "removed", factId })
                 : Results.NotFound(new { error = $"Факт '{factId}' не найден." });
-        }).WithName("RemoveSharedMemory");
+        }).WithName("RemoveSharedMemory").WithTags("Mesh");
 
         // === Phase 3: Task Lifecycle Protocol (task_036) ===
 
@@ -282,7 +282,7 @@ public static class MeshController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("AcceptDelegatedTask");
+        }).WithName("AcceptDelegatedTask").WithTags("Mesh");
 
         // GET /api/mesh/tasks/{id} — получить состояние delegated задачи
         app.MapGet("/api/mesh/tasks/{id}", async (
@@ -294,7 +294,7 @@ public static class MeshController
             return task is null
                 ? Results.NotFound(new { error = $"Delegated task '{id}' not found." })
                 : Results.Ok(ToTaskDto(task));
-        }).WithName("GetDelegatedTask");
+        }).WithName("GetDelegatedTask").WithTags("Mesh");
 
         // POST /api/mesh/tasks/{id}/state — обновить состояние
         app.MapPost("/api/mesh/tasks/{id}/state", async (
@@ -321,7 +321,7 @@ public static class MeshController
             {
                 return Results.Problem(ex.Message, statusCode: 500);
             }
-        }).WithName("UpdateDelegatedTaskState");
+        }).WithName("UpdateDelegatedTaskState").WithTags("Mesh");
 
         // POST /api/mesh/tasks/{id}/await-input — перевести в AwaitingInput
         app.MapPost("/api/mesh/tasks/{id}/await-input", async (
@@ -339,7 +339,7 @@ public static class MeshController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("AwaitDelegatedTaskInput");
+        }).WithName("AwaitDelegatedTaskInput").WithTags("Mesh");
 
         // POST /api/mesh/tasks/{id}/complete — завершить с результатом
         app.MapPost("/api/mesh/tasks/{id}/complete", async (
@@ -357,7 +357,7 @@ public static class MeshController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("CompleteDelegatedTask");
+        }).WithName("CompleteDelegatedTask").WithTags("Mesh");
 
         // POST /api/mesh/tasks/{id}/fail — завершить с ошибкой
         app.MapPost("/api/mesh/tasks/{id}/fail", async (
@@ -375,7 +375,7 @@ public static class MeshController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("FailDelegatedTask");
+        }).WithName("FailDelegatedTask").WithTags("Mesh");
 
         // POST /api/mesh/tasks/{id}/cancel — отменить
         app.MapPost("/api/mesh/tasks/{id}/cancel", async (
@@ -393,7 +393,7 @@ public static class MeshController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("CancelDelegatedTask");
+        }).WithName("CancelDelegatedTask").WithTags("Mesh");
 
         // POST /api/mesh/tasks/{id}/callback — callback от вызывающего агента (input delivered)
         app.MapPost("/api/mesh/tasks/{id}/callback", async (
@@ -411,7 +411,7 @@ public static class MeshController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("DelegatedTaskCallback");
+        }).WithName("DelegatedTaskCallback").WithTags("Mesh");
 
         // GET /api/mesh/tasks/{id}/poll — long-poll на AwaitingInput
         app.MapGet("/api/mesh/tasks/{id}/poll", async (
@@ -424,7 +424,7 @@ public static class MeshController
             return task is null
                 ? Results.NotFound(new { error = $"Delegated task '{id}' not found." })
                 : Results.Ok(ToTaskDto(task));
-        }).WithName("PollDelegatedTask");
+        }).WithName("PollDelegatedTask").WithTags("Mesh");
 
         // POST /api/mesh/tasks/{id}/expire-check — принудительная проверка expiration
         app.MapPost("/api/mesh/tasks/{id}/expire-check", async (
@@ -435,7 +435,7 @@ public static class MeshController
             var expired = await protocol.CheckExpiredAsync(id, ct);
             var task = await protocol.GetStateAsync(id, ct);
             return Results.Ok(new { taskId = id, expired, task = task is null ? null : ToTaskDto(task) });
-        }).WithName("CheckDelegatedTaskExpired");
+        }).WithName("CheckDelegatedTaskExpired").WithTags("Mesh");
 
         // POST /api/mesh/tasks/{id}/notify — отправить callback вызывающему агенту
         app.MapPost("/api/mesh/tasks/{id}/notify", async (
@@ -445,7 +445,7 @@ public static class MeshController
         {
             await protocol.NotifyStateChangeAsync(id, ct);
             return Results.Ok(new { taskId = id, notified = true });
-        }).WithName("NotifyDelegatedTaskState");
+        }).WithName("NotifyDelegatedTaskState").WithTags("Mesh");
 
         // === Phase 3: Discovery mechanisms (task_038) ===
 
@@ -463,7 +463,7 @@ public static class MeshController
                     enabled = s.Enabled
                 })
             });
-        }).WithName("ListDiscoverySources");
+        }).WithName("ListDiscoverySources").WithTags("Mesh");
 
         // GET /api/mesh/discovery/agents — all discovered agents (from cache or fresh)
         app.MapGet("/api/mesh/discovery/agents", async (
@@ -499,7 +499,7 @@ public static class MeshController
                     error = a.Error
                 })
             });
-        }).WithName("ListDiscoveredAgents");
+        }).WithName("ListDiscoveredAgents").WithTags("Mesh");
 
         // POST /api/mesh/discovery/refresh — force-refresh all discovery sources
         app.MapPost("/api/mesh/discovery/refresh", async (
@@ -523,7 +523,7 @@ public static class MeshController
                     error = a.Error
                 })
             });
-        }).WithName("RefreshDiscovery");
+        }).WithName("RefreshDiscovery").WithTags("Mesh");
 
         // === Phase 3: Trust admission policy (task_040) ===
 
@@ -541,7 +541,7 @@ public static class MeshController
             allowSchemaMismatch = config.AllowSchemaMismatch,
             allowBudgetExceeded = config.AllowBudgetExceeded,
             allowedRiskLevels = config.AllowedRiskLevels
-        })).WithName("GetTrustPolicyStatus");
+        })).WithName("GetTrustPolicyStatus").WithTags("Mesh");
 
         // POST /api/mesh/policy/dry-run — evaluate a request against the policy without enforcing
         app.MapPost("/api/mesh/policy/dry-run", (
@@ -603,7 +603,7 @@ public static class MeshController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("TrustPolicyDryRun");
+        }).WithName("TrustPolicyDryRun").WithTags("Mesh");
 
         // === Phase 4: Mesh Router (task_043) ===
 
@@ -649,7 +649,7 @@ public static class MeshController
                     c.TrustPassed
                 })
             });
-        }).WithName("MeshRouterRoutes");
+        }).WithName("MeshRouterRoutes").WithTags("Mesh");
 
         // GET /api/mesh/router/health — health scores for all tracked peers
         app.MapGet("/api/mesh/router/health", (
@@ -666,7 +666,7 @@ public static class MeshController
                 });
 
             return Results.Ok(new { count = health.Count, health });
-        }).WithName("MeshRouterHealth");
+        }).WithName("MeshRouterHealth").WithTags("Mesh");
 
         // === Phase 5: Mesh Dashboard (task_053) ===
 
@@ -682,42 +682,42 @@ public static class MeshController
             {
                 return Results.Problem(ex.Message, statusCode: 500, title: "Dashboard error");
             }
-        }).WithName("MeshDashboard");
+        }).WithName("MeshDashboard").WithTags("Mesh");
 
         // GET /api/mesh/topology — agent list with health/trust/latency
         app.MapGet("/api/mesh/topology", async (MeshDashboardService dashboard, CancellationToken ct) =>
         {
             var data = await dashboard.GetTopologyAsync(ct);
             return Results.Ok(data);
-        }).WithName("MeshTopology");
+        }).WithName("MeshTopology").WithTags("Mesh");
 
         // GET /api/mesh/health — per-agent health + circuit breaker states
         app.MapGet("/api/mesh/health", async (MeshDashboardService dashboard, CancellationToken ct) =>
         {
             var data = await dashboard.GetHealthAsync(ct);
             return Results.Ok(data);
-        }).WithName("MeshHealth");
+        }).WithName("MeshHealth").WithTags("Mesh");
 
         // GET /api/mesh/denials — recent policy denials from audit log
         app.MapGet("/api/mesh/denials", async (MeshDashboardService dashboard, int limit = 50, CancellationToken ct = default) =>
         {
             var data = await dashboard.GetPolicyDenialsAsync(ct);
             return Results.Ok(data);
-        }).WithName("MeshPolicyDenials");
+        }).WithName("MeshPolicyDenials").WithTags("Mesh");
 
         // GET /api/mesh/skills/heatmap — skill usage heatmap
         app.MapGet("/api/mesh/skills/heatmap", (MeshDashboardService dashboard) =>
         {
             var data = dashboard.GetSkillHeatmap();
             return Results.Ok(data);
-        }).WithName("MeshSkillHeatmap");
+        }).WithName("MeshSkillHeatmap").WithTags("Mesh");
 
         // GET /api/mesh/eval/summary — recent eval runs
         app.MapGet("/api/mesh/eval/summary", async (MeshDashboardService dashboard, CancellationToken ct) =>
         {
             var data = await dashboard.GetEvalSummaryAsync(ct);
             return Results.Ok(data);
-        }).WithName("MeshEvalSummary");
+        }).WithName("MeshEvalSummary").WithTags("Mesh");
     }
 
     private static TrustLevel ParseTrustLevel(string? level) =>

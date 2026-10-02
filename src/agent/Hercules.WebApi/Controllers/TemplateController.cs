@@ -22,7 +22,7 @@ public static class TemplateController
                 e.Version,
                 e.SkillCount,
                 e.FilePath)).ToList());
-        }).WithName("ListTemplates");
+        }).WithName("ListTemplates").WithTags("Templates");
 
         // GET /api/templates/{fileName} — информация о конкретном шаблоне (манифест)
         app.MapGet("/api/templates/{fileName}", (AgentTemplateManager templates, string fileName) =>
@@ -47,7 +47,7 @@ public static class TemplateController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("GetTemplate");
+        }).WithName("GetTemplate").WithTags("Templates");
 
         // POST /api/templates/{fileName}/apply — применить шаблон (импортировать навыки, память, инструменты)
         app.MapPost("/api/templates/{fileName}/apply", (
@@ -75,7 +75,7 @@ public static class TemplateController
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        }).WithName("ApplyTemplate");
+        }).WithName("ApplyTemplate").WithTags("Templates");
     }
 
     private static TemplateManifest ReadManifest(AgentTemplateManager templates, string fileName)

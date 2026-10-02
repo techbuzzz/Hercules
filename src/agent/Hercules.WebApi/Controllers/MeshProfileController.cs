@@ -22,7 +22,7 @@ public static class MeshProfileController
                 profiles = names,
                 activeProfile = active.Name
             });
-        }).WithName("ListMeshProfiles");
+        }).WithName("ListMeshProfiles").WithTags("MeshProfiles");
 
         // GET /api/mesh/profiles/{name} — get profile definition
         app.MapGet("/api/mesh/profiles/{name}", (string name, MeshProfileLoader loader) =>
@@ -31,7 +31,7 @@ public static class MeshProfileController
             return profile is null
                 ? Results.NotFound(new { error = $"Profile '{name}' not found." })
                 : Results.Ok(profile);
-        }).WithName("GetMeshProfile");
+        }).WithName("GetMeshProfile").WithTags("MeshProfiles");
 
         // GET /api/mesh/profiles/{name}/backends — get effective backend configs for a profile
         app.MapGet("/api/mesh/profiles/{name}/backends", (string name, MeshProfileLoader loader) =>
@@ -62,7 +62,7 @@ public static class MeshProfileController
                 profile = name,
                 backends
             });
-        }).WithName("GetMeshProfileBackends");
+        }).WithName("GetMeshProfileBackends").WithTags("MeshProfiles");
 
         // GET /api/mesh/backend-status — live health status of all backends
         app.MapGet("/api/mesh/backend-status", (IMeshBackendHealthMonitor monitor) =>
@@ -87,7 +87,7 @@ public static class MeshProfileController
                     LastError = s.LastError
                 }).ToList()
             });
-        }).WithName("GetMeshBackendStatus");
+        }).WithName("GetMeshBackendStatus").WithTags("MeshProfiles");
 
         // GET /api/mesh/backend-status/{role} — health status for a specific backend
         app.MapGet("/api/mesh/backend-status/{role}", (string role, IMeshBackendHealthMonitor monitor) =>
@@ -107,7 +107,7 @@ public static class MeshProfileController
                     ConsecutiveFailures = status.ConsecutiveFailures,
                     LastError = status.LastError
                 });
-        }).WithName("GetMeshBackendStatusByRole");
+        }).WithName("GetMeshBackendStatusByRole").WithTags("MeshProfiles");
     }
 
     private sealed record BackendDto

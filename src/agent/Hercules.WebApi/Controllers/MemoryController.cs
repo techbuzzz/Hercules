@@ -13,20 +13,20 @@ public static class MemoryController
         // GET /api/memory/profile — получить профиль (markdown)
         app.MapGet("/api/memory/profile", (WebApiAdapter adapter) =>
                 Results.Ok(new { content = adapter.GetProfile() }))
-            .WithName("GetProfile");
+            .WithName("GetProfile").WithTags("Memory");
 
         // PUT /api/memory/profile — обновить профиль
         app.MapPut("/api/memory/profile", (UpdateProfileRequest req, WebApiAdapter adapter) =>
         {
             adapter.UpdateProfile(req.Content ?? "");
             return Results.Ok(new { status = "ok", content = adapter.GetProfile() });
-        }).WithName("UpdateProfile");
+        }).WithName("UpdateProfile").WithTags("Memory");
 
         // POST /api/memory/reset — сбросить память
         app.MapPost("/api/memory/reset", (WebApiAdapter adapter) =>
         {
             adapter.ResetMemory();
             return Results.Ok(new { status = "reset" });
-        }).WithName("ResetMemory");
+        }).WithName("ResetMemory").WithTags("Memory");
     }
 }

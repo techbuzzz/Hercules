@@ -15,14 +15,14 @@ public static class MarketplaceController
         // GET /api/marketplace — список пакетов в маркетплейсе
         app.MapGet("/api/marketplace", (SkillMarketplace marketplace) =>
                 Results.Ok(marketplace.List()))
-            .WithName("ListMarketplace");
+            .WithName("ListMarketplace").WithTags("Marketplace");
 
         // GET /api/marketplace/search — поиск пакетов по запросу
         app.MapGet("/api/marketplace/search", (SkillMarketplace marketplace, string? q) =>
         {
             var list = string.IsNullOrWhiteSpace(q) ? marketplace.List() : marketplace.Search(q);
             return Results.Ok(list);
-        }).WithName("SearchMarketplace");
+        }).WithName("SearchMarketplace").WithTags("Marketplace");
 
         // GET /api/marketplace/{file}/verify — проверить integrity (hash + signature) пакета
         app.MapGet("/api/marketplace/{file}/verify", (SkillMarketplace marketplace, string file) =>
@@ -31,12 +31,12 @@ public static class MarketplaceController
             return !result.IsValid && result.Error is not null
                 ? Results.BadRequest(result)
                 : Results.Ok(result);
-        }).WithName("VerifyMarketplacePackage");
+        }).WithName("VerifyMarketplacePackage").WithTags("Marketplace");
 
         // GET /api/marketplace/{file}/deps — зависимости пакета
         app.MapGet("/api/marketplace/{file}/deps", (SkillMarketplace marketplace, string file) =>
                 Results.Ok(marketplace.GetDependencies(file)))
-            .WithName("GetMarketplacePackageDeps");
+            .WithName("GetMarketplacePackageDeps").WithTags("Marketplace");
 
         // POST /api/marketplace/install — установить пакет из маркетплейса
         app.MapPost("/api/marketplace/install", (SkillMarketplace marketplace, InstallRequest req) =>
@@ -55,7 +55,7 @@ public static class MarketplaceController
             {
                 return Results.NotFound(new { error = ex.Message });
             }
-        }).WithName("InstallMarketplacePackage");
+        }).WithName("InstallMarketplacePackage").WithTags("Marketplace");
 
         // POST /api/marketplace/install-with-deps — установить пакет со всеми зависимостями
         app.MapPost("/api/marketplace/install-with-deps", (SkillMarketplace marketplace, InstallRequest req) =>
@@ -74,7 +74,7 @@ public static class MarketplaceController
             {
                 return Results.NotFound(new { error = ex.Message });
             }
-        }).WithName("InstallMarketplacePackageWithDeps");
+        }).WithName("InstallMarketplacePackageWithDeps").WithTags("Marketplace");
 
         // DELETE /api/marketplace/{file} — удалить пакет из маркетплейса
         app.MapDelete("/api/marketplace/{file}", (SkillMarketplace marketplace, string file) =>
@@ -83,7 +83,7 @@ public static class MarketplaceController
             return !removed
                 ? Results.NotFound(new { error = $"Package '{file}' not found in marketplace." })
                 : Results.NoContent();
-        }).WithName("DeleteMarketplacePackage");
+        }).WithName("DeleteMarketplacePackage").WithTags("Marketplace");
 
         // POST /api/marketplace/publish — опубликовать .skillpkg в маркетплейс (multipart upload)
         app.MapPost("/api/marketplace/publish", async (
@@ -131,7 +131,7 @@ public static class MarketplaceController
                 }
             })
             .WithName("PublishMarketplacePackage")
-            .DisableAntiforgery();
+            .DisableAntiforgery().WithTags("Marketplace");
 
         // POST /api/marketplace/import — импортировать .skillpkg в локальные навыки (multipart upload)
         app.MapPost("/api/marketplace/import", async (
@@ -179,7 +179,7 @@ public static class MarketplaceController
                 }
             })
             .WithName("ImportMarketplacePackage")
-            .DisableAntiforgery();
+            .DisableAntiforgery().WithTags("Marketplace");
 
         // POST /api/marketplace/import-url — импортировать пакет из HTTP URL
         app.MapPost("/api/marketplace/import-url", async (
@@ -206,7 +206,7 @@ public static class MarketplaceController
                     return Results.BadRequest(new { error = ex.Message });
                 }
             })
-            .WithName("ImportMarketplacePackageFromUrl");
+            .WithName("ImportMarketplacePackageFromUrl").WithTags("Marketplace");
     }
 }
 

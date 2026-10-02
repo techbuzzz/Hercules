@@ -27,7 +27,7 @@ public static class SkillLifecycleController
             {
                 return Results.Problem($"Оценка не удалась: {ex.Message}");
             }
-        }).WithName("EvaluateSkill");
+        }).WithName("EvaluateSkill").WithTags("SkillLifecycle");
 
         // POST /api/skills/{id}/deprecate — пометить навык deprecated
         app.MapPost("/api/skills/{id}/deprecate", async (
@@ -53,7 +53,7 @@ public static class SkillLifecycleController
                     reason = ex.Message
                 });
             }
-        }).WithName("DeprecateSkill");
+        }).WithName("DeprecateSkill").WithTags("SkillLifecycle");
 
         // POST /api/skills/{id}/rollback — откатить к предыдущей версии
         app.MapPost("/api/skills/{id}/rollback", (
@@ -77,7 +77,7 @@ public static class SkillLifecycleController
                     reason = ex.Message
                 });
             }
-        }).WithName("RollbackSkill");
+        }).WithName("RollbackSkill").WithTags("SkillLifecycle");
 
         // POST /api/skills/{id}/undeprecate — снять deprecated-статус
         app.MapPost("/api/skills/{id}/undeprecate", (
@@ -88,7 +88,7 @@ public static class SkillLifecycleController
             return skill is null
                 ? Results.NotFound(new { error = "Навык не найден." })
                 : Results.Ok(new { message = "Deprecated-статус снят.", skill = ToDto(skill) });
-        }).WithName("UndeprecateSkill");
+        }).WithName("UndeprecateSkill").WithTags("SkillLifecycle");
 
         // GET /api/skills/deprecated — список deprecated-навыков
         app.MapGet("/api/skills/deprecated", (
@@ -96,7 +96,7 @@ public static class SkillLifecycleController
         {
             var skills = lifecycle.GetDeprecated().Select(ToDto).ToList();
             return Results.Ok(new { count = skills.Count, skills });
-        }).WithName("ListDeprecatedSkills");
+        }).WithName("ListDeprecatedSkills").WithTags("SkillLifecycle");
 
         // POST /api/skills/{id}/improve — улучшение навыка; проверяет policy
         app.MapPost("/api/skills/{id}/improve", async (
@@ -129,7 +129,7 @@ public static class SkillLifecycleController
             {
                 return Results.Problem($"Improve failed: {ex.Message}");
             }
-        }).WithName("ImproveSkillLifecycle");
+        }).WithName("ImproveSkillLifecycle").WithTags("SkillLifecycle");
     }
 
     private static SkillDto ToDto(Skill s) =>

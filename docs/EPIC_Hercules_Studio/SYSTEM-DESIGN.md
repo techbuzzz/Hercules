@@ -689,7 +689,7 @@ src/api/
 | Task | Что | Зависимости |
 |---|---|---|
 | task_109 | `AddOpenApi()` + `MapOpenApi()` + Scalar UI + build-time generation + XML docs | — |
-| task_110 | `.WithTags()` на все 35 контроллеров | task_109 |
+| task_110 | `.WithTags()` на все 37 контроллеров | task_109 |
 | task_111 | `.Produces<T>()` + DTO рефакторинг (исключить анонимные) | task_109 |
 | task_112 | `.WithName()` на Marketplace + Template | — |
 | task_113 | Studio: openapi-typescript + Orval setup | task_109-112 |

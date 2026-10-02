@@ -51,7 +51,7 @@ public static class QuotasController
                     resetAt = s.ResetAt
                 })
             });
-        }).WithName("QuotaStatus");
+        }).WithName("QuotaStatus").WithTags("Quotas");
 
         // GET /api/quotas/{scope}/{scopeId} — статус quotas для конкретного scope
         app.MapGet("/api/quotas/{scope}/{scopeId}", (IQuotaService quotaService, string scope, string scopeId) =>
@@ -94,7 +94,7 @@ public static class QuotasController
                     resetAt = s.ResetAt
                 })
             });
-        }).WithName("QuotaStatusByScope");
+        }).WithName("QuotaStatusByScope").WithTags("Quotas");
 
         // GET /api/quotas/{scope}/{scopeId}/{type} — конкретный quota status
         app.MapGet("/api/quotas/{scope}/{scopeId}/{type}", (IQuotaService quotaService, string scope, string scopeId, string type) =>
@@ -137,7 +137,7 @@ public static class QuotasController
                 usagePercent = status.UsagePercent,
                 resetAt = status.ResetAt
             });
-        }).WithName("QuotaStatusByType");
+        }).WithName("QuotaStatusByType").WithTags("Quotas");
 
         // GET /api/quotas/rate-limit — rate limit headers для response
         app.MapGet("/api/quotas/rate-limit", (IQuotaService quotaService, string scope, string? scopeId = null, string? type = null) =>
@@ -180,6 +180,6 @@ public static class QuotasController
                 resetAt = info.ResetAtUtc,
                 retryAfterSeconds = info.RetryAfterSeconds
             });
-        }).WithName("RateLimitInfo");
+        }).WithName("RateLimitInfo").WithTags("Quotas");
     }
 }

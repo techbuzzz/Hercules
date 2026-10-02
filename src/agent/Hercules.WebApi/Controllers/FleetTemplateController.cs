@@ -21,7 +21,7 @@ public static class FleetTemplateController
                 e.Vertical,
                 e.Version,
                 e.FilePath)).ToList());
-        }).WithName("ListFleetTemplates");
+        }).WithName("ListFleetTemplates").WithTags("FleetTemplates");
 
         // GET /api/fleet-templates/{fileName} — манифест fleet template.
         app.MapGet("/api/fleet-templates/{fileName}", (string fileName, IFleetTemplateManager manager) =>
@@ -48,7 +48,7 @@ public static class FleetTemplateController
             {
                 return Results.BadRequest(ex.Message);
             }
-        }).WithName("GetFleetTemplate");
+        }).WithName("GetFleetTemplate").WithTags("FleetTemplates");
 
         // POST /api/fleet-templates/{fileName}/apply — применить fleet template:
         // extract agent template и write fleet config files.
@@ -74,7 +74,7 @@ public static class FleetTemplateController
             {
                 return Results.BadRequest(ex.Message);
             }
-        }).WithName("ApplyFleetTemplate");
+        }).WithName("ApplyFleetTemplate").WithTags("FleetTemplates");
     }
 }
 

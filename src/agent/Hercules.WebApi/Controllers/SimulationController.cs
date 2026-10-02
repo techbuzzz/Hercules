@@ -16,7 +16,7 @@ public static class SimulationController
         {
             var templates = simulation.GetSimulatableTemplates();
             return Results.Ok(templates.Select(t => new SimulatableTemplateDto(t)).ToList());
-        }).WithName("ListSimulationTemplates");
+        }).WithName("ListSimulationTemplates").WithTags("Simulation");
 
         // GET /api/simulation/templates/{templateName}/available — наличие fixtures для шаблона.
         app.MapGet("/api/simulation/templates/{templateName}/available", (string templateName, TemplateSimulationService simulation) =>
@@ -24,7 +24,7 @@ public static class SimulationController
             var has = simulation.HasFixtures(templateName);
             var coverage = has ? simulation.GetFailureCoverage(templateName) : null;
             return Results.Ok(new TemplateAvailabilityDto(templateName, has, coverage));
-        }).WithName("SimulationAvailability");
+        }).WithName("SimulationAvailability").WithTags("Simulation");
 
         // POST /api/simulation/sessions — начать симуляционную сессию.
         app.MapPost("/api/simulation/sessions", (StartSessionRequest body, TemplateSimulationService simulation) =>
@@ -36,7 +36,7 @@ public static class SimulationController
 
             var session = simulation.StartSession(body.TemplateName);
             return Results.Ok(ToSessionDto(session));
-        }).WithName("StartSimulationSession");
+        }).WithName("StartSimulationSession").WithTags("Simulation");
 
         // POST /api/simulation/sessions/{templateName}/replay — запустить replay.
         app.MapPost("/api/simulation/sessions/{templateName}/replay", (string templateName, ReplayRequest body, TemplateSimulationService simulation) =>
@@ -50,14 +50,14 @@ public static class SimulationController
             {
                 return Results.BadRequest(ex.Message);
             }
-        }).WithName("SimulationReplay");
+        }).WithName("SimulationReplay").WithTags("Simulation");
 
         // DELETE /api/simulation/sessions/{templateName} — остановить симуляционную сессию.
         app.MapDelete("/api/simulation/sessions/{templateName}", (string templateName, TemplateSimulationService simulation) =>
         {
             simulation.StopSession(templateName);
             return Results.NoContent();
-        }).WithName("StopSimulationSession");
+        }).WithName("StopSimulationSession").WithTags("Simulation");
 
         // GET /api/simulation/sessions/{templateName} — текущее состояние сессии.
         app.MapGet("/api/simulation/sessions/{templateName}", (string templateName, TemplateSimulationService simulation) =>
@@ -69,7 +69,7 @@ public static class SimulationController
             }
 
             return Results.Ok(ToSessionDto(session));
-        }).WithName("GetSimulationSession");
+        }).WithName("GetSimulationSession").WithTags("Simulation");
     }
 
     private static SimulationSessionDto ToSessionDto(SimulationSession session)

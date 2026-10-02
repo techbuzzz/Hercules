@@ -52,7 +52,7 @@ public static class CacheController
                     overallHitRatePct = hitRate
                 }
             });
-        }).WithName("CacheStats");
+        }).WithName("CacheStats").WithTags("Cache");
 
         // POST /api/cache/invalidate — инвалидация cache
         app.MapPost("/api/cache/invalidate", (CacheInvalidateRequest request, ICacheService? cache) =>
@@ -92,7 +92,7 @@ public static class CacheController
             cache.InvalidateClass(cls);
             return Results.Ok(new { invalidated = "class", cls = cls.ToString() });
 
-        }).WithName("CacheInvalidate");
+        }).WithName("CacheInvalidate").WithTags("Cache");
     }
 }
 

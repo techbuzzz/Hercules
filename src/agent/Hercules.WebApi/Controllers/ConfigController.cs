@@ -23,7 +23,7 @@ public static class ConfigController
     {
         // GET /api/config — текущая "живая" конфигурация
         // task_081: short-TTL output cache (30s) для read-only config endpoint.
-        app.MapGet("/api/config", (RuntimeConfigStore store) => Results.Ok(new { config = store.Current, source = "runtime" })).WithName("GetConfig").CacheOutput(OutputCachePolicies.Config);
+        app.MapGet("/api/config", (RuntimeConfigStore store) => Results.Ok(new { config = store.Current, source = "runtime" })).WithName("GetConfig").CacheOutput(OutputCachePolicies.Config).WithTags("Config");
 
         // PUT /api/config — полная замена конфигурации (system-only, task_097).
         app.MapPut("/api/config", (JsonElement body, RuntimeConfigStore store) =>
@@ -38,7 +38,7 @@ public static class ConfigController
             {
                 return Results.BadRequest(new { error = $"Не удалось разобрать конфигурацию: {ex.Message}" });
             }
-        }).WithName("UpdateConfig").RequireSystemRole();
+        }).WithName("UpdateConfig").RequireSystemRole().WithTags("Config");
 
         // PATCH /api/config — частичное обновление (merge patch), доступно обеим ролям.
         app.MapPatch("/api/config", (JsonElement patch, RuntimeConfigStore store) =>
@@ -52,6 +52,6 @@ public static class ConfigController
             {
                 return Results.BadRequest(new { error = $"Не удалось применить патч: {ex.Message}" });
             }
-        }).WithName("PatchConfig");
+        }).WithName("PatchConfig").WithTags("Config");
     }
 }

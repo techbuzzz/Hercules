@@ -27,7 +27,7 @@ public static class SkillHarnessController
                         detail: ex.Message,
                         statusCode: 500);
                 }
-            }).WithName("RunSkillHarness").RequireRateLimiting(RateLimitPolicies.Expensive);
+            }).WithName("RunSkillHarness").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SkillHarness");
 
         // POST /api/skills/{id}/eval/baseline — записать baseline
         app.MapPost("/api/skills/{id}/eval/baseline",
@@ -67,7 +67,7 @@ public static class SkillHarnessController
                         detail: ex.Message,
                         statusCode: 500);
                 }
-            }).WithName("RecordSkillBaseline").RequireRateLimiting(RateLimitPolicies.Expensive);
+            }).WithName("RecordSkillBaseline").RequireRateLimiting(RateLimitPolicies.Expensive).WithTags("SkillHarness");
 
         // GET /api/skills/{id}/eval/baseline — получить baseline
         app.MapGet("/api/skills/{id}/eval/baseline",
@@ -77,7 +77,7 @@ public static class SkillHarnessController
                 return baseline is null
                     ? Results.NotFound(new { error = "Baseline не найден." })
                     : Results.Ok(baseline);
-            }).WithName("GetSkillBaseline");
+            }).WithName("GetSkillBaseline").WithTags("SkillHarness");
 
         // GET /api/skills/{id}/eval/history — история baseline
         app.MapGet("/api/skills/{id}/eval/history",
@@ -85,7 +85,7 @@ public static class SkillHarnessController
             {
                 var history = harness.GetBaselineHistory(id);
                 return Results.Ok(history);
-            }).WithName("GetSkillEvalHistory");
+            }).WithName("GetSkillEvalHistory").WithTags("SkillHarness");
 
         // GET /api/eval/baselines — все baselines (global)
         app.MapGet("/api/eval/baselines",
@@ -93,7 +93,7 @@ public static class SkillHarnessController
             {
                 var all = harness.GetBaselineHistory();
                 return Results.Ok(all);
-            }).WithName("ListAllBaselines");
+            }).WithName("ListAllBaselines").WithTags("SkillHarness");
     }
 }
 

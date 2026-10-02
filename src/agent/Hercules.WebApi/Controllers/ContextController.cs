@@ -32,7 +32,7 @@ public static class ContextController
                     ? Math.Round((double)budget.UsedTokens / budget.MaxTokens * 100, 1)
                     : 0
             });
-        }).WithName("ContextBudget");
+        }).WithName("ContextBudget").WithTags("Context");
 
         // GET /api/context/summary?sessionId=... — markdown-сводка дистиллированного контекста.
         // task_102: расширено — теперь возвращает реальный summary вместо заглушки.
@@ -63,7 +63,7 @@ public static class ContextController
                 summary = markdown,
                 empty = string.IsNullOrWhiteSpace(markdown)
             });
-        }).WithName("ContextSummary");
+        }).WithName("ContextSummary").WithTags("Context");
 
         // POST /api/context/distill — запуск дистилляции для сессии (task_102).
         // Body: { "sessionId": "...", "mode": "off|auto|manual" } (mode optional, defaults to current config).
@@ -130,7 +130,7 @@ public static class ContextController
                 log.LogError(ex, "[ContextController] Distill failed for session {SessionId}", req.SessionId);
                 return Results.Problem(detail: ex.Message, statusCode: 500, title: "Distill failed");
             }
-        }).WithName("ContextDistill");
+        }).WithName("ContextDistill").WithTags("Context");
 
         // POST /api/context/trace/compress — сжать tool trace в episodic memory
         app.MapPost("/api/context/trace/compress", async (
@@ -156,7 +156,7 @@ public static class ContextController
                 traceCount = trace.Count,
                 sessionId
             });
-        }).WithName("ContextTraceCompress");
+        }).WithName("ContextTraceCompress").WithTags("Context");
     }
 
     /// <summary>Request body для <c>POST /api/context/distill</c> (task_102).</summary>

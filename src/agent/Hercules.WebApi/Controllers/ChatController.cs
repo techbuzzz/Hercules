@@ -39,7 +39,7 @@ public static class ChatController
             })
             .WithName("Chat")
             .WithSummary("Отправить сообщение агенту и получить ответ")
-            .RequireRateLimiting(RateLimitPolicies.Chat);
+            .RequireRateLimiting(RateLimitPolicies.Chat).WithTags("Chat");
     }
 
     private static string ResolveSessionId(HttpRequest http, WebApiAdapter adapter)

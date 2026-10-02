@@ -21,7 +21,7 @@ public static class ApprovalController
                 count = pending.Count,
                 approvals = pending.Select(ToDto).ToList()
             });
-        }).WithName("ListPendingApprovals");
+        }).WithName("ListPendingApprovals").WithTags("Approvals");
 
         // GET /api/approvals/{id} — получить конкретный запрос
         app.MapGet("/api/approvals/{id}", (
@@ -32,7 +32,7 @@ public static class ApprovalController
             return result is null
                 ? Results.NotFound(new { error = $"Approval request '{id}' not found." })
                 : Results.Ok(ToDto(result));
-        }).WithName("GetApproval");
+        }).WithName("GetApproval").WithTags("Approvals");
 
         // POST /api/approvals/{id}/approve — одобрить запрос
         app.MapPost("/api/approvals/{id}/approve", async (
@@ -52,7 +52,7 @@ public static class ApprovalController
                 id,
                 status = "Approved"
             });
-        }).WithName("ApproveTool");
+        }).WithName("ApproveTool").WithTags("Approvals");
 
         // POST /api/approvals/{id}/deny — отклонить запрос
         app.MapPost("/api/approvals/{id}/deny", async (
@@ -72,7 +72,7 @@ public static class ApprovalController
                 id,
                 status = "Denied"
             });
-        }).WithName("DenyTool");
+        }).WithName("DenyTool").WithTags("Approvals");
 
         // GET /api/approvals — все запросы (last 100)
         app.MapGet("/api/approvals", (
@@ -85,7 +85,7 @@ public static class ApprovalController
                 count = all.Count,
                 approvals = all.Select(ToDto).ToList()
             });
-        }).WithName("ListAllApprovals");
+        }).WithName("ListAllApprovals").WithTags("Approvals");
     }
 
     private static object ToDto(ApprovalResult r) => new
