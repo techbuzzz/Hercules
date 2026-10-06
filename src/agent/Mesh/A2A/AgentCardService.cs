@@ -115,7 +115,25 @@ public sealed class AgentCardService : IAgentCardService
         }
 
         AgentCard card = await GetAgentCardAsync(ct);
-        string endpoint = _a2aCfg.AgentCard.Endpoint.TrimStart('/');
+
+        // The configured Endpoint is URL-shaped ("/agent-card.json"), so it must
+        // not be used as a filesystem path verbatim: TrimStart('/') alone yields a
+        // RELATIVE path, and the card then lands in the process working directory.
+        // That both littered the repo and desynchronised us from the reader
+        // (GET /agent-card.json reads it from the data root).
+        // Resolve relative values against the manifest's directory, which is the
+        // already-resolved data root, matching the documented "relative to
+        // dataRoot" contract.
+        string configured = _a2aCfg.AgentCard.Endpoint
+            .TrimStart('/', '\\')
+            .Replace('/', Path.DirectorySeparatorChar);
+
+        string baseDir = Path.GetDirectoryName(_manifestService.ManifestPath)
+                         ?? AppContext.BaseDirectory;
+        string endpoint = Path.IsPathRooted(configured)
+            ? configured
+            : Path.GetFullPath(Path.Combine(baseDir, configured));
+
         string? dir = Path.GetDirectoryName(endpoint);
         if (!string.IsNullOrEmpty(dir))
         {

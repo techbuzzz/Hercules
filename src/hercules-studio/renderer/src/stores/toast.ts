@@ -34,6 +34,11 @@ export const useToastStore = defineStore("toast", () => {
     show(message, "warning", duration);
   }
 
+  /** Alias matching the common `warn()` convention. */
+  function warn(message: string, duration?: number): void {
+    show(message, "warning", duration);
+  }
+
   function error(message: string, duration?: number): void {
     show(message, "error", duration ?? 6000);
   }
@@ -46,5 +51,5 @@ export const useToastStore = defineStore("toast", () => {
     toasts.value = [];
   }
 
-  return { toasts, show, info, success, warning, error, dismiss, clear };
+  return { toasts, show, info, success, warning, warn, error, dismiss, clear };
 });

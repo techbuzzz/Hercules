@@ -1,7 +1,9 @@
-/* Tailwind CSS will be added when @tailwindcss/vite is installed.
-   For now, plain CSS with theme variables. */
+@import "tailwindcss";
 
-/* ---- Theme variables ---- */
+/* Dark mode is driven by a class on <html> (settings store), not media query. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---- Theme variables (runtime source of truth) ---- */
 :root {
   --bg: #ffffff;
   --bg-secondary: #f4f4f5;
@@ -30,13 +32,25 @@
   --success: #10b981;
 }
 
-/* ---- Base styles ---- */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/*
+ * `inline` makes Tailwind emit the var() reference directly instead of copying
+ * the resolved value, so utilities react to the .dark class at runtime.
+ */
+@theme inline {
+  --color-app: var(--bg);
+  --color-secondary: var(--bg-secondary);
+  --color-tertiary: var(--bg-tertiary);
+  --color-fg: var(--fg);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-line: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
 }
 
+/* ---- Base styles ---- */
 html,
 body,
 #app {
@@ -73,26 +87,6 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--fg-secondary);
-}
-
-/* ---- Utility classes ---- */
-.bg-app {
-  background-color: var(--bg);
-}
-.bg-secondary {
-  background-color: var(--bg-secondary);
-}
-.bg-tertiary {
-  background-color: var(--bg-tertiary);
-}
-.text-app {
-  color: var(--fg);
-}
-.text-secondary {
-  color: var(--fg-secondary);
-}
-.border-app {
-  border-color: var(--border);
 }
 
 /* ---- Animations ---- */

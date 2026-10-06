@@ -13,13 +13,11 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["shared/*"],
       "@renderer/*": ["renderer/src/*"]
     }
   },
   "include": [
     "renderer/src/**/*.ts",
-    "renderer/src/**/*.vue",
-    "shared/**/*.ts"
+    "renderer/src/**/*.vue"
   ]
 }

@@ -29,6 +29,7 @@ public sealed class ApiKeyMiddleware
     private readonly ApiKeyEntry[] _entries;
     private readonly byte[]?[] _expectedKeyBytes;
     private readonly bool _unauthenticated;
+    private readonly StudioSessionStore? _sessions;
 
     public ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILogger<ApiKeyMiddleware> logger)
         : this(next, cfg, logger, keys: null)
@@ -36,9 +37,31 @@ public sealed class ApiKeyMiddleware
     }
 
     public ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILogger<ApiKeyMiddleware> logger, IReadOnlyList<ApiKeyEntry>? keys)
+        : this(next, cfg, logger, keys, sessions: null)
+    {
+    }
+
+    /// <summary>DI path: keys come from <see cref="ApiKeyStore"/>, sessions from the registry.</summary>
+    public ApiKeyMiddleware(
+        RequestDelegate next,
+        WebApiConfig cfg,
+        ILogger<ApiKeyMiddleware> logger,
+        ApiKeyStore store,
+        StudioSessionStore sessions)
+        : this(next, cfg, logger, store.LoadOrGenerate(cfg.ApiKeys), sessions)
+    {
+    }
+
+    public ApiKeyMiddleware(
+        RequestDelegate next,
+        WebApiConfig cfg,
+        ILogger<ApiKeyMiddleware> logger,
+        IReadOnlyList<ApiKeyEntry>? keys,
+        StudioSessionStore? sessions)
     {
         _next = next;
         _logger = logger;
+        _sessions = sessions;
 
         var resolved = ResolveKeys(cfg, keys);
         _entries = resolved.Entries;
@@ -78,6 +101,20 @@ public sealed class ApiKeyMiddleware
         // Ни одного ключа не настроено — открытый доступ (только для локали; см. ctor-лог).
         if (_unauthenticated)
         {
+            await _next(context);
+            return;
+        }
+
+        // ADR-0009: браузерный клиент обменял API-ключ на короткоживущую сессию.
+        // Сессия проверяется раньше ключа, но не вместо него — при отсутствии
+        // заголовка сессии flow продолжает обычным путём проверки X-Api-Key.
+        if (_sessions is not null &&
+            context.Request.Headers.TryGetValue(StudioSessionStore.HeaderName, out var sessionToken) &&
+            _sessions.TryValidate(sessionToken.ToString(), out var session) &&
+            session is not null)
+        {
+            context.Items[RoleItemKey] = session.Role;
+            context.Items[StudioSessionStore.ItemKey] = session;
             await _next(context);
             return;
         }

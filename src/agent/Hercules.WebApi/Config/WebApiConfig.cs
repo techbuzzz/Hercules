@@ -24,6 +24,19 @@ public sealed class WebApiConfig
     /// <summary>Максимальный размер тела запроса в байтах. 0 = без лимита.</summary>
     public long MaxRequestBodyBytes { get; set; } = 1_048_576;
 
+    /// <summary>
+    /// TTL сессии Studio в минутах (ADR-0009). Браузерный клиент обменивает API-ключ
+    /// на короткоживущий opaque-токен и держит его только в памяти вкладки.
+    /// По истечении клиент обменивается заново. 0 или меньше → 30 минут по умолчанию.
+    /// </summary>
+    public int StudioSessionTtlMinutes { get; set; } = 30;
+
+    /// <summary>
+    /// Каталог со собранной SPA Hercules Studio. Если существует — агент отдаёт её
+    /// на /ui (ADR-0009). Пусто → раздача статики отключена.
+    /// </summary>
+    public string StudioUiPath { get; set; } = "";
+
     /// <summary>Kestrel server tuning (task_081).</summary>
     public KestrelConfig Kestrel { get; set; } = new();
 

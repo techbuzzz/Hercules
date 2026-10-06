@@ -7,4 +7,9 @@ release/
 *.tsbuildinfo
 .vite/
 renderer/dist/
-electron/dist/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.playwright/

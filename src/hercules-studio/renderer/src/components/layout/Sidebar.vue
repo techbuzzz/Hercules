@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useConnectionsStore } from "../../stores/connections";
-import type { Connection } from "@shared/protocol";
+import type { Connection } from "@renderer/platform/capabilities";
 
 const { t } = useI18n();
 const connections = useConnectionsStore();

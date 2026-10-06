@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useConnectionsStore } from "../../stores/connections";
 import { useErrorStore } from "../../stores/error";
+import { platform } from "../../platform";
 
 const { t } = useI18n();
 const connections = useConnectionsStore();
@@ -11,7 +12,7 @@ const errorStore = useErrorStore();
 const activeAgent = computed(() => connections.active);
 const hasErrors = computed(() => errorStore.hasErrors);
 const errorCount = computed(() => errorStore.errors.length);
-const version = "0.1.0";
+const version = computed(() => platform.app.version());
 
 const statusColor = computed(() => {
   if (!activeAgent.value) return "bg-zinc-500";

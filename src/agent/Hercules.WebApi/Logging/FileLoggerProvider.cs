@@ -31,6 +31,23 @@ public sealed class FileLoggerProvider : ILoggerProvider
 
     internal void Write(string categoryName, LogLevel logLevel, string message, Exception? exception)
     {
+        // A logging failure must never take the host down. This is not
+        // theoretical: with an exclusive handle a supervised restart (the old
+        // process still closing its sink while the new one boots) used to throw
+        // IOException out of this method and kill the replacement agent with an
+        // unhandled AggregateException.
+        try
+        {
+            WriteCore(categoryName, logLevel, message, exception);
+        }
+        catch
+        {
+            // Drop the line. Losing a log entry is always preferable to a crash.
+        }
+    }
+
+    private void WriteCore(string categoryName, LogLevel logLevel, string message, Exception? exception)
+    {
         var now = DateTime.Now;
         var today = DateOnly.FromDateTime(now);
 
@@ -40,8 +57,11 @@ public sealed class FileLoggerProvider : ILoggerProvider
             {
                 _writer?.Flush();
                 _writer?.Dispose();
+                _writer = null;
                 var path = Path.Combine(_logDir, $"hercules-{today:yyyy-MM-dd}.log");
-                var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+                // FileShare.ReadWrite: a supervised restart overlaps two processes
+                // on the same file. Without write sharing the second open is denied.
+                var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
                 _writer = new StreamWriter(fs, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true))
                 {
                     AutoFlush = true

@@ -3,7 +3,7 @@ import { createPinia } from "pinia";
 import { createI18n } from "vue-i18n";
 import App from "./App.vue";
 import "./assets/styles/global.css";
-import "./mock-api";
+import { registerServiceWorker } from "./serviceWorker";
 
 import en from "./i18n/en.json";
 import ru from "./i18n/ru.json";
@@ -19,3 +19,5 @@ const app = createApp(App);
 app.use(createPinia());
 app.use(i18n);
 app.mount("#app");
+
+registerServiceWorker();

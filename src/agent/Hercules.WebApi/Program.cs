@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Threading.RateLimiting;
+using Microsoft.Extensions.FileProviders;
 using Scalar.AspNetCore;
 using Hercules.Agent;
 using Hercules.WebApi.Logging;
@@ -281,6 +282,14 @@ builder.Services.AddSingleton(webCfg);
 // task_097: ApiKeyStore (load-or-generate API keys с ролями, см. ADR-0004).
 // Регистрируем ДО app.Build(), чтобы можно было resolve при первом запросе.
 builder.Services.AddSingleton<Hercules.WebApi.Auth.ApiKeyStore>();
+
+// ADR-0009: in-memory session registry for the browser Studio client. A browser
+// cannot hold an API key safely, so the key is exchanged once for a short-lived
+// opaque token that the client keeps only in tab memory.
+builder.Services.AddSingleton<Hercules.WebApi.Auth.StudioSessionStore>();
+
+// ADR-0009: in-memory registry for sandbox code runs observed over SSE.
+builder.Services.AddSingleton<Hercules.WebApi.CodeRuns.SkillRunStore>();
 
 // task_098: CheckInService для Studio-протокола (ADR-0005). Singleton — состояние
 // CheckIn'ов живёт в памяти процесса, общий для всех запросов. IAuditService
@@ -950,12 +959,15 @@ builder.Services.AddCors(options =>
         }
 
         // Dev fallback: разрешаем только localhost-источники.
-        // 4322 = Hercules Studio (Vite dev server), 8421 = сам WebApi.
+        // 4322 = hercules-web (astro dev), 4330 = Hercules Studio (Vite dev, ADR-0009),
+        // 8421 = сам WebApi (в т.ч. раздача SPA на /ui — same-origin, CORS не нужен).
         string[] devOrigins =
         {
             "http://localhost:4322",
+            "http://localhost:4330",
             "http://localhost:8421",
             "http://127.0.0.1:4322",
+            "http://127.0.0.1:4330",
             "http://127.0.0.1:8421"
         };
         policy.WithOrigins(devOrigins)
@@ -1106,6 +1118,33 @@ if (!isBuildTime)
 }
 
 // --- Middleware ---
+// ADR-0009: Hercules Studio is served by the agent itself on /ui, so the SPA
+// runs same-origin and does not depend on the CORS allowlist above (that only
+// matters for `npm run dev` on its own port). Mounted before the API middlewares
+// so asset requests are never rate-limited, API-key-gated or drain-blocked.
+const string StudioUiRequestPath = "/ui";
+IFileProvider? studioUiProvider = ResolveStudioUiProvider(webCfg, app.Environment.ContentRootPath, log);
+if (studioUiProvider is not null)
+{
+    // Resolves /ui → /ui/index.html. Must precede UseStaticFiles.
+    app.UseDefaultFiles(new DefaultFilesOptions
+    {
+        FileProvider = studioUiProvider,
+        RequestPath = StudioUiRequestPath,
+    });
+
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = studioUiProvider,
+        RequestPath = StudioUiRequestPath,
+        OnPrepareResponse = ctx =>
+        {
+            // Hashed asset filenames are immutable; index.html must not be cached.
+            var isIndex = ctx.File.Name.Equals("index.html", StringComparison.OrdinalIgnoreCase);
+            ctx.Context.Response.Headers.CacheControl = isIndex ? "no-cache" : "public, max-age=31536000, immutable";
+        },
+    });
+}
 // task_081: response compression first so downstream responses are emitted
 // compressed (RateLimiter, ApiKey, Drain, OutputCache все пишут в поток).
 app.UseResponseCompression();
@@ -1309,6 +1348,8 @@ app.MapSimulation();
 app.MapSlos();
 app.MapApprovals();
 app.MapEscalations();
+app.MapStudio();
+app.MapCodeRuns();
 app.MapObservability();
 app.MapSkillHarness();
 app.MapSelfImprovement();
@@ -1468,4 +1509,49 @@ if (openApiOutputPath is not null)
 if (!isBuildTime)
 {
     app.Run();
+}
+
+// --- Hercules Studio static hosting (ADR-0009) ---
+
+// Resolves the built Studio bundle for hosting at /ui.
+// Path resolution order: WebApi:StudioUiPath when absolute, otherwise relative to
+// the content root; finally a default that walks up from the content root to the
+// repo layout (src/hercules-studio/dist).
+// Returns null when nothing is found — static hosting is opt-in by presence, so an
+// agent without a built Studio simply does not serve /ui.
+static IFileProvider? ResolveStudioUiProvider(WebApiConfig cfg, string contentRoot, ILogger log)
+{
+    var candidates = new List<string>();
+
+    if (!string.IsNullOrWhiteSpace(cfg.StudioUiPath))
+    {
+        candidates.Add(Path.IsPathRooted(cfg.StudioUiPath)
+            ? cfg.StudioUiPath
+            : Path.Combine(contentRoot, cfg.StudioUiPath));
+    }
+
+    // Default: walk up from src/agent/Hercules.WebApi to src/hercules-studio/dist.
+    var dir = new DirectoryInfo(contentRoot);
+    for (var i = 0; i < 6 && dir is not null; i++, dir = dir.Parent)
+    {
+        var probe = Path.Combine(dir.FullName, "hercules-studio", "dist");
+        candidates.Add(probe);
+    }
+
+    foreach (var candidate in candidates)
+    {
+        if (!Directory.Exists(candidate)) continue;
+        if (!File.Exists(Path.Combine(candidate, "index.html")))
+        {
+            log.LogWarning("[StudioUi] {Path} has no index.html — skipping", candidate);
+            continue;
+        }
+        log.LogInformation("[StudioUi] Serving Hercules Studio from {Path} at {RequestPath}", candidate, StudioUiRequestPath);
+        return new PhysicalFileProvider(candidate);
+    }
+
+    if (!string.IsNullOrWhiteSpace(cfg.StudioUiPath))
+        log.LogWarning("[StudioUi] Configured path {Path} not found — /ui disabled", cfg.StudioUiPath);
+
+    return null;
 }

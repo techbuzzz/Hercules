@@ -1,49 +1,25 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import type { StudioSettings } from "@shared/protocol";
-
-const DEFAULT_SETTINGS: StudioSettings = {
-  theme: "dark",
-  locale: "en",
-  typingEffect: true,
-  compactMode: false,
-  scan: {
-    portStart: 8421,
-    portEnd: 8521,
-    legacyPort: 5000,
-    enableProcessScan: true,
-    autoScanOnStartup: true,
-    concurrent: 50,
-    timeoutMs: 300,
-  },
-  notifications: {
-    enabled: true,
-    consensus: true,
-    workflow: true,
-    escalation: true,
-    chat: false,
-  },
-  autoUpdate: true,
-  minimizeToTray: false,
-};
+import { platform, DEFAULT_SETTINGS } from "@renderer/platform";
+import type { StudioSettings } from "@renderer/platform/capabilities";
 
 export const useSettingsStore = defineStore("settings", () => {
-  const data = ref<StudioSettings>(DEFAULT_SETTINGS);
+  const data = ref<StudioSettings>({ ...DEFAULT_SETTINGS });
   const loaded = ref(false);
 
-  async function load() {
-    data.value = await window.studioAPI.settings.get();
+  function applyTheme(): void {
+    document.documentElement.classList.toggle("dark", data.value.theme === "dark");
+  }
+
+  async function load(): Promise<void> {
+    data.value = await platform.settings.get();
     loaded.value = true;
     applyTheme();
   }
 
-  async function update(patch: Partial<StudioSettings>) {
-    data.value = await window.studioAPI.settings.update(patch);
+  async function update(patch: Partial<StudioSettings>): Promise<void> {
+    data.value = await platform.settings.update(patch);
     applyTheme();
-  }
-
-  function applyTheme() {
-    document.documentElement.classList.toggle("dark", data.value.theme === "dark");
   }
 
   return { data, loaded, load, update };
