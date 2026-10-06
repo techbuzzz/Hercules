@@ -94,9 +94,9 @@
 - **Для Studio**: при `pending=true` показывать в UI кнопку "Kill agent" с confirm-dialog. После kill — Studio опрашивает `/api/system/checkin/status` чтобы дождаться восстановления agent'а.
 
 ## Links
-- ADR-0005: [../EPIC_Hercules_Studio/adr/0005-checkin-checkout.md](../EPIC_Hercules_Studio/adr/0005-checkin-checkout.md) (sibling — CheckIn protocol)
-- task_080: [completed/task_080.md](completed/task_080.md) (graceful shutdown primitives, для будущего self-exit)
-- Backlog: [../backlog.md](../backlog.md)
+- ADR-0005: [../EPIC_Hercules_Studio/adr/0005-checkin-checkout.md](../../../EPIC_Hercules_Studio/adr/0005-checkin-checkout.md) (sibling — CheckIn protocol)
+- task_080: [task_080.md](task_080.md) (graceful shutdown primitives, для будущего self-exit)
+- Backlog: [../backlog.md](../../backlog.md)
 
 ## Dependencies
 - task_097 (dual API keys — system key for restart endpoint)
@@ -106,5 +106,5 @@
 src/agent/Hercules.WebApi/Controllers/SystemController.cs (extend), src/agent/System/RestartService.cs (new), src/agent/Config/RuntimeConfigStore.cs
 
 ## Links
-- Studio Stage 6: [../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md](../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md)
-- Backlog: [../backlog.md](../backlog.md)
+- Studio Stage 6: [../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md](../../../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md)
+- Backlog: [../backlog.md](../../backlog.md)

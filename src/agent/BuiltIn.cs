@@ -79,6 +79,9 @@ public static class BuiltIn
     public const string SharedMemorySubdir = "shared";
     public const string SharedFactsFileName = "shared_facts.json";
 
+    /// <summary>Stage 7.8 — persisted consensus history (Studio-owned).</summary>
+    public const string ConsensusSubdir = "consensus";
+
     // -------------------------------------------------------------------------
     // Runtime path resolution helpers
     // -------------------------------------------------------------------------

@@ -89,6 +89,6 @@ templates/*/sim/, src/agent/Simulation/, src/agent/Hercules.WebApi/Controllers/S
 - `dotnet test` — 866/873 passed (7 pre-existing: OtelService × 5, BudgetGuard × 1, WasmTool × 1 — unrelated to task_031)
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

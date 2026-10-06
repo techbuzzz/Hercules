@@ -151,6 +151,6 @@ src/agent/Mesh/Router/RouterHealthTracker.cs, src/agent/Mesh/Backends/Redis/Redi
 Redis `WATCH`/`MULTI`/`EXEC` добавляет round-trip; для non-CAS `SetAsync` не нужен. Postgres reconnect может маскировать persistent failure — log + metric на каждый reconnect. Rollback: individual git revert per fix.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

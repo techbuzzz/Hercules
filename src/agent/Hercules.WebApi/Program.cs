@@ -288,8 +288,20 @@ builder.Services.AddSingleton<Hercules.WebApi.Auth.ApiKeyStore>();
 // opaque token that the client keeps only in tab memory.
 builder.Services.AddSingleton<Hercules.WebApi.Auth.StudioSessionStore>();
 
+// Stage 2: append-only skill prompt history, so the Studio diff view has a
+// previous version to compare against. Edits were previously destructive.
+builder.Services.AddSingleton<Hercules.WebApi.Skills.SkillPromptHistoryStore>(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<Hercules.WebApi.Skills.SkillPromptHistoryStore>>();
+    var dataRoot = Hercules.BuiltIn.ResolveDataRoot();
+    return new Hercules.WebApi.Skills.SkillPromptHistoryStore(
+        logger,
+        Path.Combine(dataRoot, "skill-history"));
+});
+
 // ADR-0009: in-memory registry for sandbox code runs observed over SSE.
 builder.Services.AddSingleton<Hercules.WebApi.CodeRuns.SkillRunStore>();
+    builder.Services.AddSingleton<Hercules.WebApi.Consensus.ConsensusSessionStore>();
 
 // task_098: CheckInService для Studio-протокола (ADR-0005). Singleton — состояние
 // CheckIn'ов живёт в памяти процесса, общий для всех запросов. IAuditService
@@ -1349,7 +1361,9 @@ app.MapSlos();
 app.MapApprovals();
 app.MapEscalations();
 app.MapStudio();
+app.MapAuth();
 app.MapCodeRuns();
+app.MapConsensus();
 app.MapObservability();
 app.MapSkillHarness();
 app.MapSelfImprovement();

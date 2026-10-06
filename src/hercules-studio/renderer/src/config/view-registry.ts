@@ -74,11 +74,42 @@ export const viewRegistry: ViewDefinition[] = [
     requiresConnection: false,
   },
   {
+    // Human-in-the-loop queue (approvals + escalations). Was registered as
+    // "consensus" before Stage 7 was built, which collided with the multi-agent
+    // consensus feature that now owns that name.
+    id: "decisions",
+    labelKey: "activity.decisions",
+    icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+    component: () => import("../views/DecisionsView.vue").then((m) => markRaw(m.default)),
+    order: 8,
+    requiresConnection: true,
+  },
+  {
+    // Stage 7 consensus — fans a prompt out to several connected agents at once,
+    // so it needs at least one live connection.
     id: "consensus",
     labelKey: "activity.consensus",
-    icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75",
+    icon: "M4 5h6v6H4zM14 5h6v6h-6zM4 13h6v6H4zM14 13h6v6h-6z",
     component: () => import("../views/ConsensusView.vue").then((m) => markRaw(m.default)),
-    order: 8,
+    order: 9,
+    requiresConnection: true,
+  },
+  {
+    // Context talks to the agent (unlike Workflow, which has its own server),
+    // so it keeps the connection requirement.
+    id: "context",
+    labelKey: "activity.context",
+    icon: "M4 6h16M4 12h10M4 18h7",
+    component: () => import("../views/ContextView.vue").then((m) => markRaw(m.default)),
+    order: 10,
+    requiresConnection: true,
+  },
+{
+    id: "llm",
+    labelKey: "activity.llm",
+    icon: "M12 2a10 10 0 100 10 10 10 0 100-10zm0 4a6 6 0 100 6 6 6 0 100-6z",
+    component: () => import("../views/LlmView.vue").then((m) => markRaw(m.default)),
+    order: 11,
     requiresConnection: true,
   },
 ];

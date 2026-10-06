@@ -73,6 +73,6 @@ Sensitive PII в логах; централизованная redaction.
 **Validation**: `dotnet build -c Release`: 0 errors | `dotnet test MeshObservability*`: 43/43 | `dotnet test Phase4`: 275/277 (2 pre-existing NumericValidator failures)
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

@@ -111,12 +111,22 @@ public sealed class McpClientService : IConfigReload, IAsyncDisposable
         try
         {
             // Build lookup of new desired servers keyed by name.
+            // Disabled servers are deliberately excluded: `Enabled` gates client
+            // connections, not just in-process hosting by McpServerHost. Excluding
+            // them here also routes an already-connected server through the removal
+            // path below, so flipping the flag off actually disconnects it.
             var desiredByName = new Dictionary<string, McpServerConfig>(StringComparer.OrdinalIgnoreCase);
             foreach (var server in newConfig.Servers)
             {
                 if (string.IsNullOrWhiteSpace(server.Name))
                 {
                     _logger.LogWarning("Skipping MCP server with empty name in reload target");
+                    continue;
+                }
+
+                if (!server.Enabled)
+                {
+                    _logger.LogInformation("MCP server '{Name}' is disabled — no client connection", server.Name);
                     continue;
                 }
 

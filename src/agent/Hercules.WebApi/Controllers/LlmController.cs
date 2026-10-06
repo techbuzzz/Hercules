@@ -52,7 +52,12 @@ public static class LlmController
                 OpenAICompatibleModel = cfg.OpenAICompatible.Model,
                 OpenAICompatibleDisplayName = cfg.OpenAICompatible.DisplayName
             });
-        }).WithName("LlmConfig").WithTags("LLM");
+        })
+          .WithName("LlmConfig")
+          .WithTags("LLM")
+          // Deliberately excludes API keys — this DTO is the public, secret-free
+          // view of the LLM config that Studio's provider editor renders.
+          .Produces<LlmConfigDto>(200);
     }
 }
 

@@ -118,6 +118,40 @@ public class SqliteWorkflowDefinitionStoreTests : IDisposable
         Assert.True(_store.IsHealthy());
     }
 
+    // -----------------------------------------------------------------------
+    //  Stage 8: authoring depends on updating a definition in place. Before
+    //  SaveWorkflowRequest carried an Id, every save minted a new one, so
+    //  editing a workflow silently produced a duplicate.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task SaveAsync_WithExplicitId_UpdatesInPlaceInsteadOfDuplicating()
+    {
+        var first = await _store.SaveAsync(NewDefinition("flow-edit"));
+
+        first.Description = "edited";
+        first.Version = 3;
+        var second = await _store.SaveAsync(first);
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Single(await _store.ListAsync());
+
+        var reloaded = await _store.GetAsync(first.Id);
+        Assert.NotNull(reloaded);
+        Assert.Equal("edited", reloaded!.Description);
+        Assert.Equal(3, reloaded.Version);
+    }
+
+    [Fact]
+    public async Task SaveAsync_NewDefinitionWithoutId_StillMintsADistinctId()
+    {
+        var a = await _store.SaveAsync(NewDefinition("flow-a"));
+        var b = await _store.SaveAsync(NewDefinition("flow-b"));
+
+        Assert.NotEqual(a.Id, b.Id);
+        Assert.Equal(2, (await _store.ListAsync()).Count);
+    }
+
     private static WorkflowDefinition NewDefinition(string name) => new()
     {
         Name = name,

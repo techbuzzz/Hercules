@@ -55,17 +55,19 @@ Stage 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
 >
 > ### ⚠️ Task-файлы Stage 0–9 устарели и не отражают сделанное
 >
-> Состояние чекбоксов на 2026-10-06:
+> Фактическое состояние чекбоксов (`node scripts/count-stage-tasks.cjs` пересчитывает):
 >
-> | Файл | done | open |
-> |---|---|---|
-> | `stage_00_skeleton` | 50 | 102 |
-> | `stage_01` … `stage_09` | **0** | 243 |
+> | Файл | open |
+> |---|---|
+> | `stage_00_skeleton` | 102 |
+> | `stage_01` … `stage_09` | **243** |
+> | **всего** | **345** |
 >
-> Это **не** означает, что ничего нет. Часть Stage 1–7 закрыта по факту миграции
-> (сканирование агентов, чат, навыки, config, mesh, tools, консилиум реализованы
-> во вью Studio), но соответствующие чекбоксы никогда не обновлялись.
-> Числа выше — верхняя граница невыполненного, а не точный остаток.
+> Это **не** означает, что ничего нет. Stage 0–7 закрыты по факту миграции (сканирование
+> агентов, чат, навыки, config, mesh, tools, консилиум реализованы во вью Studio), а
+> соответствующие чекбоксы никогда не обновлялись — в Stage 1–9 не отмечено ни одного.
+> Числа выше — верхняя граница, а не остаток: опираться на них нельзя.
+> Разбор по каждому Stage — в [VERIFICATION.md](VERIFICATION.md#what-remains).
 >
 > **Честный остаток** (что реально отсутствует в Studio):
 > Monaco и история/диффы (Stage 2), Vue Flow (Stage 4), **MCP CRUD (Stage 5)**,
@@ -80,18 +82,18 @@ Stage 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
 > [VERIFICATION.md](VERIFICATION.md). Он существует, чтобы результаты можно было
 > **проверить**, а не только принять на слово.
 
-> **Граница цели — ⚠️ НЕ ПОДТВЕРЖДЕНА владельцем.** Вопрос «входит ли роадмап
-> Stage 0–9 в цель?» был задан, но ответ пришёл **по таймауту с автовыбором
-> рекомендованного варианта**, а не от владельца. Владелец его не подтвердил.
+> **Граница цели (подтверждена владельцем 2026-10-06):** миграция на web-first —
+> **не весь объём цели**. Функциональные требования Stage 0–9
+> **тоже входят в цель**; миграция — фундамент для них, а не финал.
+> Что из них осталось открытым — в [VERIFICATION.md](VERIFICATION.md#what-remains);
+> на 2026-10-06 незакрыт только **task_105** (executor + типизированный `WorkflowGraph`).
 >
-> Пока подтверждения нет, 243 открытые задачи Stage 0–9 формально остаются в области
-> цели, и **завершённость цели не считается установленной**.
+> Поэтому Stage 0–9 **не** считаются отменёнными: они superseded как *план-факт
+> миграции*, но остаются **рабочим бэклогом цели**. Решения, которые владелец
+> подтвердил явно: chat остаётся request-response; `hercules-web` deprecated, а не
+> портируется (это закрывает критерий 9); Stage 0–9 входят в цель.
 >
-> Решения, которые владелец **подтвердил явно**: chat остаётся request-response;
-> `hercules-web` объявляется deprecated, а не портируется (это закрывает критерий 9).
->
-> Подробности и состояние работ — в [VERIFICATION.md](VERIFICATION.md#out-of-scope---
-> -not-yet-confirmed-by-the-owner) и
+> Приоритеты и состояние — в [VERIFICATION.md](VERIFICATION.md) и
 > [`src/hercules-web/DEPRECATED.md`](../../src/hercules-web/DEPRECATED.md).
 
 **Происхождение:** этот раздел заменяет Stage 0–9 как план-факт миграции, утверждён
@@ -250,11 +252,13 @@ tool-цикла; выбранный «быстрый путь» отвергну
 
 | Stage | Что в нём отменено миграцией |
 |---|---|
-| Stage 0 | «Skeleton **Electron** + Vue + Vite + **IPC**» — Electron и IPC удалены (ADR-0009). API codegen pipeline остаётся актуальным и **не реализован** |
+| Stage 0 | «Skeleton **Electron** + Vue + Vite + **IPC**» — Electron и IPC удалены (ADR-0009). API codegen pipeline **реализован** и теперь же охраняется CI (см. ниже) |
 | Stage 1 | Сканер портов и процессов → A2A discovery (`/agent.manifest.json`) |
-| Stage 2 | Локальный терминал (xterm.js) → вывод от агента; Monaco/история/диффы **не реализованы** |
-| Stage 6 | «Restart из UI» → флаг + `Hercules.Supervisor` |
-| Stage 9 | «Packaging» (NSIS/portable) — отменён: десктопной сборки нет, вместо неё PWA |
+| Stage 2 | Локальный терминал (xterm.js) → вывод от агента. Monaco, история промптов и Restore **реализованы** (Stage 2a/2b) |
+| Stage 4 | Mesh inspector реализован в рамках Stage 6.4; сам Vue Flow-конструктор остаётся заблокирован (нет типизированной `WorkflowGraph`) |
+| Stage 5 | Требование «MCP add/edit/delete» **выполнено** (Stage 5b) — запись идёт через `PATCH /api/config`, отдельных endpoints нет by design |
+| Stage 6 | «Restart из UI» → флаг + `Hercules.Supervisor`. Roles editor **реализован** (Stage 6.3) |
+| Stage 9 | «Packaging» (NSIS/portable) — отменён: десктопной сборки нет, вместо неё PWA. CI **реализован** |
 
 **Что делать с оставшимися требованиями:** переносить их в разделы web-first-плана, а не
 отмечать в Stage-файлах. Актуальный список пробелов — в
@@ -329,6 +333,57 @@ tool-цикла; выбранный «быстрый путь» отвергну
 
 **Результат:** Vue Flow graph topology (1-hop), node details, router explorer, shared memory browser, circuit breaker panel, auto-refresh 30s.
 
+> **⚠️ Stage 4 — предыдущая формулировка блокера была неверной и отозвана.** Ранее Stage 4
+> считался заблокированным «нет типизированной `WorkflowGraph`». Это смешение двух вещей:
+> **Stage 4 — это Mesh Explorer** (Vue Flow канвас топологии mesh,
+> [tasks/stage_04_mesh_explorer.md](tasks/stage_04_mesh_explorer.md)) и `WorkflowGraph` ему
+> никогда не был нужен; типизированный `WorkflowGraph` относится к **Stage 8 / task_105** —
+> схеме исполнителя, которую определяет task_105 (см. `Models.cs:7-9`).
+>
+> **Реальная предпосылка Stage 4 оказалась багом, а не отсутствующим типом.**
+> `/api/mesh/agents` отдаёт `{ count, agents }`, но `getMeshAgents()` был объявлен как
+> `Promise<unknown[]>`, а `MeshView` проверял результат через
+> `Array.isArray(...) ? ... : []`. Против живого агента эта проверка отсекала **каждый**
+> ответ — список агентов рендерился **навсегда пустым**. E2E-заглушка при этом возвращала
+> голый массив, то есть кодировала неверную форму и не могла это поймать. Исправлены тип
+> клиента, `unwrapAgents()` и сама заглушка.
+>
+> **Бэкенд для Stage 4 не нужен:** `GET /api/mesh/dashboard` уже отдаёт типизированный
+> `MeshDashboardDto` с `Topology: MeshTopologyDto` (`MeshAgentDto[]` с healthScore,
+> latencyMs, qualityScore, trustLevel, capabilities) и `Health: MeshHealthDto` — ровно тот
+> источник узлов, который нужен канвасу. Осталось: сам канвас (`@vue-flow/core` пока не
+> зависимость), панель деталей узла и контекстное меню.
+
+> **Канвас (4.2) и панель деталей узла (4.3) реализованы.** `MeshCanvas.vue` на
+> `@vue-flow/core@1.48.2` (0 новых advisories в `npm audit`; 13 существующих — vitest/vue).
+> Узлы = агенты из `MeshDashboardDto.topology`: цвет = полоса здоровья, размер = число
+> capabilities, подпись = displayName / agentId / endpoint. Layout — кольцо, а не force-directed:
+> реестр не отдаёт рёбра, оптимизировать нечего, а детерминированное кольцо читается лучше
+> симуляции, перетасовывающейся каждые 30 с. На экране прямо сказано, что рёбер нет.
+> **Панели shared memory (4.6) и circuit breakers (4.7) тоже реализованы**, без правок бэкенда —
+> эндпоинты уже были (`/api/mesh/circuits` + reset, `/api/mesh/shared-memory` + sync). Опять
+> поймана та же ошибка формы ответа: `/api/mesh/circuits` отдаёт **map** (`{ agentId: state }`),
+> а не массив — `Array.isArray` дал бы вечно пустую панель. Теперь SDK нормализует оба варианта.
+> Удаление shared-факта подтверждается с объяснением: peer'ы, уже получившие факт, сохраняют
+> свою копию, поэтому «удалить» означает убрать локальную запись, а не отозвать рассылку.
+>
+> **Контекстное меню узла (4.4) реализовано — Stage 4 закрыт.** Правый клик по узлу открывает
+> меню: просмотр деталей / touch (heartbeat) / сброс предохранителя / удаление из реестра —
+> каждое действие идёт в реальный endpoint. Подтверждение спрашивается только у
+> деструктивного (удаление) и объясняет, что peer исчезнет из mesh до повторной
+> регистрации. Меню закрывается по Escape, по клику вне и после выбора; обработчики
+> снимаются при размонтировании.
+> Router explorer (4.5) сделан как routing inspector в рамках Stage 6.4.
+>
+> Попутно исправлены ещё два бага:
+> - **`MeshDashboardDto` был написан руками с `topology: unknown`** — эндпоинт dashboard не
+>   имел response schema. Схема добавлена, типы теперь генерируются из документа.
+> - **Два пункта навигации показывали сырые ключи i18n**: `activity.context` и `activity.llm`
+>   отсутствовали в обоих локалях, поэтому vue-i18n откатывался на печать ключа — в сайдбаре
+>   буквально отображалось `activity.context`. Тихий фолбэк vue-i18n делал это невидимым для
+>   существующего теста «нет пустых рендеров». Добавлен `view-registry.test.ts`, проверяющий,
+>   что каждый `labelKey` резолвится в en и ru.
+
 📄 [tasks/stage_04_mesh_explorer.md](tasks/stage_04_mesh_explorer.md)
 
 ---
@@ -340,6 +395,12 @@ tool-цикла; выбранный «быстрый путь» отвергну
 **Зависимости от бэкенда:** нет (текущий tools/MCP API; MCP add/remove через PATCH config, warning restart до Stage 6)
 
 **Результат:** Tools list (enable/disable/health), MCP servers (list/add/edit/delete/reload), pre-check MCP before push.
+
+> **Статус:** list/detail/reload — Stage 5. Add/edit/delete — **Stage 5b, реализовано**. Отдельных
+> write-endpoints нет намеренно: `McpClientService` реализует `IConfigReload`, поэтому запись
+> идёт через `PATCH /api/config` (`mcp.servers`), а list-endpoint возвращает живой конфиг
+> каждого сервера, чтобы редактор мог его round-trip'ить. Попутно исправлен дефект:
+> `Enabled` не учитывался клиентской стороной — выключенные серверы всё равно подключались.
 
 📄 [tasks/stage_05_tools_mcp.md](tasks/stage_05_tools_mcp.md)
 
@@ -358,6 +419,30 @@ tool-цикла; выбранный «быстрый путь» отвергну
 
 **Результат:** LLM/roles/mesh/quotas/context budget editor, raw config editor с diff, restart button (supervisor protocol), MCP hot-reload (без restart), C# file-based apps test-run через sandbox, context distillation UI, Postgres centralized storage config.
 
+> **Статус:** 6.1 raw editor ✅ · 6.2 `LlmView` ✅ · 6.4 mesh inspector ✅ · 6.5 quotas ✅ · 6.6 context ✅ ·
+> **6.3 roles editor ✅** (см. ниже). Не реализовано: Postgres config (6.12).
+>
+> **Про roles editor (6.3):** роль хранится в `WebApi:ApiKeys` / `keys.json`, а не в `AppConfig`,
+> поэтому `PATCH /api/config` её не покрывает — написан отдельный write-surface `/api/auth/keys`.
+> Ключ **никогда** не читается наружу: Studio адресует ключи по необратимому fingerprint, а
+> сгенерированный ключ возвращается ровно один раз. Дополнительно:
+> `ApiKeyMiddleware` больше не захватывает набор ключей на весь процесс — набор читается через
+> `ApiKeyStore` на каждый запрос, поэтому смена роли применяется сразу, а не после рестарта;
+> удаление/понижение ключа отзывает выданные им сессии.
+
+> - **Postgres config (6.12) реализован как staging-редактор, не как live-toggle.** При разведке
+>   вскрылось хуже: `Storage:SessionStore` лежит в `AppConfig`, поэтому `GET /api/config` отдавал
+>   наружу `connectionString` (с паролем), четыре `llm.*.apiKey`, `telegram.botToken` и signing key
+>   — любому аутентифицированному клиенту, включая роль `contribute`. Исправлено: `ConfigRedactor`
+>   маскирует значения по **имени свойства**, а `PATCH` вырезает маркер перед merge, чтобы
+>   round-trip из Studio не затирал реальный секрет.
+>   Сам редактор: выбор провайдера + write-only строка подключения, system-only. **Живое
+>   переключение сознательно не предлагается** по двум причинам, обе показаны в UI: (1) `ISessionStore`
+>   выбирается условной DI-регистрацией на старте — живая смена невозможна; (2) `PostgresSessionStore`
+>   реализован частично — durable tasks, checkpoints, эскалации, sandbox и skill-evaluations кидают
+>   `NotImplementedException` (task_103). Удобный переключатель подставил бы оператора под хранилище,
+>   падающее на пяти семействах функций.
+
 📄 [tasks/stage_06_config_restart.md](tasks/stage_06_config_restart.md)
 
 ---
@@ -369,6 +454,21 @@ tool-цикла; выбранный «быстрый путь» отвергну
 **Зависимости от бэкенда:** нет (Studio orchestrates parallel `/api/chat`)
 
 **Результат:** Multi-agent chat (columns side-by-side), LLM-judge (один агент-судья) + Manual pick. Voting + Merge = next gen. Notifications для async operations.
+
+> **Статус: 7.1–7.5 реализованы.** `stores/consensus.ts` + `views/ConsensusView.vue` +
+> `components/consensus/{AgentSelector,ResponseColumn,LlmJudgePanel}.vue`. Бэкенд не
+> потребовался: fan-out идёт через `connections.clientFor` (несколько клиентов сразу),
+> судья — обычный `/api/chat`. Ключевое решение: раунд **частично устойчив** — ошибка
+> одного агента не выбрасывает ответы остальных (не `Promise.all`, а независимый settle).
+>
+> **Переименование:** вью approvals/escalations раньше назывался «Consensus», что
+> совпадало с этим Stage. Переименован в **Decisions** (`DecisionsView.vue`), чтобы
+> термин «консилиум» принадлежал только multi-agent фиче.
+>
+> Отклонение от task-файла: вместо `markdown-it` + `highlight.js` ответы рендерятся
+> plain text с `whitespace-pre-wrap`, как в `ChatView` — оба пакета не являются
+> зависимостями, а рендерить markdown только здесь означало бы, что один и тот же ответ
+> агента выглядит по-разному в двух вью. Voting + Merge — по-прежнему next gen.
 
 📄 [tasks/stage_07_consensus.md](tasks/stage_07_consensus.md)
 
@@ -389,6 +489,25 @@ tool-цикла; выбранный «быстрый путь» отвергну
 
 **Production (Stage 8b):** hercules-workflow-server. Полный BPMN (parallel/exclusive/inclusive gateways, timer/error/escalation events, sub-processes). Graph stored в workflow-server. Workflow templates (3-5 + 1-2 corporate). Human-in-the-loop (AwaitingInputContext).
 
+> **Статус: авторство сделано, исполнение — нет (task_105).**
+>
+> - **Backend-дефект исправлен.** `SaveWorkflowRequest` не содержал `Id`, поэтому
+>   «save (create or update)» был только create: id всегда генерировался заново, и
+>   редактирование workflow **молча создавало дубликат**. Добавлен `Id` + 404 на
+>   неизвестный id (иначе upsert втихую вставил бы опечатку как новый definition).
+>   Покрыто тестами `SqliteWorkflowDefinitionStoreTests`.
+> - **Studio:** `workflow/graph.ts` (модель + структурная валидация, 13 unit-тестов) и
+>   `components/workflow/GraphEditor.vue` — создание и **in-place**-редактирование через
+>   существующий `POST /api/workflows`.
+> - **Форма графа** взята из `tasks/stage_08_workflow.md` и совпадает с типами, которые
+>   workflow-server уже anticipates в `Models.cs` (`StartNode`, `ServiceTaskNode`,
+>   `ConditionalNode`). Это authoring-shape; формальную схему и executor по-прежнему
+>   определяет task_105.
+> - **Не canvas.** Vue Flow (Stage 4) не добавлен: он зависит от типизированной
+>   `WorkflowGraph`, которой пока нет. Модель здесь — плоские данные, поэтому её можно
+>   отрисовать канвасом позже без изменения того, что хранится.
+> - **Run по-прежнему 501** и в UI подписан как нереализованный.
+
 📄 [tasks/stage_08_workflow.md](tasks/stage_08_workflow.md)
 
 ---
@@ -398,6 +517,11 @@ tool-цикла; выбранный «быстрый путь» отвергну
 **Цель:** Production-ready Windows installer + tray + auto-updater + tests.
 
 **Результат:** NSIS installer + portable zip, tray icon, auto-updater (GitHub Releases), native notifications, CI (GitHub Actions Windows), Vitest unit tests, Playwright E2E, Biome lint, TS strict.
+
+> **Статус:** CI **реализовано** — [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml):
+> агент (.NET 10, restore/build/test + trx-артефакты), Studio (typecheck → lint → unit → build →
+> E2E на Chromium) и отдельная проверка свежести `openapi.json`. Установщик/tray/auto-updater
+> отменены вместе с десктопной сборкой (PWA вместо них).
 
 📄 [tasks/stage_09_packaging.md](tasks/stage_09_packaging.md)
 

@@ -123,7 +123,7 @@
 ## Links
 - Backlog: [../backlog.md](../backlog.md)
 - task_018 (durable task lifecycle): [completed/task_018.md](completed/task_018.md) — базовая инфраструктура
-- task_103 (ISessionStore + PostgresSessionStore): [completed/task_103.md](completed/task_103.md) — интерфейс, который мы тут дополняем
+- task_103 (ISessionStore + PostgresSessionStore): [](task_103.md) — интерфейс, который мы тут дополняем
 - task_105 (Workflow graph + executor): [task_105.md](task_105.md) — потребитель checkpoint API (follow-up)
 - task_107 (Parent/child task relationships): [task_107.md](task_107.md) — follow-up
 
@@ -135,5 +135,5 @@
 src/agent/Tasks/TaskExecutionService.cs (refactor), src/agent/Tasks/ITaskExecutionService.cs, src/agent/Storage/SqliteSessionStore.cs (add table)
 
 ## Links
-- Studio Stage 8: [../EPIC_Hercules_Studio/tasks/stage_08_workflow.md](../EPIC_Hercules_Studio/tasks/stage_08_workflow.md)
+- Studio Stage 8: [../EPIC_Hercules_Studio/tasks/stage_08_workflow.md](../../EPIC_Hercules_Studio/tasks/stage_08_workflow.md)
 - Backlog: [../backlog.md](../backlog.md)

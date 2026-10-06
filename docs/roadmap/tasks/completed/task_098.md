@@ -7,7 +7,7 @@
 **Studio Stage:** 1
 
 ## Goal
-Реализовать CheckIn/CheckOut протокол: пока одна Studio подключена (contribute key), агент "Checked Out", второе подключение невозможно. System key может подключаться параллельно (read-only monitor). См. [ADR-0005](../EPIC_Hercules_Studio/adr/0005-checkin-checkout.md).
+Реализовать CheckIn/CheckOut протокол: пока одна Studio подключена (contribute key), агент "Checked Out", второе подключение невозможно. System key может подключаться параллельно (read-only monitor). См. [ADR-0005](../../../EPIC_Hercules_Studio/adr/0005-checkin-checkout.md).
 
 ## Acceptance criteria
 
@@ -109,5 +109,5 @@ src/agent/Hercules.WebApi/Controllers/SystemController.cs (new), src/agent/Check
 - Manual smoke (`dotnet run` + curl) не выполнен в cron-окружении; покрыт 25 unit-тестами + DI регистрацией.
 
 ## Links
-- ADR-0005: [../EPIC_Hercules_Studio/adr/0005-checkin-checkout.md](../EPIC_Hercules_Studio/adr/0005-checkin-checkout.md)
-- Backlog: [../backlog.md](../backlog.md)
+- ADR-0005: [../EPIC_Hercules_Studio/adr/0005-checkin-checkout.md](../../../EPIC_Hercules_Studio/adr/0005-checkin-checkout.md)
+- Backlog: [../backlog.md](../../backlog.md)

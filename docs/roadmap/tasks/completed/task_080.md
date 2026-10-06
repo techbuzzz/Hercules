@@ -39,9 +39,9 @@ src/agent/Program.cs, src/agent/Hercules.WebApi/Program.cs, src/agent/Lifecycle/
 Drain timeout 30s может задержать shutdown; configurable. In-flight tracker добавляет overhead на каждый request (Interlocked Increment/Decrement — minimal). Rollback: убрать ApplicationStopping callback (но in-flight запросы теряются при deploy).
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)
 
 ## Implementation notes (2026-08-16)
 

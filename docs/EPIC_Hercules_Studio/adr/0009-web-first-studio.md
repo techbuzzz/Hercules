@@ -83,14 +83,22 @@ timeout default:
   (MCP servers, security ops, trust admission, backup, rollout, quotas, SLO, mesh
   profiles/router, profile editor). Workflow execution remains a backend stub (task_105).
 
-### Not yet decided — scope of the Stage 0–9 product roadmap
+### Scope of the Stage 0–9 product roadmap — CONFIRMED in scope
 
-A separate question — whether this migration is the *entire* goal, or whether Stage 0–9's
-functional requirements (Monaco, Vue Flow, MCP CRUD, distillation/Postgres, consensus
-engine, BPMN designer, API codegen; 0 done / 243 open) are also in scope — was asked on
-2026-10-06 and answered by **timeout with the recommended option auto-selected, not by the
-owner**. It is therefore **unconfirmed**, and this ADR does not settle it. Until the owner
-confirms, that work remains arguably in scope. Tracked in `VERIFICATION.md`.
+Whether this migration is the *entire* goal, or whether Stage 0–9's functional requirements
+(Monaco, Vue Flow, MCP CRUD, distillation/Postgres, consensus engine, BPMN designer, API
+codegen) are also in scope, was asked twice on 2026-10-06. The first
+questionnaire **auto-selected the recommended default on timeout** and was therefore not an
+owner decision. It was re-asked with explicit confirmation required, and the owner answered:
+**the Stage 0–9 roadmap IS in scope.**
+
+At the time of that question the roadmap stood at "0 done / 243 open". That figure is
+historical, not current: the stages named above — API codegen, Monaco, MCP CRUD, Vue Flow,
+consensus, context distillation — have since been delivered. See
+`VERIFICATION.md#what-remains` for the per-stage breakdown; only **task_105** is still open.
+
+This ADR therefore governs *how Studio is built* (web-first), not *what it must eventually do*.
+It does not retire Stage 0–9; they remain the working backlog. Tracked in `VERIFICATION.md`.
 
 The capability contract, not any particular file, is the extension point. A future desktop
 adapter would be selected in `platform/index.ts` without touching views or stores.

@@ -39,9 +39,9 @@ src/agent/Cache/CacheService.cs, src/agent/Cache/CacheEntry.cs (new, mutable), s
 `Lazy<Task>` dedup может deadlock если factory re-enters cache. Stampede dedup добавляет `await` на concurrent misses. Rollback: вернуть non-atomic GetOrSet (но stampede останется).
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)
 
 ## Implementation notes (2026-08-16)
 

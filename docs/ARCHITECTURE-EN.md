@@ -28,9 +28,11 @@ Hercules consists of a reusable **agent core** and three **façade interfaces**
 
 ## Layers
 
-### 1. Interfaces (`CLI/`, `Telegram/`, `Hercules.WebApi/`, `hercules-web/`)
+### 1. Interfaces (`CLI/`, `Telegram/`, `Hercules.WebApi/` + Studio)
 Accept user input, call `AgentCore.HandleAsync()`, and display the result.
 The Web API uses `Agent/WebApiAdapter.cs` (DTO + mapping) as a thin layer over the core.
+It also serves the Studio SPA at `/ui` (ADR-0009), so the web UI and the API are one
+process; `hercules-web/` (Astro) is deprecated.
 
 ### 2. Agent Core (`Agent/`)
 - **`AgentCore`** — orchestration: load context → route → call LLM → log →

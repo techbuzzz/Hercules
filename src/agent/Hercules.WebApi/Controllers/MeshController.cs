@@ -2,6 +2,7 @@ using Hercules.Config;
 using Hercules.Mesh;
 using Hercules.Mesh.Auth;
 using Hercules.Mesh.Dashboard;
+using Hercules.WebApi.Contracts;
 using Hercules.Mesh.Discovery;
 using Hercules.Mesh.Policy;
 using Hercules.Mesh.Router;
@@ -629,27 +630,31 @@ public static class MeshController
                 candidates = await router.RouteAsync(capability, ct);
             }
 
-            return Results.Ok(new
+            return Results.Ok(new MeshRoutesResponseDto
             {
-                capability,
-                count = candidates.Count,
-                candidates = candidates.Select(c => new
-                {
-                    c.AgentId,
-                    c.DisplayName,
-                    c.Endpoint,
-                    c.HealthScore,
-                    c.LatencyMs,
-                    c.QualityScore,
-                    c.TrustLevel,
-                    c.CompositeScore,
-                    c.CostHintUsd,
-                    c.CircuitState,
-                    c.LastSeen,
-                    c.TrustPassed
-                })
+                Capability = capability,
+                Count = candidates.Count,
+                Candidates = candidates.Select(c => new MeshRouteCandidateDto
+                    {
+                        AgentId = c.AgentId,
+                        DisplayName = c.DisplayName,
+                        Endpoint = c.Endpoint,
+                        HealthScore = c.HealthScore,
+                        LatencyMs = c.LatencyMs,
+                        QualityScore = c.QualityScore,
+                        TrustLevel = c.TrustLevel,
+                        CompositeScore = c.CompositeScore,
+                        CostHintUsd = c.CostHintUsd,
+                        CircuitState = c.CircuitState.ToString(),
+                        LastSeen = c.LastSeen,
+                        TrustPassed = c.TrustPassed
+                    })
+                    .ToList()
             });
-        }).WithName("MeshRouterRoutes").WithTags("Mesh");
+        })
+          .WithName("MeshRouterRoutes")
+          .WithTags("Mesh")
+          .Produces<MeshRoutesResponseDto>(200);
 
         // GET /api/mesh/router/health — health scores for all tracked peers
         app.MapGet("/api/mesh/router/health", (
@@ -682,7 +687,10 @@ public static class MeshController
             {
                 return Results.Problem(ex.Message, statusCode: 500, title: "Dashboard error");
             }
-        }).WithName("MeshDashboard").WithTags("Mesh");
+        }).WithName("MeshDashboard").WithTags("Mesh")
+            // Stage 4: annotating this lets the Studio client derive the topology
+            // node model from the document instead of hand-writing `topology: unknown`.
+            .Produces<Hercules.Mesh.Dashboard.MeshDashboardDto>(200);
 
         // GET /api/mesh/topology — agent list with health/trust/latency
         app.MapGet("/api/mesh/topology", async (MeshDashboardService dashboard, CancellationToken ct) =>
@@ -696,14 +704,14 @@ public static class MeshController
         {
             var data = await dashboard.GetHealthAsync(ct);
             return Results.Ok(data);
-        }).WithName("MeshHealth").WithTags("Mesh");
+        }).WithName("MeshHealth").WithTags("Mesh").Produces<MeshHealthDto>(200);
 
         // GET /api/mesh/denials — recent policy denials from audit log
         app.MapGet("/api/mesh/denials", async (MeshDashboardService dashboard, int limit = 50, CancellationToken ct = default) =>
         {
             var data = await dashboard.GetPolicyDenialsAsync(ct);
             return Results.Ok(data);
-        }).WithName("MeshPolicyDenials").WithTags("Mesh");
+        }).WithName("MeshPolicyDenials").WithTags("Mesh").Produces<MeshPolicyDenialsDto>(200);
 
         // GET /api/mesh/skills/heatmap — skill usage heatmap
         app.MapGet("/api/mesh/skills/heatmap", (MeshDashboardService dashboard) =>

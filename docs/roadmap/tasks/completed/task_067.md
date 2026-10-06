@@ -79,6 +79,6 @@ src/agent/Mesh/Backends/Redis/, src/agent/Mesh/Backends/Redis/RedisMeshBus.cs, s
 Зависимость от внешнего сервиса; graceful degradation в in-process режим при недоступности.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

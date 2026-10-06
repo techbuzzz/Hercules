@@ -107,5 +107,5 @@
 src/agent/Context/ContextDistillationService.cs (new), src/agent/Context/ContextService.cs (extend), src/agent/Hercules.WebApi/Controllers/ContextController.cs (extend)
 
 ## Links
-- Studio Stage 6: [../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md](../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md)
-- Backlog: [../backlog.md](../backlog.md)
+- Studio Stage 6: [../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md](../../../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md)
+- Backlog: [../backlog.md](../../backlog.md)

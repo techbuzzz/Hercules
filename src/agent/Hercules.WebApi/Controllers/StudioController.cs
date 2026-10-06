@@ -1,5 +1,6 @@
 using Hercules.Mesh;
 using Hercules.WebApi.Auth;
+using Hercules.WebApi.Contracts;
 using Hercules.WebApi.Config;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -36,22 +37,29 @@ public static class StudioController
             var session = sessions.Create(
                 role,
                 string.IsNullOrWhiteSpace(manifest.AgentId) ? "hercules-agent" : manifest.AgentId,
-                string.IsNullOrWhiteSpace(manifest.DisplayName) ? "Hercules Agent" : manifest.DisplayName);
+                string.IsNullOrWhiteSpace(manifest.DisplayName) ? "Hercules Agent" : manifest.DisplayName,
+                // Stage 6.3: bind the session to the key that minted it so deleting or
+                // demoting that key can revoke this session instead of letting it keep
+                // the old role until TTL.
+                http.Items.TryGetValue(ApiKeyMiddleware.EntryItemKey, out var entry) && entry is ApiKeyEntry matched
+                    ? ApiKeyStore.Fingerprint(matched.Key)
+                    : null);
 
             // Deliberately does not echo the API key or log it.
-            return Results.Ok(new
+            return Results.Ok(new StudioSessionResponseDto
             {
-                token = session.Token,
-                role = session.Role.ToString().ToLowerInvariant(),
-                agentId = session.AgentId,
-                displayName = session.DisplayName,
-                expiresAt = session.ExpiresAt,
-                capabilities = session.Capabilities,
-                ttlSeconds = (int)sessions.Ttl.TotalSeconds,
+                Token = session.Token,
+                Role = session.Role.ToString().ToLowerInvariant(),
+                AgentId = session.AgentId,
+                DisplayName = session.DisplayName,
+                ExpiresAt = session.ExpiresAt,
+                Capabilities = session.Capabilities,
+                TtlSeconds = (int)sessions.Ttl.TotalSeconds,
             });
         })
         .WithName("CreateStudioSession")
-        .WithSummary("Exchange an API key for a short-lived Studio session token");
+        .WithSummary("Exchange an API key for a short-lived Studio session token")
+        .Produces<StudioSessionResponseDto>(200);
 
         // GET /api/studio/session — whoami for the current token.
         group.MapGet("/session", (HttpContext http) =>
@@ -59,17 +67,20 @@ public static class StudioController
             var session = StudioSessionStore.From(http);
             if (session is null) return Results.Problem("No active session", statusCode: 401);
 
-            return Results.Ok(new
+            return Results.Ok(new StudioSessionResponseDto
             {
-                role = session.Role.ToString().ToLowerInvariant(),
-                agentId = session.AgentId,
-                displayName = session.DisplayName,
-                expiresAt = session.ExpiresAt,
-                capabilities = session.Capabilities,
+                Token = "",
+                Role = session.Role.ToString().ToLowerInvariant(),
+                AgentId = session.AgentId,
+                DisplayName = session.DisplayName,
+                ExpiresAt = session.ExpiresAt,
+                Capabilities = session.Capabilities,
+                TtlSeconds = 0,
             });
         })
         .WithName("GetStudioSession")
-        .WithSummary("Describe the current Studio session");
+        .WithSummary("Describe the current Studio session")
+        .Produces<StudioSessionResponseDto>(200);
 
         // DELETE /api/studio/session — drop every session (used on sign-out/drain).
         group.MapDelete("/session", (StudioSessionStore sessions) =>

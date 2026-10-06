@@ -83,6 +83,6 @@ src/agent/Storage/SqliteSessionStore.cs, src/agent/Agent/AgentCore.cs, src/agent
 Connection-per-operation увеличивает число открытых файловых дескрипторов; WAL + shared cache минимизирует overhead. SemaphoreSlim сериализует доступ — acceptable для single-node агента, но ограничивает throughput под нагрузкой. Rollback: вернуть sync-обёртки (git revert).
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

@@ -50,7 +50,14 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -68,7 +75,17 @@
         "operationId": "ListSkills",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SkillDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -138,7 +155,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillDetailDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -174,7 +198,14 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillDetailDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -203,6 +234,41 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      }
+    },
+    "/api/skills/{id}/prompt-history": {
+      "get": {
+        "tags": [
+          "Skills"
+        ],
+        "operationId": "GetSkillPromptHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillPromptHistoryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -639,7 +705,14 @@
         "operationId": "GetConfig",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConfigDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -665,7 +738,14 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigUpdateResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -691,7 +771,14 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigUpdateResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1747,7 +1834,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeshRoutesResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1783,7 +1877,14 @@
         "operationId": "MeshDashboard",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeshDashboardDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1819,7 +1920,14 @@
         "operationId": "MeshHealth",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeshHealthDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1852,7 +1960,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeshPolicyDenialsDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2641,7 +2756,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaStatusResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3083,7 +3205,14 @@
         "operationId": "LlmConfig",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmConfigDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3983,7 +4112,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingApprovalsResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4128,7 +4264,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingEscalationsResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5052,7 +5195,14 @@
         "operationId": "ContextBudget",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextBudgetDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5092,7 +5242,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextSummaryDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5120,7 +5277,14 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextDistillResultDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5225,7 +5389,14 @@
         "operationId": "ListTools",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolsListResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6301,6 +6472,473 @@
         ]
       }
     },
+    "/api/studio/session": {
+      "post": {
+        "tags": [
+          "Studio"
+        ],
+        "summary": "Exchange an API key for a short-lived Studio session token",
+        "operationId": "CreateStudioSession",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioSessionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "Studio"
+        ],
+        "summary": "Describe the current Studio session",
+        "operationId": "GetStudioSession",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudioSessionResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Studio"
+        ],
+        "summary": "Revoke all issued Studio sessions",
+        "operationId": "RevokeStudioSessions",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      }
+    },
+    "/api/auth/keys": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "ListApiKeys",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeysListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "CreateApiKey",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedApiKeyResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      }
+    },
+    "/api/auth/keys/{fingerprint}": {
+      "patch": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "UpdateApiKey",
+        "parameters": [
+          {
+            "name": "fingerprint",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateApiKeyRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyMutationResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "DeleteApiKey",
+        "parameters": [
+          {
+            "name": "fingerprint",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyDeleteResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      }
+    },
+    "/api/code/scan": {
+      "post": {
+        "tags": [
+          "CodeRun"
+        ],
+        "operationId": "ScanCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CodeScanRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeScanResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      }
+    },
+    "/api/code/run": {
+      "post": {
+        "tags": [
+          "CodeRun"
+        ],
+        "operationId": "StartCodeRun",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RunRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartCodeRunResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      }
+    },
+    "/api/code/run/{runId}": {
+      "get": {
+        "tags": [
+          "CodeRun"
+        ],
+        "operationId": "GetCodeRun",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodeRunStatusDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      }
+    },
+    "/api/code/run/{runId}/stream": {
+      "get": {
+        "tags": [
+          "CodeRun"
+        ],
+        "operationId": "StreamCodeRun",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      }
+    },
+    "/api/consensus/sessions": {
+      "post": {
+        "tags": [
+          "Consensus"
+        ],
+        "operationId": "SaveConsensusSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveConsensusSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsensusSessionDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      },
+      "get": {
+        "tags": [
+          "Consensus"
+        ],
+        "operationId": "ListConsensusSessions",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsensusSessionListDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      }
+    },
+    "/api/consensus/sessions/{id}": {
+      "get": {
+        "tags": [
+          "Consensus"
+        ],
+        "operationId": "GetConsensusSession",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsensusSessionDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
+      }
+    },
     "/api/mcp/servers": {
       "get": {
         "tags": [
@@ -6309,7 +6947,14 @@
         "operationId": "ListMcpServers",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServersListResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6337,7 +6982,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerDetailDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6355,7 +7007,14 @@
         "operationId": "ReloadMcpServers",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpReloadResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6368,6 +7027,24 @@
   },
   "components": {
     "schemas": {
+      "AgentConfigDto": {
+        "required": [
+          "config",
+          "source"
+        ],
+        "type": "object",
+        "properties": {
+          "config": {
+            "type": "object",
+            "description": "The live configuration. Open-ended by design."
+          },
+          "source": {
+            "type": "string",
+            "description": "Where the configuration came from (currently always \"runtime\")."
+          }
+        },
+        "description": "    Response shape for `GET /api/config`.\r\n    The endpoint returns an anonymous object, so the OpenAPI document described\r\nnothing and Studio had to hand-write ConfigDto. The live configuration\r\nitself is RuntimeConfigStore.Current, whose keys are open-ended — it is\r\nexposed as a JSON object rather than a closed set of members."
+      },
       "AgentManifest": {
         "type": "object",
         "properties": {
@@ -6450,6 +7127,141 @@
           }
         }
       },
+      "ApiKeyDeleteResponseDto": {
+        "required": [
+          "fingerprint",
+          "systemCount",
+          "revokedSessions"
+        ],
+        "type": "object",
+        "properties": {
+          "fingerprint": {
+            "type": "string"
+          },
+          "systemCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "revokedSessions": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ApiKeyMutationResponseDto": {
+        "required": [
+          "key",
+          "systemCount",
+          "revokedSessions"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/ApiKeySummaryDto"
+          },
+          "systemCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "revokedSessions": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ApiKeySummaryDto": {
+        "required": [
+          "fingerprint",
+          "role",
+          "label"
+        ],
+        "type": "object",
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "description": "Non-reversible identifier used to address this key in the write endpoints."
+          },
+          "role": {
+            "type": "string",
+            "description": "`contribute` or `system`."
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "description": "Display-only hint about the key's shape (e.g. `hc_sys_…`). Derived from the\r\nprefix before the random token, never from the token itself."
+          }
+        },
+        "description": "One API key as exposed to Studio. The raw key is **never** included — a key the\r\nbrowser cannot read is one the browser cannot leak. Keys are addressed by\r\nstring ApiKeySummaryDto.Fingerprint, a non-reversible id, so Studio can edit and delete a key\r\nit has never seen the value of."
+      },
+      "ApiKeysListResponseDto": {
+        "required": [
+          "count",
+          "contributeCount",
+          "systemCount",
+          "keys"
+        ],
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "contributeCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "systemCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiKeySummaryDto"
+            }
+          },
+          "currentFingerprint": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Fingerprint of the key backing the calling session, if any."
+          }
+        }
+      },
       "ApplyFleetTemplateRequest": {
         "type": "object",
         "properties": {
@@ -6463,6 +7275,47 @@
         "properties": {
           "conflictResolution": {
             "$ref": "#/components/schemas/ConflictResolution"
+          }
+        }
+      },
+      "ApprovalDto": {
+        "required": [
+          "requestId",
+          "toolName",
+          "requestedAt",
+          "status"
+        ],
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toolName": {
+            "type": "string"
+          },
+          "argumentsJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestedAt": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
           }
         }
       },
@@ -6622,6 +7475,68 @@
           }
         }
       },
+      "ChatResponseDto": {
+        "required": [
+          "answer",
+          "mode",
+          "confidence",
+          "provider",
+          "skill",
+          "toolUsed",
+          "proposeSkillForInput",
+          "proposeImproveSkillId",
+          "proposeImproveSkillName"
+        ],
+        "type": "object",
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "skill": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/SkillDto"
+              }
+            ]
+          },
+          "toolUsed": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proposeSkillForInput": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proposeImproveSkillId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proposeImproveSkillName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CheckInRequestDto": {
         "type": "object",
         "properties": {
@@ -6640,9 +7555,431 @@
         },
         "description": "DTO для checkin / checkout / heartbeat."
       },
+      "CodeRunResultDto": {
+        "required": [
+          "exitCode",
+          "stdout",
+          "stderr",
+          "durationMs",
+          "status",
+          "blockedPatterns",
+          "success"
+        ],
+        "type": "object",
+        "properties": {
+          "exitCode": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "stdout": {
+            "type": "string"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "durationMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "blockedPatterns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sessionDir": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CodeRunStatusDto": {
+        "required": [
+          "runId",
+          "language",
+          "status",
+          "startedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "skillId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "language": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CodeRunResultDto"
+              }
+            ]
+          }
+        }
+      },
+      "CodeScanRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "description": "Stage 3.5 — scan-only request for the sandbox's dangerous-code rules."
+      },
+      "CodeScanResponseDto": {
+        "required": [
+          "allowed",
+          "reasons",
+          "lineNumbers"
+        ],
+        "type": "object",
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Human-readable reason, e.g. ``File.Delete` matched at line 42`."
+          },
+          "lineNumbers": {
+            "type": "array",
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            },
+            "description": "1-based line numbers, parallel to IReadOnlyList&lt;string&gt; CodeScanResponseDto.Reasons."
+          }
+        },
+        "description": "    Result of `DangerousCodeScanner` over a snippet.\r\n    Mirrors DangerousCodeScanner.ScanResult, which stops at the first match — so\r\nIReadOnlyList&lt;string&gt; CodeScanResponseDto.Reasons and IReadOnlyList&lt;int&gt; CodeScanResponseDto.LineNumbers are parallel lists of one entry\r\nrather than every violation."
+      },
+      "ConfigUpdateResponseDto": {
+        "required": [
+          "status",
+          "config"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "config": {
+            "type": "object"
+          }
+        },
+        "description": "Response shape for `PATCH`/`PUT /api/config`."
+      },
       "ConflictResolution": {
         "type": "integer",
         "default": 2
+      },
+      "ConsensusAnswerDto": {
+        "required": [
+          "agentName",
+          "connectionId",
+          "answer"
+        ],
+        "type": "object",
+        "properties": {
+          "agentName": {
+            "type": "string"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          }
+        },
+        "description": "One agent's answer as stored in a consensus session."
+      },
+      "ConsensusSessionDto": {
+        "required": [
+          "id",
+          "prompt",
+          "selectedAgents",
+          "responses",
+          "aggregationMode",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "selectedAgents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "responses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsensusAnswerDto"
+            }
+          },
+          "aggregationMode": {
+            "type": "string",
+            "description": "`manual` or `llm-judge`."
+          },
+          "result": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "judgeRationale": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "description": "A stored consensus round (Stage 7.8). Answers are kept verbatim."
+      },
+      "ConsensusSessionListDto": {
+        "required": [
+          "count",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsensusSessionDto"
+            }
+          }
+        }
+      },
+      "ContextBudgetDto": {
+        "required": [
+          "maxTokens",
+          "usedTokens",
+          "remainingTokens",
+          "budgetUsedPct"
+        ],
+        "type": "object",
+        "properties": {
+          "maxTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "usedTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "remainingTokens": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "budgetUsedPct": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Used share of the budget, one decimal. 0 when no budget is configured.",
+            "format": "double"
+          }
+        },
+        "description": "Response shapes for the context / distillation endpoints (Stage 6.6).\r\nNamed so Studio's generated client can describe them."
+      },
+      "ContextDistillResultDto": {
+        "required": [
+          "sessionId",
+          "recentCount",
+          "summariesCreated",
+          "keyFactsExtracted",
+          "tokensBefore",
+          "tokensAfter",
+          "tokenSavingsPct",
+          "summaryMarkdown"
+        ],
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "recentCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "summariesCreated": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "keyFactsExtracted": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tokensBefore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tokensAfter": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tokenSavingsPct": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "summaryMarkdown": {
+            "type": "string"
+          }
+        },
+        "description": "Result of a distillation run."
+      },
+      "ContextSummaryDto": {
+        "required": [
+          "sessionId",
+          "mode",
+          "summary",
+          "empty"
+        ],
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "empty": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateApiKeyRequestDto": {
+        "required": [
+          "role"
+        ],
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "key": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional operator-supplied key. When omitted the agent generates one and returns\r\nit **once** in ApiKeySummaryDto CreatedApiKeyResponseDto.Key — it is not retrievable afterwards."
+          }
+        }
       },
       "CreateBackupRequest": {
         "required": [
@@ -6763,6 +8100,25 @@
             "type": "boolean"
           }
         }
+      },
+      "CreatedApiKeyResponseDto": {
+        "required": [
+          "key"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/ApiKeySummaryDto"
+          },
+          "generatedKey": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Plaintext key, present only when the agent generated it."
+          }
+        },
+        "description": "A newly created key. ApiKeySummaryDto CreatedApiKeyResponseDto.Key is the only time the value is ever returned —\r\nit is not stored in the browser and cannot be re-read through any endpoint."
       },
       "DelegatedTaskAcceptRequest": {
         "required": [
@@ -6940,6 +8296,89 @@
           }
         }
       },
+      "EscalationDto": {
+        "required": [
+          "escalationId",
+          "severity",
+          "status",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "escalationId": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sessionId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "severity": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "actionPlan": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "context": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "payloadJson": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "toolOrIntentName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "resolvedAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "resolvedBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "FleetConflictResolution": {
         "type": "integer",
         "default": 1
@@ -7094,6 +8533,39 @@
         }
       },
       "JsonElement": { },
+      "LlmConfigDto": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "fallback": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "yandexGptModel": {
+            "type": "string"
+          },
+          "ollamaCloudModel": {
+            "type": "string"
+          },
+          "ollamaLocalModel": {
+            "type": "string"
+          },
+          "openAICompatibleEndpoint": {
+            "type": "string"
+          },
+          "openAICompatibleModel": {
+            "type": "string"
+          },
+          "openAICompatibleDisplayName": {
+            "type": "string"
+          }
+        },
+        "description": "Public LLM config DTO (no secrets)."
+      },
       "ManifestAuth": {
         "type": "object",
         "properties": {
@@ -7274,6 +8746,896 @@
           }
         }
       },
+      "McpReloadResponseDto": {
+        "required": [
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "McpServerDefinitionDto": {
+        "required": [
+          "name",
+          "transport",
+          "enabled",
+          "healthCheckEnabled",
+          "timeoutSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "command": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Process arguments for `stdio` transport. Empty for http/sse."
+          },
+          "endpoint": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Absolute URL for `http`/`sse` transport. Null for `stdio`."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "healthCheckEnabled": {
+            "type": "boolean"
+          },
+          "timeoutSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "The *configured* shape of one MCP server, mirroring `McpServerConfig`.\r\nStudio edits this and writes it back through `PATCH /api/config`, which\r\ntriggers `McpClientService`'s diff-driven hot-reload — there is no\r\ndedicated add/remove endpoint because the config store is the write surface."
+      },
+      "McpServerDetailDto": {
+        "required": [
+          "name",
+          "transport",
+          "status",
+          "toolCount",
+          "config"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "toolCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "serverVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "connectedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "config": {
+            "description": "Live configuration, round-trippable into `PATCH /api/config`.",
+            "$ref": "#/components/schemas/McpServerDefinitionDto"
+          }
+        }
+      },
+      "McpServerSummaryDto": {
+        "required": [
+          "name",
+          "transport",
+          "status",
+          "toolCount",
+          "config"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "transport": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "toolCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "connectedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "config": {
+            "description": "Live configuration, round-trippable into `PATCH /api/config`.",
+            "$ref": "#/components/schemas/McpServerDefinitionDto"
+          }
+        },
+        "description": "Response shapes for the MCP endpoints (Stage 0: named so Studio's generated\r\nclient can describe them; the endpoints previously returned anonymous objects\r\nand produced no schema).\r\n\r\nStage 5b additionally carries McpServerDefinitionDto McpServerSummaryDto.Config so the editor can round-trip\r\na server without a second, separately-typed read endpoint."
+      },
+      "McpServersListResponseDto": {
+        "required": [
+          "count",
+          "servers"
+        ],
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpServerSummaryDto"
+            }
+          }
+        }
+      },
+      "MeshAgentDto": {
+        "required": [
+          "agentId",
+          "displayName",
+          "endpoint",
+          "healthScore",
+          "latencyMs",
+          "qualityScore",
+          "trustLevel",
+          "lastSeen",
+          "capabilities"
+        ],
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "healthScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "latencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "qualityScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "trustLevel": {
+            "type": "string"
+          },
+          "lastSeen": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MeshDashboardDto": {
+        "required": [
+          "topology",
+          "traffic",
+          "health",
+          "policyDenials",
+          "skillHeatmap",
+          "evalSummary",
+          "generatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "topology": {
+            "$ref": "#/components/schemas/MeshTopologyDto"
+          },
+          "traffic": {
+            "$ref": "#/components/schemas/MeshTrafficDto"
+          },
+          "health": {
+            "$ref": "#/components/schemas/MeshHealthDto"
+          },
+          "policyDenials": {
+            "$ref": "#/components/schemas/MeshPolicyDenialsDto"
+          },
+          "skillHeatmap": {
+            "$ref": "#/components/schemas/MeshSkillHeatmapDto"
+          },
+          "evalSummary": {
+            "$ref": "#/components/schemas/MeshEvalSummaryDto"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MeshDenialEntryDto": {
+        "required": [
+          "id",
+          "actor",
+          "action",
+          "details",
+          "policyDecision",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "details": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "policyDecision": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MeshEvalRunDto": {
+        "required": [
+          "runId",
+          "scenarioType",
+          "passed",
+          "score",
+          "successRate",
+          "assertionsPassed",
+          "assertionsFailed",
+          "startTimeUtc",
+          "durationMs"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "scenarioType": {
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "score": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "successRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "assertionsPassed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "assertionsFailed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "startTimeUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "MeshEvalSummaryDto": {
+        "required": [
+          "totalRuns",
+          "passedRuns",
+          "failedRuns",
+          "recentRuns"
+        ],
+        "type": "object",
+        "properties": {
+          "totalRuns": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "passedRuns": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "failedRuns": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "recentRuns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeshEvalRunDto"
+            }
+          }
+        }
+      },
+      "MeshHealthDto": {
+        "required": [
+          "agents",
+          "healthyCount",
+          "degradedCount",
+          "unhealthyCount"
+        ],
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeshHealthEntryDto"
+            }
+          },
+          "healthyCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "degradedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "unhealthyCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "MeshHealthEntryDto": {
+        "required": [
+          "agentId",
+          "displayName",
+          "healthScore",
+          "healthStatus",
+          "circuitState",
+          "consecutiveFailures",
+          "lastSeen",
+          "avgLatencyMs"
+        ],
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "healthScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "healthStatus": {
+            "type": "string"
+          },
+          "circuitState": {
+            "type": "string"
+          },
+          "consecutiveFailures": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "lastSeen": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "avgLatencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "MeshPolicyDenialsDto": {
+        "required": [
+          "count",
+          "denials"
+        ],
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "denials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeshDenialEntryDto"
+            }
+          }
+        }
+      },
+      "MeshRouteCandidateDto": {
+        "required": [
+          "agentId",
+          "displayName",
+          "endpoint",
+          "healthScore",
+          "latencyMs",
+          "qualityScore",
+          "trustLevel",
+          "compositeScore",
+          "costHintUsd",
+          "circuitState",
+          "trustPassed"
+        ],
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "healthScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "latencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "qualityScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "trustLevel": {
+            "type": "string"
+          },
+          "compositeScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "costHintUsd": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "circuitState": {
+            "type": "string",
+            "description": "Rendered from the `CircuitState` enum so the document stays schema-able."
+          },
+          "lastSeen": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "trustPassed": {
+            "type": "boolean"
+          }
+        },
+        "description": "    Response shapes for the mesh routing query (Stage 6.4).\r\n    GET /api/mesh/router/routes answers \"which peers would serve capability X,\r\nand on what basis\" — the scores, trust verdict and circuit state that produced the\r\nranking. Surfaced in Studio as a routing inspector."
+      },
+      "MeshRoutesResponseDto": {
+        "required": [
+          "capability",
+          "count",
+          "candidates"
+        ],
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string"
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeshRouteCandidateDto"
+            }
+          }
+        }
+      },
+      "MeshSkillHeatmapDto": {
+        "required": [
+          "totalSkills",
+          "skills"
+        ],
+        "type": "object",
+        "properties": {
+          "totalSkills": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeshSkillHeatmapEntryDto"
+            }
+          }
+        }
+      },
+      "MeshSkillHeatmapEntryDto": {
+        "required": [
+          "skillId",
+          "skillName",
+          "totalUses",
+          "successRate",
+          "version",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "skillId": {
+            "type": "string"
+          },
+          "skillName": {
+            "type": "string"
+          },
+          "totalUses": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "successRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        }
+      },
+      "MeshTopologyDto": {
+        "required": [
+          "agentCount",
+          "agents",
+          "generatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "agentCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeshAgentDto"
+            }
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "MeshTrafficDto": {
+        "required": [
+          "totalRequests",
+          "fanOutRequests",
+          "meshDelegations",
+          "avgLatencyMs",
+          "meshRouterHits",
+          "circuitBreakerRejections",
+          "from",
+          "to"
+        ],
+        "type": "object",
+        "properties": {
+          "totalRequests": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "fanOutRequests": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "meshDelegations": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "avgLatencyMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "meshRouterHits": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "circuitBreakerRejections": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PendingApprovalsResponseDto": {
+        "required": [
+          "count",
+          "approvals"
+        ],
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "approvals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovalDto"
+            }
+          }
+        },
+        "description": "    Response shapes for the human-in-the-loop endpoints (approvals and escalations).\r\n    Stage 0: Studio's client is generated from the agent's OpenAPI document. Endpoints\r\nreturning anonymous objects produce no response schema, so Studio's types were\r\nhand-written and could drift silently. These named shapes let the endpoints\r\ndeclare themselves via .Produces&lt;T&gt;(200) without changing the JSON.\r\n    Non-nullable members use required: without it the emitter omits them from the\r\nschema's required array and every field generates as optional, so the client\r\nstops reflecting what the agent actually serialises."
+      },
+      "PendingEscalationsResponseDto": {
+        "required": [
+          "count",
+          "escalations"
+        ],
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "escalations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EscalationDto"
+            }
+          }
+        }
+      },
       "PromoteCanaryRequest": {
         "required": [
           "targetAgentId"
@@ -7291,6 +9653,172 @@
         "properties": {
           "bundleId": {
             "type": "string"
+          }
+        }
+      },
+      "QuotaCountersDto": {
+        "required": [
+          "tokensUsedToday",
+          "messagesUsedToday",
+          "requestsUsedToday",
+          "storageUsedMb",
+          "costUsedTodayCents",
+          "activeConcurrentRequests",
+          "activeSkillExecutions"
+        ],
+        "type": "object",
+        "properties": {
+          "tokensUsedToday": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "messagesUsedToday": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "requestsUsedToday": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "storageUsedMb": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "costUsedTodayCents": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "activeConcurrentRequests": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "activeSkillExecutions": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "lastResetDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "QuotaStatusDto": {
+        "required": [
+          "type",
+          "limit",
+          "current",
+          "remaining",
+          "isExceeded",
+          "isHardCap",
+          "usagePercent"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "limit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "current": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "remaining": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "isExceeded": {
+            "type": "boolean"
+          },
+          "isHardCap": {
+            "type": "boolean"
+          },
+          "usagePercent": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "resetAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          }
+        },
+        "description": "    Response shape for `GET /api/quotas` (Stage 6.5).\r\n    IQuotaService is read-only — limits live in AppConfig.Quotas. An\r\n\"editor\" therefore means writing the quotas section via\r\nPATCH /api/config, which the Studio config view already does. This DTO\r\nexists so the live status can be generated rather than hand-written."
+      },
+      "QuotaStatusResponseDto": {
+        "required": [
+          "scope",
+          "scopeId",
+          "counters",
+          "limits"
+        ],
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string"
+          },
+          "scopeId": {
+            "type": "string"
+          },
+          "counters": {
+            "$ref": "#/components/schemas/QuotaCountersDto"
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuotaStatusDto"
+            }
           }
         }
       },
@@ -7475,6 +10003,101 @@
           }
         }
       },
+      "RunRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Source to execute (a file-based C# skill under test, or an editor snippet)."
+          },
+          "language": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "args": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeoutMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "memoryLimitMb": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "workingDir": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "skillId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional skill this run relates to, for correlation in the UI."
+          }
+        },
+        "description": "Body for `POST /api/code/run`."
+      },
+      "SaveConsensusSessionRequest": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "selectedAgents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "responses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsensusAnswerDto"
+            }
+          },
+          "aggregationMode": {
+            "type": "string"
+          },
+          "result": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "judgeRationale": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Request to record a consensus round."
+      },
       "SharedMemoryPublishRequest": {
         "required": [
           "category",
@@ -7500,6 +10123,177 @@
         },
         "description": "Запрос на публикацию shared-факта памяти."
       },
+      "SkillDetailDto": {
+        "required": [
+          "meta",
+          "descriptionMarkdown",
+          "prompt"
+        ],
+        "type": "object",
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/SkillDto"
+          },
+          "descriptionMarkdown": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          }
+        }
+      },
+      "SkillDto": {
+        "required": [
+          "id",
+          "name",
+          "description",
+          "phraseReceivers",
+          "version",
+          "successRate",
+          "totalUses",
+          "createdAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "phraseReceivers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "successRate": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "totalUses": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "deprecatedAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "deprecationReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastEvaluationScore": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "SkillPromptHistoryResponseDto": {
+        "required": [
+          "skillId",
+          "count",
+          "revisions"
+        ],
+        "type": "object",
+        "properties": {
+          "skillId": {
+            "type": "string"
+          },
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkillPromptRevisionDto"
+            }
+          }
+        }
+      },
+      "SkillPromptRevisionDto": {
+        "required": [
+          "version",
+          "prompt",
+          "changedAt",
+          "source"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "changedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string"
+          },
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "description": "Response shapes for skill prompt history (Stage 2: the diff view needs a\r\nprevious version; the agent previously discarded prompt history entirely)."
+      },
+      "StartCodeRunResponseDto": {
+        "required": [
+          "runId"
+        ],
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          }
+        }
+      },
       "StartSessionRequest": {
         "required": [
           "templateName"
@@ -7510,6 +10304,51 @@
             "type": "string"
           }
         }
+      },
+      "StudioSessionResponseDto": {
+        "required": [
+          "token",
+          "role",
+          "agentId",
+          "displayName",
+          "expiresAt",
+          "capabilities",
+          "ttlSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ttlSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        },
+        "description": "    Response shapes for the Studio endpoints added by ADR-0009.\r\n    These were written after the codegen pipeline existed, so they are named from\r\nthe start: an undeclared response shape is exactly the drift that made\r\nStudio's client hand-written and wrong."
       },
       "TaskRetryPolicy": {
         "type": "object",
@@ -7549,6 +10388,127 @@
           }
         }
       },
+      "ToolLimitsDto": {
+        "required": [
+          "maxCallsPerMinute",
+          "timeoutSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "maxCallsPerMinute": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "timeoutSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "ToolSummaryDto": {
+        "required": [
+          "name",
+          "category",
+          "description",
+          "enabled",
+          "allowed",
+          "registeredAt",
+          "source",
+          "supportsHealthCheck",
+          "healthStatus",
+          "consecutiveFailures",
+          "timeoutSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "registeredAt": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "supportsHealthCheck": {
+            "type": "boolean"
+          },
+          "healthStatus": {
+            "type": "string"
+          },
+          "lastCheckedAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "consecutiveFailures": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "sideEffectLevel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requiredPermissions": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "timeoutSeconds": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "limits": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolLimitsDto"
+              }
+            ]
+          }
+        },
+        "description": "    Response shapes for the tool registry.\r\n    ADR / Stage 0: the agent's OpenAPI document is the input to Studio's generated\r\nclient. Endpoints returning anonymous objects cannot be described, so\r\nGET /api/tools had no response schema at all and full client codegen was\r\nimpossible. Naming the shape here lets the endpoint declare it via\r\n.Produces&lt;T&gt;(200) without changing the serialized JSON."
+      },
       "ToolTraceEntry": {
         "required": [
           "toolName",
@@ -7583,6 +10543,38 @@
           },
           "success": {
             "type": "boolean"
+          }
+        }
+      },
+      "ToolsListResponseDto": {
+        "required": [
+          "count",
+          "allowedCount",
+          "tools"
+        ],
+        "type": "object",
+        "properties": {
+          "count": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "allowedCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolSummaryDto"
+            }
           }
         }
       },
@@ -7705,6 +10697,25 @@
           }
         },
         "description": "Request для dry-run evaluation of trust admission policy (task_040).\r\nAllows callers to test a policy decision without actually sending an intent."
+      },
+      "UpdateApiKeyRequestDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional new role; null leaves the current role untouched."
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional new description; null leaves the current description untouched."
+          }
+        }
       },
       "UpdatePackageRequest": {
         "required": [
@@ -7904,6 +10915,18 @@
     },
     {
       "name": "System"
+    },
+    {
+      "name": "Studio"
+    },
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "CodeRun"
+    },
+    {
+      "name": "Consensus"
     },
     {
       "name": "MCP"

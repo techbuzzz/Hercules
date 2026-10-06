@@ -50,10 +50,10 @@
 src/agent/SkillSdk/ (new project), src/agent/CodeExecution/DotnetFileBasedExecutor.cs, src/agent/Tools/skill.code-execution.v1.md
 
 ## Links
-- PLAN-v2: [../../PLAN-v2.md](../../PLAN-v2.md) Stage 2
-- Studio Stage 3: [../EPIC_Hercules_Studio/tasks/stage_03_skill_push.md](../EPIC_Hercules_Studio/tasks/stage_03_skill_push.md)
-- Studio Stage 6: [../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md](../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md)
-- Backlog: [../backlog.md](../backlog.md)
+- PLAN-v2:  (PLAN-v2.md does not exist in this repo) Stage 2
+- Studio Stage 3: [../EPIC_Hercules_Studio/tasks/stage_03_skill_push.md](../../../EPIC_Hercules_Studio/tasks/stage_03_skill_push.md)
+- Studio Stage 6: [../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md](../../../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md)
+- Backlog: [../backlog.md](../../backlog.md)
 
 ## Done
 

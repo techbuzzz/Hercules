@@ -81,5 +81,5 @@ MCP hot-reload для `PATCH /api/config` (Phase 8 task_100, Studio Stage 6).
 - Manual smoke (`dotnet run` + curl `PATCH /api/config` + `GET /api/mcp/servers`) не выполнялся в cron-окружении; покрыт 17 unit-тестами + 60 связанных тестов.
 
 ## Links
-- Studio Stage 5: [../EPIC_Hercules_Studio/tasks/stage_05_tools_mcp.md](../EPIC_Hercules_Studio/tasks/stage_05_tools_mcp.md)
-- Backlog: [../backlog.md](../backlog.md)
+- Studio Stage 5: [../EPIC_Hercules_Studio/tasks/stage_05_tools_mcp.md](../../../EPIC_Hercules_Studio/tasks/stage_05_tools_mcp.md)
+- Backlog: [../backlog.md](../../backlog.md)

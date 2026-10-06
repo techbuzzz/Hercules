@@ -71,6 +71,6 @@ src/agent/Tasks/, src/agent/Storage/SqliteSessionStore.cs
 - `dotnet test` — 606/612 passed (6 pre-existing: OtelServiceTests + BudgetGuardTests + WASM timing)
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

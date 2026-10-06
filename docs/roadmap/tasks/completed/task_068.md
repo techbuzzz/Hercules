@@ -35,6 +35,6 @@ src/agent/Mesh/Backends/Nats/, src/agent/Mesh/Backends/Nats/NatsMeshBus.cs, src/
 Сложность JetStream; начинать с core NATS + request/reply, JetStream — отдельный milestone. Fallback на in-process bus.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

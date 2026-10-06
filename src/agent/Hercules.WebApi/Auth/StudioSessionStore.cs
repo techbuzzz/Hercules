@@ -11,13 +11,20 @@ namespace Hercules.WebApi.Auth;
 /// <param name="Token">Opaque bearer value. Never logged, never persisted.</param>
 /// <param name="Role">Role granted by the API key that was exchanged.</param>
 /// <param name="ExpiresAt">Absolute expiry; the client is expected to re-exchange.</param>
+/// <param name="Capabilities">Capability set granted by the role.</param>
+/// <param name="KeyFingerprint">
+///     Stage 6.3: non-reversible id of the API key this session was exchanged from, so
+///     deleting or demoting that key can invalidate its live sessions instead of letting
+///     them run to TTL with the old role.
+/// </param>
 public sealed record StudioSession(
     string Token,
     ApiKeyRole Role,
     string AgentId,
     string DisplayName,
     DateTimeOffset ExpiresAt,
-    IReadOnlyList<string> Capabilities);
+    IReadOnlyList<string> Capabilities,
+    string? KeyFingerprint = null);
 
 /// <summary>
 ///     In-memory session registry backing <c>X-Session-Token</c>.
@@ -66,11 +73,11 @@ public sealed class StudioSessionStore
     /// <summary>Lifetime of a freshly issued session.</summary>
     public TimeSpan Ttl => _ttl;
 
-    public StudioSession Create(ApiKeyRole role, string agentId, string displayName)
+    public StudioSession Create(ApiKeyRole role, string agentId, string displayName, string? keyFingerprint = null)
     {
         Sweep();
 
-        // 32 bytes of entropy, base64url — no padding, safe in a header value.
+        // 32 bytes of entropy, base64url — no padding, safe for a header value.
         var raw = RandomNumberGenerator.GetBytes(32);
         var token = Convert.ToBase64String(raw).Replace('+', '-').Replace('/', '_').TrimEnd('=');
 
@@ -80,7 +87,8 @@ public sealed class StudioSessionStore
             agentId,
             displayName,
             _clock.GetUtcNow().Add(_ttl),
-            role == ApiKeyRole.System ? SystemCapabilities : ContributeCapabilities);
+            role == ApiKeyRole.System ? SystemCapabilities : ContributeCapabilities,
+            string.IsNullOrWhiteSpace(keyFingerprint) ? null : keyFingerprint);
 
         _sessions[token] = session;
         _logger.LogInformation(
@@ -88,6 +96,31 @@ public sealed class StudioSessionStore
             role, agentId, session.ExpiresAt);
 
         return session;
+    }
+
+    /// <summary>
+    /// Drops every session exchanged from a given API key fingerprint. Called when a key
+    /// is deleted or demoted, so a revoked key cannot keep admin rights through a session
+    /// token that was minted before the change.
+    /// </summary>
+    public int RevokeByFingerprint(string fingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint)) return 0;
+
+        var doomed = _sessions
+            .Where(kv => string.Equals(kv.Value.KeyFingerprint, fingerprint, StringComparison.OrdinalIgnoreCase))
+            .Select(kv => kv.Key)
+            .ToArray();
+
+        foreach (var token in doomed) _sessions.TryRemove(token, out _);
+
+        if (doomed.Length > 0)
+        {
+            _logger.LogInformation(
+                "[StudioSession] Revoked {Count} session(s) for key {Fingerprint}", doomed.Length, fingerprint);
+        }
+
+        return doomed.Length;
     }
 
     public bool TryValidate(string? token, out StudioSession? session)

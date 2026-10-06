@@ -44,5 +44,5 @@
 src/workflow-server/Models/WorkflowGraph.cs, src/workflow-server/Executor/WorkflowExecutor.cs, src/workflow-server/Executor/ExpressionEvaluator.cs
 
 ## Links
-- Studio Stage 8: [../EPIC_Hercules_Studio/tasks/stage_08_workflow.md](../EPIC_Hercules_Studio/tasks/stage_08_workflow.md)
+- Studio Stage 8: [../EPIC_Hercules_Studio/tasks/stage_08_workflow.md](../../EPIC_Hercules_Studio/tasks/stage_08_workflow.md)
 - Backlog: [../backlog.md](../backlog.md)

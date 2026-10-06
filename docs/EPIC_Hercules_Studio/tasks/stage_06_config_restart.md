@@ -1,7 +1,14 @@
 # Stage 6 — Тонкая настройка + Restart + SkillSdk + Context Distillation + Postgres
 
+<!-- web-first-migration-status -->
+> ⚠️ **These checkboxes are not a progress report.** They were never ticked during the
+> web-first migration, so an unticked box does not mean the work is outstanding.
+> As of 2026-10-06: raw editor, LLM, roles, mesh inspector, quotas, context, restart and the session-store editor are **done**; Postgres hot-switch is not.
+> Per-item breakdown: [VERIFICATION.md](../VERIFICATION.md#what-remains).
+
+
 **Epic:** Hercules Studio
-**Status:** pending
+**Status:** delivered — all editors, the restart protocol and the staged session-store switch. 6.10's C# tab is **withdrawn**: skills do not own executable source, so the sandbox stays snippet-driven (see note below) |
 **Estimate:** 2-3 недели
 **Dependencies (backend):** task_099 (restart), task_100 (MCP reload), task_101 (SkillSdk), task_102 (context distillation), task_103 (Postgres session store)
 **Dependencies (Studio):** Stage 2, Stage 5
@@ -102,7 +109,24 @@
   - Remove warning banner from Stage 5
   - Test: add MCP server → reload → see connected without restart
 
-### 6.10 — C# file-based apps test-run
+### 6.10 — C# file-based apps test-run — WITHDRAWN
+
+> A questionnaire (2026-10-06, `ask_080517719c5352cd0b69536e`) **auto-submitted on timeout**
+> (`explicitUserConfirmation: false`, `responseSource: automatic_timeout`). It selected
+> "skills do not own executable source". **That is not an owner decision**, by the same
+> standard ADR-0009 applies to the earlier timeout selection, so this is recorded as
+> *provisional* — it needs explicit confirmation to stand.
+>
+> The reasoning holds up independently of the vote, and is already how the code behaves:
+> `SkillPackager` has no `code.cs` handling, the package spec's file table (Section 8) omits
+> `code.cs`, and `SkillDetailDto` carries no `code`. C# reaches the sandbox only as a
+> snippet via `POST /api/code/run`, gated by `DangerousCodeScanner` (exposed scan-only at
+> `POST /api/code/scan`). Keeping code out of the skill model means the scanner is the
+> single execution gate and skills cannot carry executable payload.
+>
+> Consequence: the `.skillpkg` builder's optional `code.cs` entry is dead code while the
+> package spec omits it, and the Stage 3.5 pre-check belongs on the sandbox-run flow rather
+> than at push time. Both are already wired that way.
 
 - [ ] `components/skills/CsharpTestRun.vue`:
   - In SkillEditor "C# files" tab → "Test run" button

@@ -1,7 +1,14 @@
 # Stage 8 — BPMN Workflow Designer
 
+<!-- web-first-migration-status -->
+> ⚠️ **These checkboxes are not a progress report.** They were never ticked during the
+> web-first migration, so an unticked box does not mean the work is outstanding.
+> As of 2026-10-06: graph model, validation, editor and in-place update are **done**; the executor (task_105) is not.
+> Per-item breakdown: [VERIFICATION.md](../VERIFICATION.md#what-remains).
+
+
 **Epic:** Hercules Studio
-**Status:** pending
+**Status:** partially delivered — authoring done, executor (task_105) not
 **Estimate:** 3-4 недели
 **Dependencies (backend):** task_104 (workflow-server), task_105 (graph model + executor), task_106 (DelegatedTask persistence), task_107 (parent/child tasks), task_108 (checkpoint persistence)
 **Dependencies (Studio):** Stage 7

@@ -83,4 +83,4 @@ Hercules Studio — десктопное IDE-приложение (Electron + Vu
 - [tasks/](tasks/) — детальные планы задач
 - [adr/](adr/) — архитектурные решения
 - [../roadmap/backlog.md](../roadmap/backlog.md) — backlog Hercules (включая Phase 8 prerequisites)
-- [../../PLAN-v2.md](../../PLAN-v2.md) — Stage 2 code execution (DotnetFileBasedExecutor, sandbox, SkillSdk)
+- Stage 2 code execution (DotnetFileBasedExecutor, sandbox, SkillSdk) — `PLAN-v2.md` was referenced here but does not exist in this repo; see [../roadmap/tasks/](../roadmap/tasks/) for the implemented work items.

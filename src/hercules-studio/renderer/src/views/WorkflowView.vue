@@ -13,6 +13,8 @@ import { ref, computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToastStore } from "../stores/toast";
 import { platform } from "../platform";
+import GraphEditor from "../components/workflow/GraphEditor.vue";
+import { parseGraph, type WorkflowGraph } from "../workflow/graph";
 import type { WorkflowDetailDto, WorkflowSummaryDto } from "../platform/capabilities";
 
 const { t } = useI18n();
@@ -30,6 +32,16 @@ const detail = ref<WorkflowDetailDto | null>(null);
 const loading = ref(false);
 const selectedId = ref<string | null>(null);
 const hasMore = ref(false);
+
+// Stage 8 authoring. `editingId` is null while creating a new definition; a
+// non-null id updates that definition in place (POST with an explicit id).
+const editing = ref(false);
+const editingId = ref<string | null>(null);
+const editingName = ref("");
+const editingDescription = ref("");
+const editingVersion = ref(1);
+const editingGraph = ref<WorkflowGraph>({ nodes: [], edges: [] });
+const saving = ref(false);
 
 const isConfigured = computed(() => configured.value);
 
@@ -106,6 +118,63 @@ function prettyGraph(value: unknown): string {
   }
 }
 
+function startCreate(): void {
+  editingId.value = null;
+  editingName.value = "";
+  editingDescription.value = "";
+  editingVersion.value = 1;
+  editingGraph.value = { nodes: [], edges: [] };
+  editing.value = true;
+}
+
+/** Loads an existing definition into the editor so saving updates it in place. */
+function startEdit(): Promise<void> {
+  if (!detail.value) return Promise.resolve();
+  editingId.value = detail.value.id;
+  editingName.value = detail.value.name;
+  editingDescription.value = detail.value.description ?? "";
+  editingVersion.value = detail.value.version ?? 1;
+  editingGraph.value = parseGraph(detail.value.graphJson);
+  editing.value = true;
+  return Promise.resolve();
+}
+
+function cancelEdit(): void {
+  editing.value = false;
+  editingId.value = null;
+}
+
+async function saveWorkflow(payload: {
+  id: string | null;
+  name: string;
+  description: string;
+  version: number;
+  graph: WorkflowGraph;
+}): Promise<void> {
+  if (saving.value) return;
+  saving.value = true;
+  try {
+    const saved = await platform.workflows.save({
+      id: payload.id ?? undefined,
+      name: payload.name,
+      description: payload.description,
+      version: payload.version,
+      graph: payload.graph,
+    });
+
+    editing.value = false;
+    editingId.value = null;
+    toast.success(payload.id ? t("workflowEditor.updated") : t("workflowEditor.created"));
+    await load();
+    // Re-read the definition rather than trusting the local draft.
+    await select(saved.id ?? payload.id ?? "");
+  } catch (e) {
+    toast.error(`${t("workflowEditor.saveFailed")}: ${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    saving.value = false;
+  }
+}
+
 onMounted(() => {
   configured.value = platform.workflows.configured();
 });
@@ -162,18 +231,49 @@ onMounted(() => {
 
       <!-- Definitions -->
       <template v-else>
+        <!-- Stage 8 authoring. Editing an existing definition updates it in place;
+             creating omits the id so the server mints one. -->
+        <GraphEditor
+          v-if="editing"
+          class="mb-4"
+          :workflow-id="editingId"
+          :initial-name="editingName"
+          :initial-description="editingDescription"
+          :initial-version="editingVersion"
+          :initial-graph="editingGraph"
+          @save="saveWorkflow"
+          @cancel="cancelEdit"
+        />
+
         <div class="mb-3 flex items-center justify-between">
           <span class="text-xs text-secondary">
             {{ t("workflow.count") }}: {{ workflows.length }}
             <span v-if="hasMore" class="ml-1 text-amber-400">({{ t("workflow.moreAvailable") }})</span>
           </span>
-          <button
-            class="rounded-lg border border-app px-3 py-2 text-sm text-app transition-colors hover:bg-tertiary disabled:opacity-50"
-            :disabled="loading"
-            @click="load"
-          >
-            {{ t("common.refresh") }}
-          </button>
+          <div class="flex gap-2">
+            <button
+              class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+              :disabled="editing"
+              @click="startCreate"
+            >
+              {{ t("workflowEditor.newWorkflow") }}
+            </button>
+            <button
+              v-if="detail"
+              class="rounded-lg border border-app px-3 py-2 text-sm text-app transition-colors hover:bg-tertiary disabled:opacity-50"
+              :disabled="editing"
+              @click="startEdit"
+            >
+              {{ t("common.edit") }}
+            </button>
+            <button
+              class="rounded-lg border border-app px-3 py-2 text-sm text-app transition-colors hover:bg-tertiary disabled:opacity-50"
+              :disabled="loading"
+              @click="load"
+            >
+              {{ t("common.refresh") }}
+            </button>
+          </div>
         </div>
 
         <p v-if="loading" class="text-sm text-secondary">{{ t("common.loading") }}</p>

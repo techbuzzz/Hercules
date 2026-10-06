@@ -673,6 +673,28 @@ export function createWebCapabilities(): PlatformCapabilities {
       async get(id: string): Promise<WorkflowDetailDto> {
         return workflowFetch<WorkflowDetailDto>(`/api/workflows/${encodeURIComponent(id)}`);
       },
+      async save(input: {
+        id?: string;
+        name: string;
+        version?: number;
+        description?: string;
+        graph: unknown;
+      }): Promise<WorkflowDetailDto> {
+        // `id` is what makes this an update rather than a new definition; omitting it
+        // creates. The server rejects an unknown id instead of upserting a typo.
+        // `workflowFetch` serialises `init.body` itself — passing a pre-stringified
+        // value here would double-encode the payload.
+        return workflowFetch<WorkflowDetailDto>("/api/workflows", {
+          method: "POST",
+          body: {
+            id: input.id,
+            name: input.name,
+            version: input.version ?? 1,
+            description: input.description,
+            graphJson: input.graph,
+          },
+        });
+      },
       async remove(id: string): Promise<void> {
         await workflowFetch(`/api/workflows/${encodeURIComponent(id)}`, { method: "DELETE" });
       },

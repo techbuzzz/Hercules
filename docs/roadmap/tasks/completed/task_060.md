@@ -34,9 +34,9 @@ src/agent/Offline/
 Buffer overflow; явные приоритеты и TTL.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)
 
 ## Implementation notes
 - Implemented in `src/agent/Offline/`: `OfflineSyncConfig`, `SyncItem`, `IOutboxStore`, `SqliteOutboxStore`, `INetworkMonitor`, `NetworkMonitor`, `OfflineSyncService`

@@ -12,7 +12,7 @@ const toast = useToastStore();
 async function scan() {
   await connections.scan();
   if (connections.discovered.length > 0) {
-    toast.success(t("connection.scanResults") + `: ${connections.discovered.length}`);
+    toast.success(t("connection.scanResults", { n: connections.discovered.length }));
   } else {
     toast.info(t("connection.noAgentsFound"));
   }

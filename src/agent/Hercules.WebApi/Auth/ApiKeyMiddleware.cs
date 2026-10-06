@@ -26,8 +26,14 @@ public sealed class ApiKeyMiddleware
     // constructor. Previously the 3-argument constructor left _expectedKeyBytes null
     // (CS8618) and InvokeAsync then read that null as "no keys configured" — i.e. one
     // refactor away from silently disabling authentication on every /api route.
+    //
+    // Stage 6.3: on the DI path these are only a fallback. When an ApiKeyStore is
+    // available the lookup goes through the store per request so a role edit made via
+    // /api/auth/keys applies immediately instead of after a restart. The test-only
+    // constructors still take a fixed key list.
     private readonly ApiKeyEntry[] _entries;
     private readonly byte[]?[] _expectedKeyBytes;
+    private readonly ApiKeyStore? _store;
     private readonly bool _unauthenticated;
     private readonly StudioSessionStore? _sessions;
 
@@ -50,6 +56,10 @@ public sealed class ApiKeyMiddleware
         StudioSessionStore sessions)
         : this(next, cfg, logger, store.LoadOrGenerate(cfg.ApiKeys), sessions)
     {
+        // Publish the resolved set so the live lookup path and any /api/auth/keys
+        // reader observe the same snapshot the middleware authenticated with.
+        store.SetActive(_entries);
+        _store = store;
     }
 
     public ApiKeyMiddleware(
@@ -99,7 +109,10 @@ public sealed class ApiKeyMiddleware
         }
 
         // Ни одного ключа не настроено — открытый доступ (только для локали; см. ctor-лог).
-        if (_unauthenticated)
+        // Evaluated per request on the live path so a key set emptied by an admin edit
+        // would flip the API open — the /api/auth/keys endpoints therefore refuse any
+        // mutation that would leave zero keys.
+        if (_store != null ? !_store.HasKeys : _unauthenticated)
         {
             await _next(context);
             return;
@@ -127,25 +140,46 @@ public sealed class ApiKeyMiddleware
         }
 
         var providedBytes = Encoding.UTF8.GetBytes(provided.ToString());
-        for (var i = 0; i < _expectedKeyBytes.Length; i++)
+        if (Match(providedBytes, out var matched))
         {
-            var expected = _expectedKeyBytes[i];
-            if (expected is null || expected.Length == 0) continue;
-            if (providedBytes.Length != expected.Length) continue;
-            if (!CryptographicOperations.FixedTimeEquals(providedBytes, expected)) continue;
-
             // Match — ставим role + entry в HttpContext.Items.
             // R5: index into the RESOLVED entries, not cfg.ApiKeys. The table can be built
             // from store.LoadOrGenerate(...), whose length is not guaranteed to match
             // cfg.ApiKeys — the previous code would have thrown IndexOutOfRange there.
-            context.Items[RoleItemKey] = _entries[i].Role;
-            context.Items[EntryItemKey] = _entries[i];
+            context.Items[RoleItemKey] = matched.Role;
+            context.Items[EntryItemKey] = matched;
             await _next(context);
             return;
         }
 
         _logger.LogWarning("Отклонён запрос {Path}: неверный {Header}", path, HeaderName);
         await Reject(context, "Требуется корректный заголовок X-Api-Key.");
+    }
+
+    /// <summary>
+    /// Constant-time key match. Prefers the store's live table so role edits and key
+    /// additions take effect without a restart; falls back to the constructor snapshot
+    /// for the test-only construction paths.
+    /// </summary>
+    private bool Match(byte[] providedBytes, out ApiKeyEntry matched)
+    {
+        if (_store is not null)
+        {
+            return _store.TryResolve(providedBytes, out matched);
+        }
+
+        for (var i = 0; i < _expectedKeyBytes.Length; i++)
+        {
+            var expected = _expectedKeyBytes[i];
+            if (expected is null || expected.Length == 0) continue;
+            if (providedBytes.Length != expected.Length) continue;
+            if (!CryptographicOperations.FixedTimeEquals(providedBytes, expected)) continue;
+            matched = _entries[i];
+            return true;
+        }
+
+        matched = null!;
+        return false;
     }
 
     private static async Task Reject(HttpContext context, string message)

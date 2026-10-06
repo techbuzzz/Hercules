@@ -1,8 +1,6 @@
 import { ref, onMounted, onUnmounted } from "vue";
 
-export interface HotkeyHandler {
-  (e: KeyboardEvent): void;
-}
+export type HotkeyHandler = (e: KeyboardEvent) => void
 
 export interface HotkeyDef {
   ctrl?: boolean;

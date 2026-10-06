@@ -1,5 +1,7 @@
 using Hercules.Mesh.Escalation;
 
+using Hercules.WebApi.Contracts;
+
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
@@ -28,7 +30,8 @@ public static class EscalationController
                 count = pending.Count,
                 escalations = pending.Select(ToDto).ToList()
             });
-        }).WithName("ListPendingEscalations").WithTags("Escalations");
+        }).WithName("ListPendingEscalations").WithTags("Escalations")
+          .Produces<PendingEscalationsResponseDto>(200);
 
         // GET /api/escalations/{id} — get specific escalation
         app.MapGet("/api/escalations/{id}", (

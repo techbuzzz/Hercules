@@ -7,7 +7,7 @@
 **Studio Stage:** 1
 
 ## Goal
-Заменить одиночный `WebApi:ApiKey` на массив `WebApi:ApiKeys` с ролями `contribute` и `system`. См. [ADR-0004](../EPIC_Hercules_Studio/adr/0004-dual-api-keys.md).
+Заменить одиночный `WebApi:ApiKey` на массив `WebApi:ApiKeys` с ролями `contribute` и `system`. См. [ADR-0004](../../../EPIC_Hercules_Studio/adr/0004-dual-api-keys.md).
 
 ## Acceptance criteria
 
@@ -98,5 +98,5 @@ src/agent/Hercules.WebApi/Config/WebApiConfig.cs, src/agent/Hercules.WebApi/Auth
 - Для Studio: в `connections.ts` теперь нужно хранить ОБА ключа в safeStorage. У `mutator.ts` будет выбор per-request: для system-only endpoint'ов отправлять system-ключ, для остальных — contribute.
 
 ## Links
-- ADR-0004: [../EPIC_Hercules_Studio/adr/0004-dual-api-keys.md](../EPIC_Hercules_Studio/adr/0004-dual-api-keys.md)
-- Backlog: [../backlog.md](../backlog.md)
+- ADR-0004: [../EPIC_Hercules_Studio/adr/0004-dual-api-keys.md](../../../EPIC_Hercules_Studio/adr/0004-dual-api-keys.md)
+- Backlog: [../backlog.md](../../backlog.md)

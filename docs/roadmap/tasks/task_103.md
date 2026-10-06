@@ -78,5 +78,5 @@
 src/agent/Storage/ISessionStore.cs (new), src/agent/Storage/SqliteSessionStore.cs (refactor), src/agent/Storage/PostgresSessionStore.cs (new), src/agent/Config/AppConfig.cs, src/agent/Program.cs
 
 ## Links
-- Studio Stage 6: [../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md](../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md)
+- Studio Stage 6: [../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md](../../EPIC_Hercules_Studio/tasks/stage_06_config_restart.md)
 - Backlog: [../backlog.md](../backlog.md)

@@ -60,6 +60,6 @@ src/agent/Offline/SqliteOutboxStore.cs, src/agent/Offline/OfflineSyncService.cs,
 Хранение Synced-записей увеличивает размер таблицы до prune; убедиться что `PruneSyncedKeep` (default 500) достаточно мал. Rollback: git revert (вернуть DELETE).
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

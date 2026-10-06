@@ -1,14 +1,48 @@
 # Stage 9 — Packaging & Polish
 
+<!-- web-first-migration-status -->
+> ⚠️ **These checkboxes are not a progress report.** They were never ticked during the
+> web-first migration, so an unticked box does not mean the work is outstanding.
+> As of 2026-10-06: CI is **done**; desktop packaging is cancelled in favour of the PWA.
+> Per-item breakdown: [VERIFICATION.md](../VERIFICATION.md#what-remains).
+
+
 **Epic:** Hercules Studio
-**Status:** pending
+**Status:** cancelled for desktop packaging (PWA replaces it); CI, Biome, Vitest, Playwright and `strict` TypeScript are all in place. Follow-up: `noUncheckedIndexedAccess` is **not** enabled — it produces **49 errors across 12 files** (15 in `skills/promptDiff.ts` from 2-D LCS table indexing, 9 in `stores/connections.ts`, the rest spread across views, the workflow graph and tests). Scope it as its own change rather than folding it into another.
+**Estimate:** — (dropped)
+**Dependencies (backend):** нет
+**Dependencies (Studio):** Stage 8
+
+> ## Почему этап отменён
+>
+> Этот этап описывает упаковку **Electron-приложения**: NSIS-инсталлятор, portable-сборка,
+> `electron-builder`, tray-иконка, `electron-updater`. Electron удалён — Studio теперь
+> браузерное SPA, которое агент раздаёт на `/ui`.
+>
+> Замены уже реализованы в ходе миграции:
+>
+> | Задача этого этапа | Чем заменена | Статус |
+> |---|---|---|
+> | 9.1 Tray icon | Отменено; PWA-shortcut (отдельная задача) | ⬜ не начато |
+> | 9.2 Установщик (NSIS/portable) | Не нужен — открывается по URL в браузере | ✅ не требуется |
+> | 9.3 Автообновление Electron | Не требуется; сервис-воркер обновляется при pull | ✅ не требуется |
+> | 9.4 Нативные уведомления | Web Notification API (`platform.notify`) | ✅ готово |
+> | 9.5 CI | GitHub Actions | ⬜ не начато |
+> | 9.6 Полное покрытие тестами | 27 unit (Studio) + 14 E2E + 2233 agent | ✅ частично |
+>
+> **Оставшиеся пункты (9.1 tray, 9.5 CI, 9.6 покрытие) переносятся в PWA-задачу и CI.**
+> Задачи ниже оставлены как историческая запись и **не должны выполняться** —
+> они ссылаются на удалённый `electron/`.
+
+**Epic:** Hercules Studio
+**Status (legacy):** pending
 **Estimate:** 1-2 недели
 **Dependencies (backend):** нет
 **Dependencies (Studio):** Stage 8
 
 ## Goal
 
-Production-ready Windows installer + tray icon + auto-updater + native notifications + CI + full tests + documentation.
+~~Production-ready Windows installer + tray icon + auto-updater + native notifications + CI + full tests + documentation.~~
 
 ## Tasks
 

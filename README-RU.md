@@ -10,7 +10,7 @@
 <p align="center">
   <img alt=".NET" src="https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white" />
   <img alt="C#" src="https://img.shields.io/badge/C%23-15-239120?logo=csharp&logoColor=white" />
-  <img alt="Astro" src="https://img.shields.io/badge/Astro-Frontend-FF5D01?logo=astro&logoColor=white" />
+  <img alt="Vue" src="https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white" />
   <img alt="License" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
   <img alt="Status" src="https://img.shields.io/badge/status-active-success.svg" />
 </p>
@@ -51,7 +51,7 @@
 | **Офлайн-устойчивость**          | Outbox-очередь, мониторинг сети, синхронизация при восстановлении, детерминированный fallback при недоступности LLM             |
 | **Hot-Reload конфигурации**     | Смена LLM-провайдеров, системного промпта и порогов через Web UI или API без перезапуска сервера                               |
 | **Мульти-провайдер LLM**        | YandexGPT (основной), Ollama Cloud / Local, LM Studio — через единый OpenAI-совместимый интерфейс с автоматическим fallback     |
-| **Интерфейсы**                  | CLI (REPL, основной) + Telegram-бот (вторичный) + Web API (35 контроллеров) + Astro SPA                                         |
+| **Интерфейсы**                  | CLI (REPL, основной) + Telegram-бот (вторичный) + Web API (35 контроллеров) + Studio SPA (Vue 3)                                         |
 
 ---
 
@@ -191,14 +191,20 @@ src/agent/Hercules.WebApi/           # ASP.NET Core Minimal API (REST), порт
                                        # SelfImprovement, TaskProgress, Context, Cache,
                                        # ToolRegistry, MCP, Template
 
-src/hercules-web/                    # Фронтенд на Astro + TailwindCSS, порт :4321
-├── src/lib/api.ts                    # Типизированный клиент Web API (35+ эндпоинтов)
-├── src/layouts/Layout.astro         # Базовый макет (тёмная тема, навигация)
-├── src/components/                  # ChatBox, SkillCard, ProfileEditor, ConfigEditor,
-│                                    # StatsDashboard, MeshDashboard, MeshRouterPanel,
-│                                    # EscalationPanel
-└── src/pages/                       # index / skills / profile / stats / config / memmesh
+src/hercules-studio/                   # SPA Studio (Vue 3 + Vite), раздаётся агентом на /ui
+├── renderer/src/views/               # Agents, Chat, Skills, Mesh, Tools, Config,
+│                                    # Workflow, Decisions, Consensus, Context, LLM
+├── renderer/src/components/          # consensus/, mesh/, skills/, workflow/, common/
+├── renderer/src/sdk/                 # типизированный клиент поверх сгенерированных OpenAPI-типов
+└── renderer/src/platform/            # capabilities + web-адаптер платформы
+
+src/hercules-web/                     # УСТАРЕЛО (ADR-0009) — Astro-фронтенд не собирается и не портируется
+                                      # Карта замены: src/hercules-web/DEPRECATED.md
 ```
+
+Интерфейс — один процесс: агент сам раздаёт собранный SPA на `/ui`, отдельного dev-сервера
+и Electron-оболочки нет. Для работы над UI запускай `npm run dev` внутри `src/hercules-studio`
+(порт 4330, base path `/ui/`) параллельно с агентом на 8421.
 
 Развертывание:
 
@@ -248,17 +254,15 @@ dotnet build
 ### Публикация (для развёртывания конечному пользователю)
 
 ```bash
-# Бэкенд
-dotnet publish src/agent/Hercules.WebApi -c Release -o ./dist/webapi
+# Бандл Studio -> src/dist (раздаётся агентом на /ui)
+cd src/hercules-studio && npm ci && npm run build && cd ../..
 
-# Фронтенд
-cd src/hercules-web
-npm install
-npm run build   # статика попадает в src/hercules-web/dist
+# Агент
+dotnet publish src/agent/Hercules.WebApi -c Release -o ./dist/webapi
 ```
 
-После публикации достаточно запустить `dist/webapi/Hercules.WebApi` и раздать статику
-фронтенда любым статическим сервером, например `npx serve src/hercules-web/dist -p 4321`.
+После публикации достаточно запустить `dist/webapi/Hercules.WebApi` — он отдаёт и API, и
+интерфейс на `/ui`. Отдельный статический сервер не нужен.
 Все пользовательские данные (навыки, память, БД и runtime-конфигурация) живут в папке `data/`,
 которую легко держать вне репозитория.
 
@@ -297,8 +301,7 @@ dotnet run --project src/agent/Hercules            # то же самое (CLI �
 ## 🌐 Web API
 
 ASP.NET Core Minimal API с 35 контроллерами. Все ответы — JSON (UTF-8, camelCase). Защита — заголовок
-`X-Api-Key` (значение из `WebApi:ApiKey`, по умолчанию `dev-local-key`). CORS открыт для
-локального фронтенда (`http://localhost:4321`, `http://localhost:3000`). Каждое взаимодействие
+`X-Api-Key` (значение из `WebApi:ApiKey`, по умолчанию `dev-local-key`). CORS для локальной разработки: `http://localhost:4330` (dev-сервер Studio) и `8421` (сам агент; раздаваемый им SPA на /ui — same-origin). Каждое взаимодействие
 логируется в SQLite (`data/sessions.db`).
 
 ### Основные эндпоинты
@@ -365,59 +368,53 @@ curl -X POST http://localhost:8421/api/chat \
 ```jsonc
 "WebApi": {
   "ApiKey": "dev-local-key",                  // пустая строка → доступ без ключа
-  "AllowedCorsOrigins": [ "http://localhost:4321", "http://localhost:3000" ]
+  "AllowedCorsOrigins": [ "http://localhost:4330" ]
 }
 ```
 
 ---
 
-## 🎨 Веб-интерфейс (Astro)
+## 🎨 Веб-интерфейс — Studio
 
-Минималистичный SPA на **Astro + TailwindCSS** (тёмная тема, моноширинные блоки кода).
-Лежит в каталоге `src/hercules-web/`.
+**SPA на Vue 3 + Vite, которую раздаёт сам агент на `/ui`** (ADR-0009). Один процесс: без
+Electron-оболочки, без второго dev-сервера и отдельного статического хоста.
 
-| Страница   | Назначение                                                                               |
-| ---------- | ---------------------------------------------------------------------------------------- |
-| `/`        | Чат с агентом (бейджи режима/уверенности/провайдера, эффект печати, подсказки о навыках) |
-| `/skills`  | Список навыков, создание и улучшение через ИИ, редактирование, жизненный цикл и качество |
-| `/profile` | Редактор профиля долговременной памяти + сброс                                           |
-| `/config`  | **Редактор конфигурации агента** — LLM-провайдеры, системный промпт, пороги, инструменты |
-| `/stats`   | Дашборд метрик, соотношение навык/прямой, активность по дням, рефлексия                  |
-| `/memmesh` | Дашборд mesh-сети — пиры, маршрутизация, наблюдаемость                                    |
+| Раздел       | Назначение                                                                                    |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| Agents       | Подключения, здоровье, обнаружение агентов, добавление/удаление                            |
+| Chat         | Чат с агентом с бейджами режима/уверенности/провайдера/навыка; sandbox-запуски идут по SSE   |
+| Skills       | Редактор (Monaco), история промптов с **diff-видом**, restore, создание из шаблона, push     |
+| Mesh         | Канвас топологии на Vue Flow, детали узла, контекстное меню, общая память, предохранители   |
+| Tools        | Переключатель инструментов и серверы MCP: добавить/изменить/удалить/перезагрузить          |
+| Config       | Merge-patch редактор, LLM-провайдеры, роли по API-ключам, квоты, бюджет контекста, хранилище |
+| Workflow     | Определения workflow (авторство; исполнение — task_105)                                     |
+| Decisions    | Согласования и эскалации, ждущие человека                                                   |
+| Consensus    | Один запрос нескольким агентам, агрегация вручную или через LLM-судью                      |
+| Context / LLM| Бюджет и дистилляция контекста · здоровье LLM-провайдера                                      |
 
-Компоненты: `ChatBox`, `SkillCard`, `ProfileEditor`, `ConfigEditor`, `StatsDashboard`,
-`MeshDashboard`, `MeshRouterPanel`, `EscalationPanel`. Клиент API — `src/lib/api.ts`.
+Типизированный клиент — в `renderer/src/sdk`, типы генерируются из OpenAPI агента.
+`npm run dev` внутри `src/hercules-studio` поднимает dev-сервер на **4330** с base path `/ui/`.
 
-### Запуск фронтенда
-
-```bash
-cd src/hercules-web
-npm install
-npm run dev        # dev-сервер на http://localhost:4321
-```
-
-Адрес бэкенда и ключ настраиваются через переменные окружения (файл `src/hercules-web/.env`):
+### Запуск Studio для разработки
 
 ```bash
-PUBLIC_API_BASE=http://localhost:8421
-PUBLIC_API_KEY=dev-local-key
-```
-
-> **Hot-reload конфигурация:** не обязательно править `appsettings.json` до запуска.
-> Откройте страницу `/config`, вставьте ключи LLM-провайдера и сохраните — настройки
-> применятся сразу, без перезагрузки сервера, и сохранятся в `data/runtime-config.json`.
-
-### Полный локальный запуск (два терминала)
-
-```bash
-# Терминал 1 — бэкенд
+# Терминал 1 — агент (раздаёт собранный бандл на /ui)
 dotnet run --project src/agent/Hercules.WebApi      # → :8421
 
-# Терминал 2 — фронтенд
-cd src/hercules-web && npm run dev                  # → :4321
+# Терминал 2 — dev-сервер Studio (hot reload, проксирует на 8421)
+cd src/hercules-studio && npm ci && npm run dev    # → :4330/ui/
 ```
 
-Откройте `http://localhost:4321`.
+Откройте `http://localhost:4330/ui/`. Без hot reload достаточно запустить агент и открыть
+`http://localhost:8421/ui/`.
+
+Параметры подключения вводятся в интерфейсе и хранятся только в памяти: API-ключ один раз
+меняется на короткоживущий токен сессии и никогда не попадает в хранилище браузера.
+
+> **Hot-reload конфигурация:** не обязательно править `appsettings.json` до запуска.
+> Отредактируй в разделе Config и сохрани — настройки применятся без перезагрузки сервера
+> и сохранятся в `data/runtime-config.json`. Секреты возвращаются замаскированными и
+> никогда не записываются обратно.
 
 ---
 
@@ -618,7 +615,7 @@ docker compose up -d
 | `Npgsql` | 10.0.3 | PostgreSQL бэкенд |
 | `OpenTelemetry` | 1.17.0 | Наблюдаемость (трейсинг + метрики) |
 
-Фронтенд: **Astro 6.4+**, **TailwindCSS 4.3+**, **Node.js 22.12+**
+Фронтенд: **Vue 3.5+**, **Vite 5.4+**, **TailwindCSS 4**, **vue-i18n 11**, **Monaco editor**, **Vue Flow**, **Node.js 22.12+**
 
 ---
 

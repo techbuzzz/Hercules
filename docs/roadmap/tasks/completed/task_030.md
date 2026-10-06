@@ -67,6 +67,6 @@ templates/greenhouse/, templates/cold-chain/, ...
 - `dotnet test` — 835/845 passed (10 pre-existing: OtelService × 5, BudgetGuard × 1, WasmTool × 1, SkillQualityService × 2)
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

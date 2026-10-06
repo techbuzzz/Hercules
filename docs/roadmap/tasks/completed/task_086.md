@@ -100,6 +100,6 @@ src/agent/HerculesBus/InMemory/InMemoryEventBus.cs, src/agent/Mesh/InProcess/InP
 Bounded channels with `WaitAsync` могут deadlock если subscriber slower than publisher; configurable timeout + drop policy. In-process visibility timeout — background timer overhead. Rollback: вернуть unbounded channels (но OOM риск под нагрузкой).
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

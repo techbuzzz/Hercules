@@ -66,6 +66,14 @@ public class McpClientServiceTests : IDisposable
         Enabled = true
     };
 
+    /// <summary>Configured but switched off — must never produce a client connection.</summary>
+    private static McpServerConfig DisabledTransportServer(string name) => new()
+    {
+        Name = name,
+        Transport = "unknown",
+        Enabled = false
+    };
+
     // -----------------------------------------------------------------------
     //  Initialization
     // -----------------------------------------------------------------------
@@ -331,6 +339,78 @@ public class McpClientServiceTests : IDisposable
         await service.ReloadAsync();
 
         Assert.True(service.ServerStates.ContainsKey("only"));
+    }
+
+    // -----------------------------------------------------------------------
+    //  Enabled flag (Stage 5b): `Enabled` gates client connections, not just
+    //  in-process hosting by McpServerHost.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task InitializeAsync_DisabledServer_EstablishesNoConnection()
+    {
+        var store = NewStore(new McpConfig
+        {
+            Servers = { DisabledTransportServer("off") }
+        });
+        var service = new McpClientService(store, NoOpLoggerFactory(), _loggerMock.Object, null);
+
+        await service.InitializeAsync();
+
+        Assert.Empty(service.ServerStates);
+    }
+
+    [Fact]
+    public async Task InitializeAsync_EnabledAndDisabledServers_ConnectsOnlyEnabled()
+    {
+        var store = NewStore(new McpConfig
+        {
+            Servers = { UnknownTransportServer("on"), DisabledTransportServer("off") }
+        });
+        var service = new McpClientService(store, NoOpLoggerFactory(), _loggerMock.Object, null);
+
+        await service.InitializeAsync();
+
+        Assert.True(service.ServerStates.ContainsKey("on"));
+        Assert.False(service.ServerStates.ContainsKey("off"));
+    }
+
+    [Fact]
+    public async Task ReloadAsync_DisablingServer_DisconnectsAndUnregistersTools()
+    {
+        var store = NewStore(new McpConfig { Servers = { UnknownTransportServer("alpha") } });
+        var toolRegistry = NewToolRegistry();
+        var service = new McpClientService(store, NoOpLoggerFactory(), _loggerMock.Object, toolRegistry);
+        await service.InitializeAsync();
+        Assert.True(service.ServerStates.ContainsKey("alpha"));
+        toolRegistry.RegisterTool(new FakeMcpTool("mcp.alpha.tool1"));
+
+        // Flip the server off through config, exactly as PATCH /api/config would.
+        store.Update(new AppConfig
+        {
+            Mcp = new McpConfig { Servers = { DisabledTransportServer("alpha") } }
+        });
+        await service.ReloadAsync();
+
+        Assert.False(service.ServerStates.ContainsKey("alpha"));
+        Assert.Null(toolRegistry.GetEntry("mcp.alpha.tool1"));
+    }
+
+    [Fact]
+    public async Task ReloadAsync_EnablingPreviouslyDisabledServer_Connects()
+    {
+        var store = NewStore(new McpConfig { Servers = { DisabledTransportServer("alpha") } });
+        var service = new McpClientService(store, NoOpLoggerFactory(), _loggerMock.Object, null);
+        await service.InitializeAsync();
+        Assert.Empty(service.ServerStates);
+
+        store.Update(new AppConfig
+        {
+            Mcp = new McpConfig { Servers = { UnknownTransportServer("alpha") } }
+        });
+        await service.ReloadAsync();
+
+        Assert.True(service.ServerStates.ContainsKey("alpha"));
     }
 
     // -----------------------------------------------------------------------

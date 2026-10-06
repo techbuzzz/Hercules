@@ -1,7 +1,14 @@
 # Stage 5 — Tool Registry + MCP Management
 
+<!-- web-first-migration-status -->
+> ⚠️ **These checkboxes are not a progress report.** They were never ticked during the
+> web-first migration, so an unticked box does not mean the work is outstanding.
+> As of 2026-10-06: tool toggle and MCP list/add/edit/delete are **done**; the pre-check MCP before push is **done** too.
+> Per-item breakdown: [VERIFICATION.md](../VERIFICATION.md#what-remains).
+
+
 **Epic:** Hercules Studio
-**Status:** pending
+**Status:** delivered — tool toggle, MCP CRUD and the pre-push MCP check
 **Estimate:** 1-2 недели
 **Dependencies (backend):** нет (MCP add/remove через PATCH config, warning restart до Stage 6)
 **Dependencies (Studio):** Stage 1

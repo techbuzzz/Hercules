@@ -23,11 +23,11 @@ Hercules is a runnable, self-improving C# micro-agent that learns from conversat
 
 ---
 
-## Watch the demo
+## Demo
 
-[![Demo cover](../assets/demo/demo-video-cover.svg)](demo)
+[![Demo cover](../assets/demo/demo-video-cover.svg)](../assets/demo/demo-script.md)
 
-[🎬 Watch the 60-sec demo](demo) · [📁 Examples](../examples) · [🤝 Good first issues](https://github.com/techbuzzz/Hercules/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+[🎬 Demo script & recording guide](../assets/demo/demo-script.md) · [📁 Examples](../examples) · [🤝 Good first issues](https://github.com/techbuzzz/Hercules/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 
 ---
 
@@ -40,9 +40,8 @@ git clone https://github.com/techbuzzz/Hercules.git && cd Hercules
 # Run CLI REPL
 dotnet run --project src/agent/Hercules
 
-# Run Web API + Astro frontend
+# Run Web API + Studio (the agent serves the UI at /ui)
 dotnet run --project src/agent/Hercules.WebApi
-cd src/hercules-web && npm install && npm run dev
 ```
 
 ---
@@ -51,7 +50,7 @@ cd src/hercules-web && npm install && npm run dev
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Interfaces: CLI REPL · Telegram bot · Web API · Astro SPA          │
+│  Interfaces: CLI REPL · Telegram bot · Web API + Studio SPA (/ui)   │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Agent Core   →  Skill Router  →  Reflection  →  Memory Manager   │
 │        ↓              ↓                ↓              ↓             │

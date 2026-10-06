@@ -67,6 +67,6 @@ Interface changes (`Evaluate` → `async`, `SloService` methods → `async`) rip
 - `feat(roadmap): complete task 077 - sync-over-async sweep (ToolPolicyEngine/SloService/timers)`
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

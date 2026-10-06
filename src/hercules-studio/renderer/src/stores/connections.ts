@@ -43,6 +43,39 @@ export const useConnectionsStore = defineStore("connections", () => {
   const active = computed(() => list.value.find((c) => c.id === activeId.value) ?? null);
   const onlineCount = computed(() => list.value.filter((c) => c.status === "online").length);
 
+  /** Clients built on demand for connections that are not the active one. */
+  const extraClients = new Map<string, HerculesClient>();
+
+  /**
+   * Returns a client for *any* connection, not just the active one.
+   *
+   * Stage 7 consensus fans a single prompt out to several agents at once, which the
+   * single `client` ref cannot express. Clients are cached per connection so a second
+   * call does not reallocate, and the token closure reads the platform map per request
+   * so a re-exchange is picked up without rebuilding — the same contract as the
+   * active client built in `setActive`.
+   *
+   * Returns null for an unknown connection or one with no session yet, so callers can
+   * report "not connected" instead of firing an unauthenticated request.
+   */
+  function clientFor(id: string): HerculesClient | null {
+    const conn = list.value.find((c) => c.id === id);
+    if (!conn) return null;
+    if (!platform.session.token(id)) return null;
+
+    const cached = extraClients.get(id);
+    if (cached) return cached;
+
+    const built = new HerculesClient(conn.baseUrl, () => platform.session.token(id));
+    extraClients.set(id, built);
+    return built;
+  }
+
+  /** Drops a cached non-active client, e.g. after its session was invalidated. */
+  function forgetClient(id: string): void {
+    extraClients.delete(id);
+  }
+
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let monitorTimer: ReturnType<typeof setTimeout> | null = null;
   let unsubscribeProgress: (() => void) | null = null;
@@ -92,6 +125,7 @@ export const useConnectionsStore = defineStore("connections", () => {
       await platform.connections.remove(id);
       list.value = list.value.filter((c) => c.id !== id);
       lastHealthAt.delete(id);
+      forgetClient(id);
 
       if (activeId.value === id) {
         activeId.value = null;
@@ -370,6 +404,8 @@ export const useConnectionsStore = defineStore("connections", () => {
     openAddForm,
     closeAddForm,
     client,
+    clientFor,
+    forgetClient,
     error,
     busyAgent,
     sessionExpiredId,

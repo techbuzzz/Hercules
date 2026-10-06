@@ -135,5 +135,5 @@ import { useListSkillsQuery } from "api/generated/skills/skills";
 
 ## Links
 - Backlog: [../backlog.md](../backlog.md)
-- Epic Studio: [../EPIC_Hercules_Studio/README.md](../EPIC_Hercules_Studio/README.md)
-- Studio Stage 0: [../EPIC_Hercules_Studio/tasks/stage_00_skeleton.md](../EPIC_Hercules_Studio/tasks/stage_00_skeleton.md)
+- Epic Studio: [../EPIC_Hercules_Studio/README.md](../../EPIC_Hercules_Studio/README.md)
+- Studio Stage 0: [../EPIC_Hercules_Studio/tasks/stage_00_skeleton.md](../../EPIC_Hercules_Studio/tasks/stage_00_skeleton.md)

@@ -1,277 +1,322 @@
 <script setup lang="ts">
 /**
- * Consensus view — the human-in-the-loop queue.
+ * Stage 7 — Consensus: fan one prompt out to several agents and aggregate.
  *
- * Backs onto the agent's approvals (tool calls awaiting a human) and escalations
- * (decisions an agent could not make on its own). This is where a multi-agent
- * system actually needs a person, so both lists are actionable rather than
- * read-only, and every action re-reads the pending set instead of guessing
- * whether the item left the queue.
+ * Orchestrated entirely in Studio (the task file's own dependency line: "нет — Studio
+ * orchestrates parallel /api/chat"), so this view talks to N agents at once through
+ * `connections.clientFor` rather than the single active client.
+ *
+ * Not to be confused with `DecisionsView.vue`, the human-in-the-loop approvals queue.
+ * The two shared the name "Consensus" before Stage 7 was built.
  */
-import { ref, computed, onMounted } from "vue";
+import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import AgentSelector from "../components/consensus/AgentSelector.vue";
+import ResponseColumn from "../components/consensus/ResponseColumn.vue";
+import LlmJudgePanel from "../components/consensus/LlmJudgePanel.vue";
+import { useConsensusStore } from "../stores/consensus";
 import { useConnectionsStore } from "../stores/connections";
-import { useToastStore } from "../stores/toast";
-import type { ApprovalDto, EscalationDto } from "../sdk/types";
+import { useNotifications } from "../composables/useNotifications";
+import type { ConsensusSessionDto } from "../sdk/types";
 
 const { t } = useI18n();
+const consensus = useConsensusStore();
 const connections = useConnectionsStore();
-const toast = useToastStore();
+const { notify } = useNotifications();
 
-const approvals = ref<ApprovalDto[]>([]);
-const escalations = ref<EscalationDto[]>([]);
-const loading = ref(false);
-const minSeverity = ref<string | null>(null);
-const busy = ref<Set<string>>(new Set());
-const expanded = ref<Set<string>>(new Set());
+const judgeError = ref<string | null>(null);
 
-const client = computed(() => connections.client);
-const totalPending = computed(() => approvals.value.length + escalations.value.length);
+// ---- History (Stage 7.8) ----
+// Persisted agent-side, not in the browser: the record of what several agents said is
+// worth keeping across a restart, and answers are not the browser's business to store.
+const history = ref<ConsensusSessionDto[]>([]);
+const historyOpen = ref(false);
+const historyLoading = ref(false);
+const viewing = ref<ConsensusSessionDto | null>(null);
 
-function severityClass(severity: string): string {
-  switch (severity.toLowerCase()) {
-    case "critical":
-      return "bg-red-500/20 text-red-400";
-    case "high":
-      return "bg-amber-500/20 text-amber-400";
-    case "low":
-      return "bg-tertiary text-secondary";
-    default:
-      return "bg-sky-500/20 text-sky-400";
-  }
-}
-
-function mark(id: string, on: boolean): void {
-  const next = new Set(busy.value);
-  if (on) next.add(id);
-  else next.delete(id);
-  busy.value = next;
-}
-
-async function load(): Promise<void> {
-  if (!client.value) return;
-  loading.value = true;
+async function loadHistory(): Promise<void> {
+  if (!connections.client) return;
+  historyLoading.value = true;
   try {
-    // Each list is independent: an escalation outage must not hide approvals.
-    const [a, e] = await Promise.allSettled([
-      client.value.getPendingApprovals(),
-      client.value.getPendingEscalations(minSeverity.value ?? undefined),
-    ]);
-    approvals.value = a.status === "fulfilled" && Array.isArray(a.value.approvals) ? a.value.approvals : [];
-    escalations.value =
-      e.status === "fulfilled" && Array.isArray(e.value.escalations) ? e.value.escalations : [];
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function act(
-  id: string,
-  action: () => Promise<unknown>,
-  successMessage: string,
-): Promise<void> {
-  if (!client.value || busy.value.has(id)) return;
-  mark(id, true);
-  try {
-    await action();
-    toast.success(successMessage);
-    await load(); // re-read: never assume the item left the queue
-  } catch (err) {
-    toast.error(`${t("consensus.actionFailed")}: ${err instanceof Error ? err.message : String(err)}`);
-  } finally {
-    mark(id, false);
-  }
-}
-
-const approveApproval = (id: string) =>
-  act(id, () => client.value!.approveApproval(id), t("consensus.approved"));
-const denyApproval = (id: string) =>
-  act(id, () => client.value!.denyApproval(id), t("consensus.denied"));
-const approveEscalation = (id: string) =>
-  act(id, () => client.value!.approveEscalation(id), t("consensus.approved"));
-const denyEscalation = (id: string) =>
-  act(id, () => client.value!.denyEscalation(id), t("consensus.denied"));
-
-async function approveAll(): Promise<void> {
-  const ids = escalations.value.map((e) => e.escalationId);
-  if (ids.length === 0 || !client.value) return;
-  await act("__all__", () => client.value!.batchApproveEscalations(ids), t("consensus.batchApproved"));
-}
-
-function toggle(id: string): void {
-  const next = new Set(expanded.value);
-  if (next.has(id)) next.delete(id);
-  else next.add(id);
-  expanded.value = next;
-}
-
-function pretty(json: string): string {
-  if (!json) return "";
-  try {
-    return JSON.stringify(JSON.parse(json), null, 2);
+    const res = await connections.client.listConsensusSessions();
+    history.value = res.items ?? [];
   } catch {
-    return json;
+    history.value = [];
+  } finally {
+    historyLoading.value = false;
   }
 }
 
-onMounted(load);
+function toggleHistory(): void {
+  historyOpen.value = !historyOpen.value;
+  viewing.value = null;
+  if (historyOpen.value) void loadHistory();
+}
+
+/** Best-effort: a history write failing must not disturb the round that just finished. */
+async function recordRound(): Promise<void> {
+  const api = connections.client;
+  if (!api) return;
+  const answered = consensus.responses.filter(
+    (r): r is typeof r & { response: NonNullable<typeof r.response> } =>
+      r.status === "done" && r.response !== null,
+  );
+  if (answered.length === 0 || !consensus.prompt.trim()) return;
+
+  try {
+    await api.saveConsensusSession({
+      prompt: consensus.prompt.trim(),
+      selectedAgents: consensus.selectedIds,
+      aggregationMode: consensus.aggregationMode,
+      responses: answered.map((r) => ({
+        agentName: r.agentName,
+        connectionId: r.connectionId,
+        answer: r.response.answer ?? "",
+      })),
+      ...(consensus.aggregatedResult ? { result: consensus.aggregatedResult } : {}),
+      ...(consensus.judgeRationale ? { judgeRationale: consensus.judgeRationale } : {}),
+    });
+    if (historyOpen.value) await loadHistory();
+  } catch {
+    // Deliberately silent — see the comment above.
+  }
+}
+
+const hasRound = computed(() => consensus.responses.length > 0);
+const busy = computed(() => consensus.status === "querying" || consensus.status === "aggregating");
+
+async function runJudge(): Promise<void> {
+  judgeError.value = null;
+  try {
+    await consensus.aggregateLlmJudge();
+  } catch (e) {
+    // The per-agent answers stay on screen; only the judge failed.
+    judgeError.value = e instanceof Error ? e.message : String(e);
+  }
+}
+
+function pick(connectionId: string): void {
+  judgeError.value = null;
+  consensus.aggregateManual(connectionId);
+}
+
+// Stage 7: a fan-out across several agents can take a while, and the operator may have
+// navigated away. Notify on completion — but only with a count, since a round with a dead
+// agent is not the same outcome as a clean one.
+watch(
+  () => consensus.status,
+  (next, prev) => {
+    if (next !== "done" || prev === "done") return;
+    void notify(
+      t("consensus.title"),
+      t("consensus.notifyDone", {
+        done: consensus.doneCount,
+        failed: consensus.errorCount,
+      }),
+    );
+    void recordRound();
+  },
+);
 </script>
 
 <template>
   <div class="flex flex-1 flex-col overflow-y-auto bg-app p-4">
-    <div class="mx-auto w-full max-w-4xl">
-      <!-- Header -->
-      <div class="mb-4 flex items-center justify-between">
+    <div class="mx-auto flex w-full max-w-6xl flex-1 flex-col">
+      <div class="mb-4 flex items-start justify-between">
         <div>
           <h1 class="text-lg font-semibold text-app">{{ t("consensus.title") }}</h1>
           <p class="text-sm text-secondary">{{ t("consensus.subtitle") }}</p>
         </div>
         <button
-          class="rounded-lg border border-app px-3 py-2 text-sm text-app transition-colors hover:bg-tertiary disabled:opacity-50"
-          :disabled="loading"
-          @click="load"
+          v-if="hasRound"
+          class="rounded-lg border border-app px-3 py-1.5 text-xs text-app transition-colors hover:bg-tertiary disabled:opacity-50"
+          :disabled="busy"
+          @click="consensus.clearRound()"
         >
-          {{ t("common.refresh") }}
+          {{ t("consensus.newRound") }}
+        </button>
+        <button
+          class="rounded-lg border border-app px-3 py-1.5 text-xs text-app transition-colors hover:bg-tertiary disabled:opacity-50"
+          :disabled="!connections.client"
+          @click="toggleHistory"
+        >
+          {{ historyOpen ? t("consensus.hideHistory") : t("consensus.history") }}
+          <span v-if="history.length > 0">({{ history.length }})</span>
         </button>
       </div>
 
-      <p v-if="!loading && totalPending === 0" class="text-sm text-secondary">
+      <!-- Stage 7.8 — past rounds, read-only. -->
+      <div v-if="historyOpen" class="mb-4 rounded-xl border border-app bg-secondary p-3">
+        <p v-if="historyLoading" class="text-xs text-secondary">{{ t("common.loading") }}</p>
+        <p v-else-if="history.length === 0" class="text-xs text-secondary">
+          {{ t("consensus.historyEmpty") }}
+        </p>
+
+        <div v-else class="space-y-1">
+          <button
+            v-for="s in history"
+            :key="s.id"
+            type="button"
+            class="block w-full rounded-lg border border-app bg-app px-3 py-2 text-left transition-colors hover:border-emerald-500/50"
+            :aria-pressed="viewing?.id === s.id"
+            @click="viewing = viewing?.id === s.id ? null : s"
+          >
+            <p class="truncate text-xs text-app">{{ s.prompt }}</p>
+            <p class="text-[10px] text-secondary">
+              {{ s.responses.length }} {{ t("consensus.historyAnswers") }} ·
+              {{ s.aggregationMode }} · {{ new Date(s.createdAt).toLocaleString() }}
+            </p>
+          </button>
+        </div>
+
+        <!-- Read-only detail: what each agent said, and what was chosen. -->
+        <div
+          v-if="viewing"
+          class="mt-2 rounded-lg border border-app bg-app p-3"
+          data-testid="consensus-history-detail"
+        >
+          <p class="mb-2 text-xs text-app">{{ t("consensus.historyDetail") }}</p>
+          <div
+            v-for="r in viewing.responses"
+            :key="r.connectionId"
+            class="mb-2 rounded border border-app bg-secondary px-2 py-1.5"
+          >
+            <p class="text-[10px] text-secondary">{{ r.agentName }}</p>
+            <p class="whitespace-pre-wrap text-[11px] text-app">{{ r.answer }}</p>
+          </div>
+          <p
+            v-if="viewing.result"
+            class="mt-2 border-l-2 border-emerald-600/50 pl-2 text-[11px] text-app"
+          >
+            {{ t("consensus.historyChosen") }}: {{ viewing.result }}
+          </p>
+          <p v-if="viewing.judgeRationale" class="mt-1 text-[10px] italic text-secondary">
+            {{ viewing.judgeRationale }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Setup: agents + prompt -->
+      <div class="mb-4 space-y-3 rounded-xl border border-app bg-secondary p-4">
+        <AgentSelector />
+
+        <textarea
+          v-model="consensus.prompt"
+          rows="3"
+          :placeholder="t('consensus.promptPlaceholder')"
+          class="w-full resize-y rounded-lg border border-app bg-tertiary px-3 py-2 text-sm text-app outline-none focus:border-emerald-500 disabled:opacity-50"
+          :disabled="busy"
+        />
+
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            :disabled="!consensus.canSend"
+            @click="consensus.send()"
+          >
+            {{ consensus.status === "querying" ? t("consensus.queryingAll") : t("consensus.sendToAll") }}
+          </button>
+          <button
+            v-if="hasRound"
+            type="button"
+            class="rounded-lg border border-app px-3 py-2 text-sm text-app transition-colors hover:bg-tertiary disabled:opacity-50"
+            :disabled="busy"
+            @click="consensus.reset()"
+          >
+            {{ t("consensus.reset") }}
+          </button>
+          <span v-if="hasRound && !busy" class="text-[11px] text-secondary">
+            {{ t("consensus.tally", { done: consensus.doneCount, failed: consensus.errorCount }) }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <p v-if="!hasRound" class="py-10 text-center text-sm text-secondary">
         {{ t("consensus.empty") }}
       </p>
-      <p v-else-if="loading" class="text-sm text-secondary">{{ t("common.loading") }}</p>
 
-      <!-- Approvals -->
-      <section v-if="approvals.length > 0" class="mb-6">
-        <h2 class="mb-2 text-sm font-medium text-app">
-          {{ t("consensus.approvals") }} ({{ approvals.length }})
-        </h2>
-        <div class="space-y-2">
-          <div
-            v-for="a in approvals"
-            :key="a.requestId"
-            class="rounded-xl border border-app bg-secondary p-3"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-medium text-app">{{ a.toolName }}</span>
-                  <span class="rounded bg-tertiary px-1.5 py-0.5 text-[10px] text-secondary">
-                    {{ a.status }}
-                  </span>
-                </div>
-                <p v-if="a.reason" class="mt-0.5 text-xs text-secondary">{{ a.reason }}</p>
-                <p class="mt-0.5 text-[11px] text-secondary">{{ a.requestedAt }}</p>
-              </div>
-              <div class="flex shrink-0 gap-2">
-                <button
-                  class="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-                  :disabled="busy.has(a.requestId)"
-                  :aria-label="`${t('common.confirm')} ${a.toolName}`"
-                  @click="approveApproval(a.requestId)"
-                >
-                  {{ t("common.confirm") }}
-                </button>
-                <button
-                  class="rounded-lg border border-app px-3 py-1 text-xs text-app hover:bg-tertiary disabled:opacity-50"
-                  :disabled="busy.has(a.requestId)"
-                  :aria-label="`${t('common.no')} ${a.toolName}`"
-                  @click="denyApproval(a.requestId)"
-                >
-                  {{ t("common.no") }}
-                </button>
-              </div>
-            </div>
-            <details
-              v-if="a.argumentsJson"
-              class="mt-2 cursor-pointer text-xs text-secondary"
-              @toggle="toggle(a.requestId)"
-            >
-              <summary>{{ t("consensus.arguments") }}</summary>
-              <pre class="mt-1 overflow-auto rounded-lg bg-tertiary p-2 font-mono text-[11px] text-app">{{
-                pretty(a.argumentsJson)
-              }}</pre>
-            </details>
-          </div>
-        </div>
-      </section>
+      <!-- Response columns -->
+      <div
+        v-else
+        class="grid min-h-0 flex-1 gap-2"
+        :style="{ gridTemplateColumns: `repeat(${Math.min(consensus.responses.length, 4)}, minmax(0, 1fr))` }"
+      >
+        <ResponseColumn
+          v-for="r in consensus.responses"
+          :key="r.connectionId"
+          :response="r"
+          :pickable="consensus.aggregationMode === 'manual'"
+          :picked="consensus.pickedConnectionId === r.connectionId"
+          @pick="pick"
+        />
+      </div>
 
-      <!-- Escalations -->
-      <section v-if="escalations.length > 0 || approvals.length === 0">
-        <div class="mb-2 flex items-center justify-between">
-          <h2 class="text-sm font-medium text-app">
-            {{ t("consensus.escalations") }} ({{ escalations.length }})
-          </h2>
-          <div class="flex items-center gap-2">
-            <select
-              v-model="minSeverity"
-              class="rounded-lg border border-app bg-tertiary px-2 py-1 text-xs text-app outline-none"
-              @change="load"
-            >
-              <option :value="null">{{ t("consensus.allSeverities") }}</option>
-              <option value="low">low</option>
-              <option value="medium">medium</option>
-              <option value="high">high</option>
-              <option value="critical">critical</option>
-            </select>
+      <!-- Aggregation -->
+      <div v-if="hasRound" class="mt-4 rounded-xl border border-app bg-secondary p-4">
+        <div class="mb-3 flex items-center gap-2">
+          <h2 class="text-sm font-medium text-app">{{ t("consensus.aggregate") }}</h2>
+          <div class="flex rounded-lg border border-app p-0.5">
             <button
-              v-if="escalations.length > 1"
-              class="rounded-lg border border-app px-2 py-1 text-xs text-app hover:bg-tertiary disabled:opacity-50"
-              :disabled="busy.has('__all__')"
-              @click="approveAll"
+              type="button"
+              class="rounded-md px-2.5 py-1 text-xs transition-colors disabled:opacity-50"
+              :class="consensus.aggregationMode === 'manual' ? 'bg-emerald-600 text-white' : 'text-secondary'"
+              :disabled="busy"
+              @click="consensus.aggregationMode = 'manual'"
             >
-              {{ t("consensus.approveAll") }}
+              {{ t("consensus.modeManual") }}
+            </button>
+            <button
+              type="button"
+              class="rounded-md px-2.5 py-1 text-xs transition-colors disabled:opacity-50"
+              :class="consensus.aggregationMode === 'llm-judge' ? 'bg-emerald-600 text-white' : 'text-secondary'"
+              :disabled="busy"
+              @click="consensus.aggregationMode = 'llm-judge'"
+            >
+              {{ t("consensus.modeJudge") }}
             </button>
           </div>
         </div>
 
-        <p v-if="escalations.length === 0" class="text-sm text-secondary">
-          {{ t("consensus.noEscalations") }}
+        <!-- Shown in both modes: an incomplete round is worth knowing about before
+             choosing an aggregation mode, not only once the judge is involved. -->
+        <p v-if="consensus.errorCount > 0" class="mb-3 text-[11px] text-amber-400">
+          {{
+            t("consensus.partialRound", {
+              done: consensus.doneCount,
+              failed: consensus.errorCount,
+            })
+          }}
         </p>
 
-        <div class="space-y-2">
-          <div
-            v-for="e in escalations"
-            :key="e.escalationId"
-            class="rounded-xl border border-app bg-secondary p-3"
+        <p v-if="consensus.aggregationMode === 'manual'" class="text-xs text-secondary">
+          {{ t("consensus.manualHint") }}
+        </p>
+
+        <LlmJudgePanel v-else @run="runJudge" />
+
+        <p v-if="judgeError" class="mt-2 text-xs text-red-400">{{ judgeError }}</p>
+
+        <div
+          v-if="consensus.aggregatedResult !== null"
+          class="mt-3 rounded-lg border border-emerald-600/40 bg-emerald-500/5 p-3"
+        >
+          <p class="mb-1 text-[11px] text-secondary">
+            {{ consensus.aggregatedByJudge() ? t("consensus.judgeResult") : t("consensus.pickedResult") }}
+          </p>
+          <!-- Stage 7.5: the judge's reason for its pick. -->
+          <p
+            v-if="consensus.judgeRationale"
+            class="mb-2 border-l-2 border-emerald-600/50 pl-2 text-[11px] italic text-secondary"
           >
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm font-medium text-app">
-                    {{ e.toolOrIntentName || e.type }}
-                  </span>
-                  <span class="rounded px-1.5 py-0.5 text-[10px]" :class="severityClass(e.severity)">
-                    {{ e.severity }}
-                  </span>
-                </div>
-                <p v-if="e.actionPlan" class="mt-1 text-xs text-secondary">{{ e.actionPlan }}</p>
-                <p v-if="e.context" class="mt-0.5 text-[11px] text-secondary">{{ e.context }}</p>
-                <p class="mt-0.5 text-[11px] text-secondary">
-                  {{ e.requestedBy }} · {{ e.createdAt }}
-                </p>
-              </div>
-              <div class="flex shrink-0 gap-2">
-                <button
-                  class="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-                  :disabled="busy.has(e.escalationId)"
-                  :aria-label="`${t('common.confirm')} ${e.toolOrIntentName || e.type}`"
-                  @click="approveEscalation(e.escalationId)"
-                >
-                  {{ t("common.confirm") }}
-                </button>
-                <button
-                  class="rounded-lg border border-app px-3 py-1 text-xs text-app hover:bg-tertiary disabled:opacity-50"
-                  :disabled="busy.has(e.escalationId)"
-                  :aria-label="`${t('common.no')} ${e.toolOrIntentName || e.type}`"
-                  @click="denyEscalation(e.escalationId)"
-                >
-                  {{ t("common.no") }}
-                </button>
-              </div>
-            </div>
+            {{ consensus.judgeRationale }}
+          </p>
+          <div class="whitespace-pre-wrap text-sm leading-relaxed text-app">
+            {{ consensus.aggregatedResult }}
           </div>
         </div>
-      </section>
+      </div>
     </div>
   </div>
 </template>

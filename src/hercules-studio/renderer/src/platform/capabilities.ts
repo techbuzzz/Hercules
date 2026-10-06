@@ -209,6 +209,17 @@ export interface PlatformCapabilities {
     baseUrl(): string | null;
     list(opts?: { limit?: number; cursor?: string }): Promise<WorkflowListDto>;
     get(id: string): Promise<WorkflowDetailDto>;
+    /**
+     * Creates or updates a definition. Supplying `id` updates that definition in place;
+     * omitting it creates a new one.
+     */
+    save(input: {
+      id?: string;
+      name: string;
+      version?: number;
+      description?: string;
+      graph: unknown;
+    }): Promise<WorkflowDetailDto>;
     remove(id: string): Promise<void>;
     run(id: string): Promise<unknown>;
   };

@@ -169,8 +169,15 @@ Agent (data/Skills/skill.{id}/)
   ├─ skill.meta.json
   ├─ skill.prompt.md
   ├─ skill.description.md
-  ├─ skill.{id}.v{N}.md (history)
-  └─ code.cs (if file-based app)
+  └─ skill.{id}.v{N}.md (history)
+
+  ⚠️ `code.cs` is NOT stored per skill. A skill is Meta + Description + Prompt;
+     `SkillDetailDto` carries no code field and `SkillPackager` never reads or writes
+     one. C# reaches the sandbox only as a one-off snippet (POST /api/code/run) or a
+     session file under {DataRoot}/Sandbox/sessions. Consequently the .skillpkg
+     builder's optional `code.cs` entry is implemented but never populated from a live
+     skill, and the Stage 3.5 pre-check runs on the sandbox-run flow rather than at push
+     time. Exposing per-skill source is the prerequisite for both.
 
 Studio:
   GET /api/skills/{id} → SkillDetailDto

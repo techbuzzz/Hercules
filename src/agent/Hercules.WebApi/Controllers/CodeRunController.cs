@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Hercules.CodeExecution;
 using Hercules.WebApi.CodeRuns;
+using Hercules.WebApi.Contracts;
 
 namespace Hercules.WebApi.Controllers;
 
@@ -27,6 +28,26 @@ public static class CodeRunController
     public static void MapCodeRuns(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/code").WithTags("CodeRun");
+
+        // POST /api/code/scan — scan-only. Stage 3.5: a skill being pushed can carry C#, and
+// the operator should see "File.Delete at line 42" before shipping it, rather than
+// discovering it when the sandbox rejects the run. Uses the same DangerousCodeScanner and
+// the same DI-registered SandboxOptions the executors use, so what is reported here is
+// exactly what execution would enforce — no second, drifting ruleset.
+group.MapPost("/scan", (CodeScanRequest? req, SandboxOptions options) =>
+{
+if (req is null || string.IsNullOrWhiteSpace(req.Code))
+        return Results.BadRequest(new { error = "code is required" });
+
+    var scan = DangerousCodeScanner.Scan(req.Code, options);
+
+    return Results.Ok(new CodeScanResponseDto
+    {
+        Allowed = scan.IsAllowed,
+        Reasons = scan.BlockedReasons,
+        LineNumbers = scan.LineNumbers,
+    });
+}).WithName("ScanCode").WithTags("CodeRun").Produces<CodeScanResponseDto>(200);
 
         // POST /api/code/run — start a sandbox run. Returns immediately with a runId;
         // observe it over SSE so the UI never blocks on a long execution.
@@ -90,10 +111,11 @@ public static class CodeRunController
                 }
             }, CancellationToken.None);
 
-            return Results.Accepted($"/api/code/run/{run.Id}/stream", new { runId = run.Id });
+            return Results.Accepted($"/api/code/run/{run.Id}/stream", new StartCodeRunResponseDto { RunId = run.Id });
         })
         .WithName("StartCodeRun")
-        .RequireRateLimiting(RateLimitPolicies.Expensive);
+        .RequireRateLimiting(RateLimitPolicies.Expensive)
+        .Produces<StartCodeRunResponseDto>(202);
 
         // GET /api/code/run/{runId} — status snapshot (polling alternative to SSE).
         group.MapGet("/run/{runId}", (string runId, SkillRunStore store) =>
@@ -103,7 +125,8 @@ public static class CodeRunController
                 ? Results.NotFound(new { error = "unknown run" })
                 : Results.Ok(run.StatusSnapshot());
         })
-        .WithName("GetCodeRun");
+        .WithName("GetCodeRun")
+        .Produces<CodeRunStatusDto>(200);
 
         // GET /api/code/run/{runId}/stream — SSE.
         // `?after=<seq>` replays from the client's last seen sequence, so a dropped

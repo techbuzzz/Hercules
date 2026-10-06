@@ -214,6 +214,6 @@ Hercules becomes a **runtime for agent meshes**: tiny, self-improving, single-pu
 
 ## How to influence the roadmap
 
-- Open a [discussion](../../discussions) for ideas.
-- Open an [issue](../../issues) for concrete bugs or proposals.
+- Open a [discussion](https://github.com/techbuzzz/Hercules/discussions) for ideas.
+- Open an [issue](https://github.com/techbuzzz/Hercules/issues) for concrete bugs or proposals.
 - See [CONTRIBUTING-EN.md](../CONTRIBUTING-EN.md) for contribution guidelines.

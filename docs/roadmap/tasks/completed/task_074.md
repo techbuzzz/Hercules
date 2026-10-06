@@ -86,6 +86,6 @@ src/agent/Mesh/Backends/Nats/NatsTaskQueue.cs, src/agent/Mesh/Backends/Nats/Nats
 NATS client API может отличаться между версиями; проверить совместимость с установленной `NATS.Net` package. Rollback: вернуть no-ops (но баг останется). Если NATS backend не используется в production — понизить priority.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

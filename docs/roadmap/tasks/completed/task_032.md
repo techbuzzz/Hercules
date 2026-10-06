@@ -81,6 +81,6 @@ src/agent/Mesh/Manifest/, src/agent/Hercules.WebApi/Controllers/ManifestControll
 - `dotnet test` — 872/880 passed (8 pre-existing failures: OtelService × 5, BudgetGuard × 1, WasmTool × 1, AgentCore × 1)
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

@@ -80,8 +80,22 @@ public static class WorkflowsController
                     statusCode: StatusCodes.Status413PayloadTooLarge);
             }
 
+            // An update must land on an existing definition. Without this guard the upsert
+            // (ON CONFLICT DO UPDATE) would INSERT a client-chosen id that does not
+            // exist yet, so a typo in the id would quietly create a new workflow
+            // instead of reporting that there was nothing to update.
+            if (!string.IsNullOrWhiteSpace(req.Id) &&
+                await store.GetAsync(req.Id, ct).ConfigureAwait(false) is null)
+            {
+                return Results.Problem(
+                    title: "Not found",
+                    detail: $"Workflow '{req.Id}' not found.",
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+
             var def = new WorkflowDefinition
             {
+                Id = req.Id ?? "",
                 Name = req.Name,
                 Version = req.Version <= 0 ? 1 : req.Version,
                 Description = req.Description,

@@ -1,5 +1,7 @@
 using Hercules.Tools.Approval;
 
+using Hercules.WebApi.Contracts;
+
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
@@ -21,7 +23,8 @@ public static class ApprovalController
                 count = pending.Count,
                 approvals = pending.Select(ToDto).ToList()
             });
-        }).WithName("ListPendingApprovals").WithTags("Approvals");
+        }).WithName("ListPendingApprovals").WithTags("Approvals")
+          .Produces<PendingApprovalsResponseDto>(200);
 
         // GET /api/approvals/{id} — получить конкретный запрос
         app.MapGet("/api/approvals/{id}", (

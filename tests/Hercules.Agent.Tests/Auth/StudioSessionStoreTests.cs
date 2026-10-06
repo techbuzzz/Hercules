@@ -129,6 +129,68 @@ public class StudioSessionStoreTests
         Assert.Equal(clock.GetUtcNow().AddMinutes(15), session.ExpiresAt);
     }
 
+    // -----------------------------------------------------------------------
+    //  Stage 6.3: sessions are bound to the API key that minted them, so a
+    //  deleted or demoted key cannot keep admin rights until its TTL runs out.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Create_RecordsTheMintingKeyFingerprint()
+    {
+        var store = Create();
+        var session = store.Create(ApiKeyRole.System, "a", "A", "abc123def456");
+
+        Assert.Equal("abc123def456", session.KeyFingerprint);
+    }
+
+    [Fact]
+    public void Create_WithoutAFingerprint_LeavesItNull()
+    {
+        var store = Create();
+        Assert.Null(store.Create(ApiKeyRole.Contribute, "a", "A").KeyFingerprint);
+        Assert.Null(store.Create(ApiKeyRole.Contribute, "a", "A", "   ").KeyFingerprint);
+    }
+
+    [Fact]
+    public void RevokeByFingerprint_DropsOnlySessionsFromThatKey()
+    {
+        var store = Create();
+        var doomed = store.Create(ApiKeyRole.System, "a", "A", "key-one");
+        var sameKey = store.Create(ApiKeyRole.System, "a", "A", "key-one");
+        var survivor = store.Create(ApiKeyRole.Contribute, "a", "A", "key-two");
+
+        Assert.Equal(2, store.RevokeByFingerprint("key-one"));
+
+        Assert.False(store.TryValidate(doomed.Token, out _));
+        Assert.False(store.TryValidate(sameKey.Token, out _));
+        Assert.True(store.TryValidate(survivor.Token, out _));
+    }
+
+    [Fact]
+    public void RevokeByFingerprint_MatchesCaseInsensitivelyAndIgnoresBlankInput()
+    {
+        var store = Create();
+        var session = store.Create(ApiKeyRole.System, "a", "A", "ABC123");
+
+        Assert.Equal(1, store.RevokeByFingerprint("abc123"));
+        Assert.False(store.TryValidate(session.Token, out _));
+
+        Assert.Equal(0, store.RevokeByFingerprint(""));
+        Assert.Equal(0, store.RevokeByFingerprint(null!));
+    }
+
+    [Fact]
+    public void RevokeByFingerprint_LeavesSessionsWithNoBoundKeyAlone()
+    {
+        var store = Create();
+        // Sessions issued before Stage 6.3 carry no fingerprint; revoking a specific
+        // key must not sweep them up, because they may belong to any key.
+        var legacy = store.Create(ApiKeyRole.System, "a", "A");
+
+        Assert.Equal(0, store.RevokeByFingerprint("some-key"));
+        Assert.True(store.TryValidate(legacy.Token, out _));
+    }
+
     /// <summary>Минимальные детерминированные часы — без зависимости ради сдвига времени.</summary>
     private sealed class FakeTimeProvider(DateTimeOffset? start = null) : TimeProvider
     {

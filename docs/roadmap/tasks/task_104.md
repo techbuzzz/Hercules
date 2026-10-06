@@ -7,7 +7,7 @@
 **Studio Stage:** 8
 
 ## Goal
-Создать отдельный .NET сервис `hercules-workflow-server` для durable workflow execution: хранение определений, исполнитель, триггеры (webhook + cron), история, мониторинг. См. [ADR-0008](../EPIC_Hercules_Studio/adr/0008-workflow-server-architecture.md).
+Создать отдельный .NET сервис `hercules-workflow-server` для durable workflow execution: хранение определений, исполнитель, триггеры (webhook + cron), история, мониторинг. См. [ADR-0008](../../EPIC_Hercules_Studio/adr/0008-workflow-server-architecture.md).
 
 ## Acceptance criteria
 - [ ] `src/workflow-server/Hercules.WorkflowServer.csproj` — новый ASP.NET Core проект
@@ -171,6 +171,6 @@ src/agent/Hercules.slnx (add project reference)
 src/agent/Hercules.csproj (add to DefaultItemExcludes)
 
 ## Links
-- ADR-0008: [../EPIC_Hercules_Studio/adr/0008-workflow-server-architecture.md](../EPIC_Hercules_Studio/adr/0008-workflow-server-architecture.md)
-- Studio Stage 8: [../EPIC_Hercules_Studio/tasks/stage_08_workflow.md](../EPIC_Hercules_Studio/tasks/stage_08_workflow.md)
+- ADR-0008: [../EPIC_Hercules_Studio/adr/0008-workflow-server-architecture.md](../../EPIC_Hercules_Studio/adr/0008-workflow-server-architecture.md)
+- Studio Stage 8: [../EPIC_Hercules_Studio/tasks/stage_08_workflow.md](../../EPIC_Hercules_Studio/tasks/stage_08_workflow.md)
 - Backlog: [../backlog.md](../backlog.md)

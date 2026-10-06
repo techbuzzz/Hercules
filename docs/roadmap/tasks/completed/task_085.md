@@ -97,6 +97,6 @@ src/agent/Observability/OtelHostBuilderExtensions.cs, src/agent/Observability/Ot
 Sampled logging может пропустить первый occurrence критического event; всегда emit metric counter + emit LogError (не sampled) для critical. Console gating: dev experience может пострадать — добавить `Otel.ConsoleExporterEnabled` override. Rollback: вернуть always-on console.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

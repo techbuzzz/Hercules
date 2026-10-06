@@ -1,7 +1,14 @@
 # Stage 2 — Chat + Skill Editor
 
+<!-- web-first-migration-status -->
+> ⚠️ **These checkboxes are not a progress report.** They were never ticked during the
+> web-first migration, so an unticked box does not mean the work is outstanding.
+> As of 2026-10-06: Monaco editor, prompt history with Restore, and a revision **diff view** are **done**.
+> Per-item breakdown: [VERIFICATION.md](../VERIFICATION.md#what-remains).
+
+
 **Epic:** Hercules Studio
-**Status:** pending
+**Status:** delivered — Monaco, prompt history and revision diff all done
 **Estimate:** 2-3 недели
 **Dependencies (backend):** нет
 **Dependencies (Studio):** Stage 0, Stage 1

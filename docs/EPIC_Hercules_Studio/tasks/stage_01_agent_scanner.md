@@ -1,7 +1,14 @@
 # Stage 1 — Agent Scanner + Connection Manager + CheckIn/CheckOut
 
+<!-- web-first-migration-status -->
+> ⚠️ **These checkboxes are not a progress report.** They were never ticked during the
+> web-first migration, so an unticked box does not mean the work is outstanding.
+> As of 2026-10-06: superseded by A2A discovery (`/agent.manifest.json`).
+> Per-item breakdown: [VERIFICATION.md](../VERIFICATION.md#what-remains).
+
+
 **Epic:** Hercules Studio
-**Status:** pending
+**Status:** superseded by A2A discovery (ADR-0009)
 **Estimate:** 1-2 недели
 **Dependencies (backend):** task_096 (port migration), task_097 (dual API keys), task_098 (CheckIn/CheckOut)
 **Dependencies (Studio):** Stage 0

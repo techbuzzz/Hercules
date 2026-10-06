@@ -104,10 +104,10 @@
 
 | # | Initiative | Task | Slug | Status |
 |---|------------|------|------|--------|
-| 71 | 45 | [SQLite thread-safety and sync-over-async removal](tasks/completed/task_071.md) | `sqlite-thread-safety` | done |
+| 71 | 45 | [SQLite thread-safety and sync-over-async removal](tasks/completed/task_071.md) | `sqlite-thread-safety` | done (deferrals to task_073/075/077 tracked in the file) |
 | 72 | 45 | [QuotaService cleanup fix and distributed quotas](tasks/completed/task_072.md) | `quota-cleanup-fix` | done |
 | 73 | 45 | [Outbox synced-state and bounded-queue prune fix](tasks/completed/task_073.md) | `outbox-synced-fix` | done |
-| 74 | 45 | [NATS JetStream ack/fail implementation](tasks/completed/task_074.md) | `nats-jetstream-ack` | done |
+| 74 | 45 | [NATS JetStream ack/fail implementation](tasks/completed/task_074.md) | `nats-jetstream-ack` | done (live-NATS integration test skipped by design) |
 | 75 | 46 | [DI lifetime fixes: captive dependency and AgentCore singleton](tasks/completed/task_075.md) | `di-lifetime-fixes` | done |
 | 76 | 46 | [ResilientLLMClient per-call provider/model](tasks/completed/task_076.md) | `resilient-llm-per-call-provider` | done |
 | 77 | 46 | [Sync-over-async sweep: ToolPolicyEngine, SloService, Redis/Postgres timers, RolloutController](tasks/completed/task_077.md) | `sync-over-async-sweep` | done |
@@ -116,11 +116,11 @@
 | 80 | 46 | [Graceful shutdown and drain](tasks/completed/task_080.md) | `graceful-shutdown-drain` | done |
 | 81 | 46 | [Kestrel tuning, framework rate limiter, compression, output cache](tasks/completed/task_081.md) | `kestrel-rate-limiter-compression` | done |
 | 82 | 46 | [RouterHealthTracker, Redis CAS, Postgres reconnect, BuildServiceProvider](tasks/completed/task_082.md) | `router-redis-postgres-di-fixes` | done |
-| 83 | 47 | [CacheService stampede, eviction, and sliding expiration](tasks/completed/task_083.md) | `cache-stampede-eviction` | done |
+| 83 | 47 | [CacheService stampede, eviction, and sliding expiration](tasks/completed/task_083.md) | `cache-stampede-eviction` | done (multi-node IDistributedCache layer deferred) |
 | 84 | 47 | [ProposalStore caching, async I/O, and hot-path allocations](tasks/completed/task_084.md) | `proposal-store-hotpath-alloc` | done |
-| 85 | 47 | [OpenTelemetry polish: console gating, process instrumentation, histogram buckets, async logging](tasks/completed/task_085.md) | `otel-logging-polish` | done |
+| 85 | 47 | [OpenTelemetry polish: console gating, process instrumentation, histogram buckets, async logging](tasks/completed/task_085.md) | `otel-logging-polish` | done (Console.WriteLine→ILogger deferred to a follow-up) |
 | 86 | 47 | [Backpressure, bounded channels, and DLQ/requeue fixes](tasks/completed/task_086.md) | `backpressure-bounded-channels-dlq` | done |
-| 87 | 47 | [Misc hardening: DelegationBoundary TTL, ResilientTransport trim, CORS, backup passphrase, SLO real metrics](tasks/completed/task_087.md) | `misc-hardening` | done |
+| 87 | 47 | [Misc hardening: DelegationBoundary TTL, ResilientTransport trim, CORS, backup passphrase, SLO real metrics](tasks/completed/task_087.md) | `misc-hardening` | done (four follow-ups tracked in the file) |
 
 ## Phase 6 — IoT/edge fleet and mesh operations (Q3 2027)
 
@@ -149,7 +149,7 @@
 | 89 | 48 | [Capability registry panel](tasks/completed/task_089.md) | `web-capability-registry-panel` | done |
 | 90 | 48 | [Discovery panel](tasks/completed/task_090.md) | `web-discovery-panel` | done |
 | 91 | 48 | [Trust admission policy panel](tasks/completed/task_091.md) | `web-trust-admission-panel` | done |
-| 92 | 48 | [Mesh profiles & backend health](tasks/completed/task_092.md) | `web-mesh-profiles-health` | done |
+| 92 | 48 | [Mesh profiles & backend health](tasks/task_092.md) | `web-mesh-profiles-health` | partial — config + backend health exist, the profile UI does not; the task file still has 9 unticked boxes |
 | 93 | 48 | [Mesh observability & centralized logs](tasks/completed/task_093.md) | `web-mesh-observability` | done |
 | 94 | 48 | [Backup & SLO panel](tasks/completed/task_094.md) | `web-backup-slo-panel` | done |
 | 95 | 48 | [Security, quotas & rollout panel](tasks/completed/task_095.md) | `web-security-quotas-rollout` | done |
@@ -168,12 +168,12 @@
 | 101 | 6 | [SkillSdk (Hercules.SkillSdk NuGet)](tasks/completed/task_101.md) | `skill-sdk` | done |
 | 102 | 6 | [Context distillation](tasks/completed/task_102.md) | `context-distillation` | done |
 | 103 | 6 | [PostgreSQL session store](tasks/task_103.md) | `postgres-session-store` | pending |
-| 104 | 8 | [hercules-workflow-server](tasks/task_104.md) | `workflow-server` | done |
+| 104 | 8 | [hercules-workflow-server](tasks/task_104.md) | `workflow-server` | done (MVP; unchecked boxes in the file are checklist parent headings) |
 | 105 | 8 | [Workflow graph model + executor](tasks/task_105.md) | `workflow-graph-executor` | pending |
 | 106 | 8 | [DelegatedTask persistence](tasks/task_106.md) | `delegated-task-persistence` | done |
 | 107 | 8 | [Parent/child task relationships](tasks/task_107.md) | `parent-child-tasks` | pending |
 | 108 | 8 | [DurableTask checkpoint persistence](tasks/task_108.md) | `checkpoint-persistence` | pending |
-| 109 | 0 (pre-req) | [AddOpenApi() в Program.cs](tasks/completed/task_109.md) | `add-openapi-producer` | done |
+| 109 | 0 (pre-req) | [AddOpenApi() в Program.cs](tasks/completed/task_109.md) | `add-openapi-producer` | done — the file's boxes predate task_111, which actually produced the OpenAPI document |
 | 110 | 0 (pre-req) | [WithTags на все контроллеры](tasks/completed/task_110.md) | `withtags-all-controllers` | done |
 | 111 | 0 (pre-req) | [Produces\<T\>() + DTO рефакторинг](tasks/task_111.md) | `produces-dto-refactor` | pending |
 | 112 | 0 (pre-req) | [WithName на Marketplace + Template](tasks/task_112.md) | `withname-marketplace-template` | pending |
