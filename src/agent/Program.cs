@@ -545,7 +545,10 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<StorageConfig>(),
             sp.GetRequiredService<SkillPackager>(),
             sp.GetRequiredService<IMarketplaceSigningService>(),
-            sp.GetService<IHttpClientFactory>()));
+            sp.GetService<IHttpClientFactory>(),
+            // R1: without MarketplaceConfig the URL-import guard has no feature flag and
+            // ImportFromUrlAsync refuses — fail-closed.
+            sp.GetRequiredService<MarketplaceConfig>()));
     services.AddSingleton<AgentTemplateManager>();
 
     // Fleet templates (task_062)
@@ -722,8 +725,13 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<SlosConfig>(),
             sp.GetRequiredService<IAuditService>(),
             sp.GetRequiredService<Hercules.Mesh.Observability.IMeshObservabilityService>(),
-            sp.GetService<Hercules.Offline.IOutboxStore>(),
-            sp.GetService<IBudgetService>(),
+            // R27: GetService<T>() returns null when unregistered, and these two are
+            // non-nullable ctor parameters — an accidental unregistration would have
+            // surfaced as a NullReferenceException on first SLO evaluation, long after
+            // startup. Both are registered unconditionally (see above), so GetRequiredService
+            // is behaviour-preserving and turns that class of failure into a startup error.
+            sp.GetRequiredService<Hercules.Offline.IOutboxStore>(),
+            sp.GetRequiredService<IBudgetService>(),
             sp.GetRequiredService<ILogger<SloService>>(),
             sp.GetService<Hercules.Slo.ISloLatencyTracker>(),
             sp.GetService<Hercules.Slo.IConnectivityStateProvider>()));

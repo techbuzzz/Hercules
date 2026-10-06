@@ -9,6 +9,15 @@
     <AssemblyName>Hercules.WebApi</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
 
+    <!-- R23: CS0436 — both `Hercules` (the agent console, an Exe with top-level statements)
+         and this project emit a compiler-generated global-namespace `Program`. This project
+         references `Hercules`, so the type collides three times in this file. The resolution
+         is deterministic and correct — the local `Program` always wins — and it matters
+         because `public partial class Program;` here is the hook WebApplicationFactory<T>
+         uses for integration tests. Suppressing is preferred to restructuring an entry point,
+         which would risk changing startup behaviour for a purely cosmetic warning. -->
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
+
     <!-- [task_109] OpenAPI build-time generation: emits openapi.json in project root on `dotnet build` -->
     <OpenApiDocumentFile>$(MSBuildProjectDirectory)/openapi.json</OpenApiDocumentFile>
 
@@ -44,10 +53,20 @@
        /openapi/v1.json endpoint — so the committed document cannot drift from the
        document the server actually serves.
 
-       Skipped for design-time builds and when OpenApiGenerateDocumentOnBuild=false. -->
+       OPT-IN (R11/R12): generation is deliberately NOT part of a normal build.
+       Running the app on every build bound a real Kestrel socket (parallel/CI
+       builds collided on the port) and rewrote the git-tracked openapi.json plus
+       the tracked SQLite WAL sidecars, leaving the working tree permanently dirty.
+
+       To refresh the committed document:
+           dotnet build Hercules.WebApi/Hercules.WebApi.csproj -p:OpenApiGenerateDocumentOnBuild=true
+       or run the app directly with the `openapi-output` flag:
+           dotnet run :project Hercules.WebApi : openapi-output Hercules.WebApi/openapi.json
+
+       Skipped for design-time builds regardless. -->
   <Target Name="GenerateOpenApiDocument"
           AfterTargets="Build"
-          Condition="'$(DesignTimeBuild)' != 'true' AND '$(TargetFramework)' != '' AND '$(OpenApiGenerateDocumentOnBuild)' != 'false'">
+          Condition="'$(DesignTimeBuild)' != 'true' AND '$(TargetFramework)' != '' AND '$(OpenApiGenerateDocumentOnBuild)' == 'true'">
     <Message Importance="high" Text="GenerateOpenApiDocument: writing $(OpenApiDocumentFile)" />
     <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(TargetPath)&quot; --openapi-output &quot;$(OpenApiDocumentFile)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"

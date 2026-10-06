@@ -145,7 +145,12 @@ public class NatsTaskQueueTests : IDisposable
         var q = new NatsTaskQueue(null!, config, new Mock<ILogger<NatsTaskQueue>>().Object);
         try
         {
-            var expected = Path.Combine(AppContext.BaseDirectory, "test-dlq.jsonl");
+            // R3a: the DLQ path resolves against BuiltIn.ResolveDataRoot(), NOT
+            // AppContext.BaseDirectory as the test previously asserted. Asserting the base
+            // directory made this test write a real file outside the repo (it landed in
+            // D:\Sources\Github\HerculesData\) and fail on any machine with a different
+            // data root. The stream prefix part of the contract is unchanged.
+            var expected = Path.Combine(BuiltIn.ResolveDataRoot(), "test-dlq.jsonl");
             Assert.Equal(expected, q.DlqFilePath);
         }
         finally

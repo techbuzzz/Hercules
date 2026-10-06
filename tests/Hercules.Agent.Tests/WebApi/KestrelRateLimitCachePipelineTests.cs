@@ -25,7 +25,12 @@ namespace Hercules.Agent.Tests.WebApi;
 /// </summary>
 public class KestrelRateLimitCachePipelineTests
 {
-    private static IHost BuildTestHost(int chatPermits, int chatWindowSec = 60, int expensivePermits = 2)
+    private static IHost BuildTestHost(
+        int chatPermits,
+        int chatWindowSec = 60,
+        int expensivePermits = 2,
+        TaskCompletionSource? expensiveEntered = null,
+        TaskCompletionSource? expensiveRelease = null)
     {
         // Counter incremented by the (uncached) skills endpoint to verify the cache
         // is actually serving the second response.
@@ -109,7 +114,27 @@ public class KestrelRateLimitCachePipelineTests
 
         app.MapGet("/api/expensive", async () =>
         {
-            await Task.Delay(50);
+            // R3d: when the caller supplies a gate, hold the concurrency permit until it is
+            // released instead of guessing at a delay. The previous version slept 50 ms and
+            // the test waited 20 ms before issuing the second request; under CPU contention
+            // that 20 ms could elapse AFTER the first handler had already returned, releasing
+            // the permit and letting both requests succeed. That made the test
+            // intermittently red and dependent on machine load rather than on limiter
+            // behaviour. Without a gate (every other test) the original delay is kept.
+            if (expensiveEntered is not null)
+            {
+                expensiveEntered.TrySetResult();
+            }
+
+            if (expensiveRelease is not null)
+            {
+                await expensiveRelease.Task.ConfigureAwait(false);
+            }
+            else
+            {
+                await Task.Delay(50);
+            }
+
             return Results.Ok(new { ok = true });
         }).RequireRateLimiting(RateLimitPolicies.Expensive);
 
@@ -166,18 +191,36 @@ public class KestrelRateLimitCachePipelineTests
     [Fact]
     public async Task ExpensiveRateLimit_RejectsWhenConcurrencyExhausted()
     {
-        using var host = BuildTestHost(chatPermits: 100, chatWindowSec: 60, expensivePermits: 1);
+        // R3d: use an explicit handshake rather than a sleep. `entered` is signalled once
+        // the first request is actually inside the handler (so the single permit is held),
+        // and only then is the second request issued. The previous `Task.Delay(20)` raced
+        // the handler's 50 ms delay and let both requests succeed whenever the test thread
+        // was descheduled, which is why this test was intermittently red.
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        using var host = BuildTestHost(
+            chatPermits: 100,
+            chatWindowSec: 60,
+            expensivePermits: 1,
+            expensiveEntered: entered,
+            expensiveRelease: release);
+
         var client = await NewClientAsync(host);
 
-        // Launch 2 slow requests — first should pass, second should be rejected.
-        var t1 = client.GetAsync("/api/expensive");
-        await Task.Delay(20); // let the first request start
-        var t2 = client.GetAsync("/api/expensive");
+        var first = client.GetAsync("/api/expensive");
 
-        var responses = await Task.WhenAll(t1, t2);
+        // Fail loudly rather than hanging if the handler never runs.
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
-        Assert.Contains(responses, r => r.StatusCode == HttpStatusCode.TooManyRequests);
-        Assert.Contains(responses, r => r.StatusCode == HttpStatusCode.OK);
+        var second = await client.GetAsync("/api/expensive");
+
+        release.TrySetResult();
+
+        var firstResponse = await first;
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, second.StatusCode);
     }
 
     // -------- Response compression --------

@@ -32,4 +32,20 @@
     <ProjectReference Include="..\..\src\workflow-server\Hercules.WorkflowServer.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- R7/R41/R42: copy the committed OpenAPI document next to the test binaries so the
+         contract tests can assert against the real artefact instead of a regenerated one. -->
+    <None Include="..\..\src\agent\Hercules.WebApi\openapi.json" Link="openapi.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- R3b: explicit runner configuration. Collection parallelism stays on for speed,
+         but process-global state (notably the ActivityListener registry behind
+         OtelActivityListenerScope) is isolated by [Collection(DisableParallelization)].
+         Without a copied runner config the collection attributes still apply, but the
+         settings below are what keep them deterministic. -->
+    <None Update="xunit.runner.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

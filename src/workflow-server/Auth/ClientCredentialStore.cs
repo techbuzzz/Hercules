@@ -109,9 +109,60 @@ public sealed class ClientCredentialStore
         if (!string.IsNullOrEmpty(dir))
         {
             Directory.CreateDirectory(dir);
+
+            // R24: the directory holds a plaintext client secret. On POSIX it must not be
+            // world- or group-readable; the default umask often allows 644.
+            TryRestrictDirectoryPermissions(dir);
         }
-        using var stream = new FileStream(CredentialsFilePath, FileMode.Create, FileAccess.Write, FileShare.None);
-        JsonSerializer.Serialize(stream, new CredentialsFile { ClientId = creds.ClientId, ClientSecret = creds.ClientSecret }, JsonOptions);
+
+        // R24: write through a fresh stream and then tighten the file mode. Creating the
+        // file with FileStream uses the process umask, so on a permissive umask the secret
+        // was briefly world-readable between create and chmod.
+        using (var stream = new FileStream(CredentialsFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            JsonSerializer.Serialize(stream, new CredentialsFile { ClientId = creds.ClientId, ClientSecret = creds.ClientSecret }, JsonOptions);
+        }
+
+        TryRestrictFilePermissions(CredentialsFilePath);
+    }
+
+    /// <summary>
+    ///     R24: chmod 700 on the credentials directory (POSIX only; a no-op on Windows,
+    ///     where the ACL is inherited from the parent directory).
+    /// </summary>
+    private static void TryRestrictDirectoryPermissions(string dir)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            Console.Error.WriteLine($"[workflow-server] Could not restrict permissions on '{dir}': {ex.Message}");
+        }
+    }
+
+    /// <summary>R24: chmod 600 on the credentials file (POSIX only).</summary>
+    private static void TryRestrictFilePermissions(string path)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            Console.Error.WriteLine($"[workflow-server] Could not restrict permissions on '{path}': {ex.Message}");
+        }
     }
 
     private static string GenerateRandomToken(int bytes)

@@ -19,6 +19,17 @@ namespace Hercules.WorkflowServer.Controllers;
 /// </summary>
 public static class WorkflowsController
 {
+    /// <summary>R34: bounds on GET /api/workflows. Unbounded list responses are a cheap DoS.</summary>
+    private const int DefaultPageSize = 50;
+
+    private const int MaxPageSize = 200;
+
+    // R34: input length caps. Without these a single POST could persist an arbitrarily
+    // large graph into SQLite and blow up the response payload.
+    private const int MaxNameLength = 200;
+    private const int MaxDescriptionLength = 4_000;
+    private const int MaxGraphBytes = 1_000_000;
+
     public static void MapWorkflows(this IEndpointRouteBuilder app)
     {
         // POST /api/workflows — save (create or update) definition
@@ -29,12 +40,46 @@ public static class WorkflowsController
         {
             if (string.IsNullOrWhiteSpace(req.Name))
             {
-                return Results.BadRequest(new { error = "name is required." });
+                return Results.Problem(
+                    title: "Invalid workflow",
+                    detail: "name is required.",
+                    statusCode: StatusCodes.Status400BadRequest);
             }
+
             if (req.GraphJson.ValueKind == JsonValueKind.Undefined)
             {
-                return Results.BadRequest(new { error = "graphJson is required." });
+                return Results.Problem(
+                    title: "Invalid workflow",
+                    detail: "graphJson is required.",
+                    statusCode: StatusCodes.Status400BadRequest);
             }
+
+            // R34: validate before persisting.
+            if (req.Name.Length > MaxNameLength)
+            {
+                return Results.Problem(
+                    title: "Invalid workflow",
+                    detail: $"name exceeds {MaxNameLength} characters.",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            if (req.Description is { Length: > MaxDescriptionLength })
+            {
+                return Results.Problem(
+                    title: "Invalid workflow",
+                    detail: $"description exceeds {MaxDescriptionLength} characters.",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            var graphBytes = System.Text.Encoding.UTF8.GetByteCount(req.GraphJson.GetRawText());
+            if (graphBytes > MaxGraphBytes)
+            {
+                return Results.Problem(
+                    title: "Invalid workflow",
+                    detail: $"graphJson exceeds {MaxGraphBytes} bytes.",
+                    statusCode: StatusCodes.Status413PayloadTooLarge);
+            }
+
             var def = new WorkflowDefinition
             {
                 Name = req.Name,
@@ -46,13 +91,60 @@ public static class WorkflowsController
             return Results.Created($"/api/workflows/{saved.Id}", saved);
         }).WithName("SaveWorkflow");
 
-        // GET /api/workflows — list definitions
+        // GET /api/workflows — list definitions (paginated, summary only)
         app.MapGet("/api/workflows", async (
+            int? limit,
+            string? cursor,
             IWorkflowDefinitionStore store,
             CancellationToken ct) =>
         {
-            var list = await store.ListAsync(ct).ConfigureAwait(false);
-            return Results.Ok(list);
+            // R34: the endpoint previously returned every definition with no bound, so a
+            // large store turned a single GET into an unbounded response.
+            var take = limit ?? DefaultPageSize;
+            if (take <= 0)
+            {
+                return Results.Problem(
+                    title: "Invalid pagination",
+                    detail: "limit must be greater than 0.",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+
+            if (take > MaxPageSize)
+            {
+                take = MaxPageSize;
+            }
+
+            var all = await store.ListAsync(ct).ConfigureAwait(false);
+
+            IReadOnlyList<WorkflowSummary> page;
+            if (string.IsNullOrEmpty(cursor))
+            {
+                page = all.Take(take).ToList();
+            }
+            else
+            {
+                // Opaque cursor = index into the stable ordering the store returns.
+                if (!int.TryParse(cursor, out var start) || start < 0 || start > all.Count)
+                {
+                    return Results.Problem(
+                        title: "Invalid pagination",
+                        detail: "cursor is not a valid position for this collection.",
+                        statusCode: StatusCodes.Status400BadRequest);
+                }
+
+                page = all.Skip(start).Take(take).ToList();
+            }
+
+            var nextCursor = (int.TryParse(cursor, out var from) ? from + page.Count : page.Count);
+            var hasMore = nextCursor < all.Count;
+
+            return Results.Ok(new
+            {
+                items = page,
+                count = page.Count,
+                total = all.Count,
+                nextCursor = hasMore ? nextCursor.ToString(System.Globalization.CultureInfo.InvariantCulture) : null,
+            });
         }).WithName("ListWorkflows");
 
         // GET /api/workflows/{id} — get full definition
@@ -89,18 +181,32 @@ public static class WorkflowsController
             var def = await store.GetAsync(id, ct).ConfigureAwait(false);
             if (def is null)
             {
-                return Results.NotFound(new { error = $"Workflow '{id}' not found." });
+                return Results.Problem(
+                    title: "Not found",
+                    detail: $"Workflow '{id}' not found.",
+                    statusCode: StatusCodes.Status404NotFound);
             }
-            // task_105: real executor + persistence + retries.
-            // На этом этапе возвращаем 501 с явным follow-up указателем.
-            return Results.Json(
-                new
+
+            // R34: RunWorkflowRequest was accepted and then silently discarded — the API
+            // documented a run payload it never read. Reject a supplied body explicitly
+            // rather than pretending to honour it.
+            if (body?.Input is { } input && input.ValueKind is not JsonValueKind.Undefined and not JsonValueKind.Null)
+            {
+                return Results.Problem(
+                    title: "Not implemented",
+                    detail: "Workflow execution is not implemented yet (task_105); run inputs cannot be accepted.",
+                    statusCode: StatusCodes.Status501NotImplemented);
+            }
+
+            return Results.Problem(
+                title: "Not implemented",
+                detail: "Workflow execution is not implemented yet (task_104 follow-up, see task_105).",
+                statusCode: StatusCodes.Status501NotImplemented,
+                extensions: new Dictionary<string, object?>
                 {
-                    error = "Workflow execution not implemented yet (task_104 follow-up, see task_105).",
-                    workflowId = id,
-                    workflowName = def.Name,
-                },
-                statusCode: StatusCodes.Status501NotImplemented);
+                    ["workflowId"] = id,
+                    ["workflowName"] = def.Name,
+                });
         }).WithName("RunWorkflow");
 
         // GET /api/workflows/{id}/executions — list executions for a workflow (stub)
@@ -112,29 +218,27 @@ public static class WorkflowsController
             var def = await store.GetAsync(id, ct).ConfigureAwait(false);
             if (def is null)
             {
-                return Results.NotFound(new { error = $"Workflow '{id}' not found." });
+                return Results.Problem(
+                    title: "Not found",
+                    detail: $"Workflow '{id}' not found.",
+                    statusCode: StatusCodes.Status404NotFound);
             }
-            return Results.Json(
-                new
-                {
-                    error = "Execution listing not implemented yet (task_104 follow-up, see task_105).",
-                    workflowId = id,
-                    executions = Array.Empty<object>(),
-                },
-                statusCode: StatusCodes.Status501NotImplemented);
+
+            // R35: RFC 7807 instead of a 501 carrying a mixed error/data body.
+            return Results.Problem(
+                title: "Not implemented",
+                detail: "Execution listing is not implemented yet (task_105).",
+                statusCode: StatusCodes.Status501NotImplemented,
+                extensions: new Dictionary<string, object?> { ["workflowId"] = id });
         }).WithName("ListWorkflowExecutions");
 
         // GET /api/workflows/executions/{eid} — single execution status (stub)
-        app.MapGet("/api/workflows/executions/{eid}", (
-            string eid) =>
-        {
-            return Results.Json(
-                new
-                {
-                    error = "Execution status not implemented yet (task_104 follow-up, see task_105).",
-                    executionId = eid,
-                },
-                statusCode: StatusCodes.Status501NotImplemented);
-        }).WithName("GetWorkflowExecution");
+        app.MapGet("/api/workflows/executions/{eid}", (string eid) =>
+            Results.Problem(
+                title: "Not implemented",
+                detail: "Execution status is not implemented yet (task_105).",
+                statusCode: StatusCodes.Status501NotImplemented,
+                extensions: new Dictionary<string, object?> { ["executionId"] = eid }))
+            .WithName("GetWorkflowExecution");
     }
 }

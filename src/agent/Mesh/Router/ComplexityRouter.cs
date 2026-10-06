@@ -170,11 +170,11 @@ public sealed class ComplexityRouter : IComplexityRouter
             if (!_options.EnableFanOut)
             {
                 return (ExecutionPath.SinglePeer,
-                    "Explicit peer request — routing to single peer", wasDowngraded: false);
+                    "Explicit peer request — routing to single peer", WasDowngraded: false);
             }
 
             return (ExecutionPath.FanOut,
-                "Explicit peer request — routing to multiple peers (fan-out)", wasDowngraded: false);
+                "Explicit peer request — routing to multiple peers (fan-out)", WasDowngraded: false);
         }
 
         // No local capability → must route to peer
@@ -185,11 +185,11 @@ public sealed class ComplexityRouter : IComplexityRouter
             {
                 return (ExecutionPath.FanOut,
                     "No local capability + safety-sensitive tools — fan-out to multiple peers for redundancy",
-                    wasDowngraded: false);
+                    WasDowngraded: false);
             }
 
             return (ExecutionPath.SinglePeer,
-                "No local capability matched — routing to best available peer", wasDowngraded: false);
+                "No local capability matched — routing to best available peer", WasDowngraded: false);
         }
 
         return level switch
@@ -197,7 +197,7 @@ public sealed class ComplexityRouter : IComplexityRouter
             // Simple: direct skill or small model
             ComplexityLevel.Simple when analysis.ToolCount == 0 =>
                 (ExecutionPath.LocalDirect,
-                    "Simple intent, no tools — direct skill execution", wasDowngraded: false),
+                    "Simple intent, no tools — direct skill execution", WasDowngraded: false),
 
             ComplexityLevel.Simple =>
                 (estimatedCostUsd > _options.SmallModelCostThresholdUsd
@@ -207,7 +207,7 @@ public sealed class ComplexityRouter : IComplexityRouter
                     (estimatedCostUsd > _options.SmallModelCostThresholdUsd
                         ? "small model (exceeds direct cost threshold)"
                         : "direct skill (within cost threshold)"),
-                    wasDowngraded: false),
+                    WasDowngraded: false),
 
             // Moderate: small model or large model
             ComplexityLevel.Moderate =>
@@ -218,21 +218,21 @@ public sealed class ComplexityRouter : IComplexityRouter
                     (estimatedCostUsd > _options.LargeModelCostThresholdUsd
                         ? "large model (exceeds small model threshold)"
                         : "small model"),
-                    wasDowngraded: false),
+                    WasDowngraded: false),
 
             // Complex: large model or fan-out (if peers available)
             ComplexityLevel.Complex when analysis.HasSafetySensitiveTool && _options.EnableFanOut =>
                 (ExecutionPath.FanOut,
                     "Complex intent with safety-sensitive tools — fan-out to multiple trusted peers for verification",
-                    wasDowngraded: false),
+                    WasDowngraded: false),
 
             ComplexityLevel.Complex =>
                 (ExecutionPath.LocalLargeModel,
                     $"Complex intent — large model (safety-sensitive: {analysis.HasSafetySensitiveTool})",
-                    wasDowngraded: false),
+                    WasDowngraded: false),
 
             _ => (ExecutionPath.LocalLargeModel,
-                    "Default fallback — large model", wasDowngraded: false)
+                    "Default fallback — large model", WasDowngraded: false)
         };
     }
 

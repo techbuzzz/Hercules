@@ -184,7 +184,7 @@ public sealed class NatsTaskQueue : ITaskQueue
                         var msg = enum1.Current;
                         try
                         {
-                            var payload = JsonSerializer.Deserialize<NatsTaskPayload>(msg.Data, _json);
+                            var payload = JsonSerializer.Deserialize<NatsTaskPayload>(msg.Data ?? "{}", _json);
                             if (payload is null)
                             {
                                 await msg.NakAsync(null, ct).ConfigureAwait(false);
@@ -261,7 +261,7 @@ public sealed class NatsTaskQueue : ITaskQueue
                     await foreach (var msg in sub.Msgs.ReadAllAsync(subCts.Token))
                     {
                         if (string.IsNullOrEmpty(msg.Data)) continue;
-                        var payload = JsonSerializer.Deserialize<NatsTaskPayload>(msg.Data, _json);
+                        var payload = JsonSerializer.Deserialize<NatsTaskPayload>(msg.Data ?? "{}", _json);
                         if (payload is null) continue;
 
                         await sub.UnsubscribeAsync().ConfigureAwait(false);

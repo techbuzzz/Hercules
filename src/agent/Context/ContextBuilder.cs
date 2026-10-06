@@ -67,17 +67,21 @@ public sealed class ContextBuilder : IContextBuilder
             return new ContextAssembly("", _currentBudget, 0, false);
         }
 
+        // Non-null local: `_memory` is a field, and its null-state is reset by the awaits
+        // below, so later uses must go through this capture rather than `_memory!`.
+        var memory = _memory;
+
         var items = new List<ContextItem>();
         var availableTokens = _cfg.MaxContextTokens - _cfg.SystemPromptOverheadTokens;
         if (availableTokens < 0) availableTokens = _cfg.MaxContextTokens;
 
         // 1. Durable facts — High importance first
-        var facts = await _memory.BuildContextBlockAsync(ct);
+        var facts = await memory.BuildContextBlockAsync(ct);
         items.AddRange(ParseFactsFromContext(facts, ImportanceLevel.High));
 
         // 2. Episodes
-        var episodes = _memory?.EpisodicStore is not null
-            ? await _memory.EpisodicStore.GetRecentEpisodesAsync(_cfg.MaxEpisodesInContext, ct)
+        var episodes = memory.EpisodicStore is not null
+            ? await memory.EpisodicStore.GetRecentEpisodesAsync(_cfg.MaxEpisodesInContext, ct)
             : Array.Empty<Episode>();
         foreach (var ep in episodes)
         {
@@ -92,8 +96,11 @@ public sealed class ContextBuilder : IContextBuilder
                 ep.Entry.Tags));
         }
 
-        // 3. Working memory (from LayeredMemoryManager facade)
-        var workingCtx = await _memory.BuildContextBlockAsync(ct);
+        // 3. Working memory (from LayeredMemoryManager facade).
+        // `_memory` is a nullable field guarded at the top of this method; the compiler
+        // resets a field's null-state across `await`, so the non-null local captured in
+        // `memory` is used instead of re-asserting with `!` at every call site.
+        var workingCtx = await memory.BuildContextBlockAsync(ct);
         items.AddRange(ParseWorkingFromContext(workingCtx, ImportanceLevel.Medium));
 
         // 5. Sort by importance (High → Medium → Low), then by token size (smaller first)

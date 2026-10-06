@@ -95,9 +95,14 @@ public class WasmToolTests
 
       Assert.True(r1.Compiled);
       Assert.True(r2.Compiled);
-      // Второй запуск использует кеш — compile duration должен быть ~0
-      Assert.True(r2.CompileDuration <= r1.CompileDuration,
-         $"Expected cached run to be no slower than first. r1={r1.CompileDuration.TotalMilliseconds}ms, r2={r2.CompileDuration.TotalMilliseconds}ms");
+
+      // R3d: assert the cache state directly. The previous assertion compared two wall-clock
+      // measurements (`r2.CompileDuration <= r1.CompileDuration`), which is not a reliable
+      // signal: a cached run can measure marginally slower than the first compile purely from
+      // scheduler noise, and the test went intermittently red. WasmToolResult.FromCache is
+      // the deterministic signal this test should be asserting.
+      Assert.False(r1.FromCache);
+      Assert.True(r2.FromCache, "The second execution of the same source must be served from the module cache.");
    }
 
    [Fact]

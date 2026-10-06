@@ -192,6 +192,23 @@ public static class MarketplaceController
                     return Results.BadRequest(new { error = "url is required." });
                 }
 
+                // R1: defence in depth. SkillImportUrlGuard performs the authoritative
+                // validation inside ImportFromUrlAsync; this pre-check turns a disabled
+                // feature or a malformed URL into a clean 400 instead of a deeper throw,
+                // and it runs before any DNS resolution is attempted.
+                if (!Uri.TryCreate(req.Url, UriKind.Absolute, out var parsed) ||
+                    parsed.Scheme is not ("http" or "https"))
+                {
+                    return Results.BadRequest(new { error = "url must be an absolute http(s) URI." });
+                }
+
+                if (SkillImportUrlGuard.IsBlockedAddress(System.Net.IPAddress.TryParse(parsed.Host, out var literal)
+                        ? literal
+                        : System.Net.IPAddress.None))
+                {
+                    return Results.BadRequest(new { error = "url host is not permitted." });
+                }
+
                 try
                 {
                     var skill = await marketplace.ImportFromUrlAsync(req.Url, httpClient: null, ct);

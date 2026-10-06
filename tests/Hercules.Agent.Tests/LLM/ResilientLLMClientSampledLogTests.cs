@@ -9,10 +9,29 @@ using Xunit;
 namespace Hercules.Agent.Tests.LLM;
 
 /// <summary>
+///     R3d: serialises tests that assert on the process-global
+///     <c>OtelMetrics.LlmRetryCounter</c>. The counter is static, so a delta-based
+///     assertion is only valid when nothing else in the assembly increments it
+///     concurrently.
+/// </summary>
+[CollectionDefinition(nameof(OtelMetricCollection), DisableParallelization = true)]
+public sealed class OtelMetricCollection
+{
+}
+
+/// <summary>
 /// Tests for task_085: ResilientLLMClient retry/fallback warning logs are
 /// sampled 1-in-N while the underlying LlmRetryCounter metric increments on
 /// every retryable failure (no sampling on metrics).
 /// </summary>
+/// <remarks>
+///     R3d: this class was the one remaining flaky test. <c>OtelMetrics.LlmRetryCounter</c>
+///     is a process-wide static counter, and this test asserts on a DELTA against a
+///     baseline snapshot. Any other test class touching the same counter while this one
+///     ran inflated the delta, so the test passed or failed depending on collection
+///     scheduling. Serialising the class removes the race.
+/// </remarks>
+[Collection(nameof(OtelMetricCollection))]
 public class ResilientLLMClientSampledLogTests
 {
     // Install a MeterListener at module load so it can capture instruments

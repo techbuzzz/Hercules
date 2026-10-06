@@ -13,18 +13,50 @@ namespace Hercules.WebApi.Auth;
 ///     <c>HttpContext.Items["ApiKeyEntry"]</c> для downstream-фильтров
 ///     (см. <see cref="RequireSystemRoleFilter"/>, task_097, ADR-0004).
 /// </summary>
-public sealed class ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILogger<ApiKeyMiddleware> logger)
+public sealed class ApiKeyMiddleware
 {
     private const string HeaderName = "X-Api-Key";
     public const string RoleItemKey = "ApiKeyRole";
     public const string EntryItemKey = "ApiKeyEntry";
 
+    private readonly RequestDelegate _next;
+    private readonly ILogger<ApiKeyMiddleware> _logger;
+
+    // R5/R6: the resolved entries and their parallel byte table are both assigned in every
+    // constructor. Previously the 3-argument constructor left _expectedKeyBytes null
+    // (CS8618) and InvokeAsync then read that null as "no keys configured" — i.e. one
+    // refactor away from silently disabling authentication on every /api route.
+    private readonly ApiKeyEntry[] _entries;
     private readonly byte[]?[] _expectedKeyBytes;
+    private readonly bool _unauthenticated;
+
+    public ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILogger<ApiKeyMiddleware> logger)
+        : this(next, cfg, logger, keys: null)
+    {
+    }
 
     public ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILogger<ApiKeyMiddleware> logger, IReadOnlyList<ApiKeyEntry>? keys)
-        : this(next, cfg, logger)
     {
-        _expectedKeyBytes = BuildKeyTable(keys);
+        _next = next;
+        _logger = logger;
+
+        var resolved = ResolveKeys(cfg, keys);
+        _entries = resolved.Entries;
+        _expectedKeyBytes = resolved.Bytes;
+        _unauthenticated = resolved.Entries.Length == 0;
+
+        if (_unauthenticated)
+        {
+            // Fail loudly. Open access is a deliberate local-dev mode, not something an
+            // operator should discover from a 200 response in production.
+            logger.LogError(
+                "[ApiKey] No API keys configured (WebApi:ApiKeys empty and WebApi:ApiKey empty). " +
+                "The API is UNAUTHENTICATED. Set WebApi:ApiKeys or WebApi:ApiKey before exposing this port.");
+        }
+        else
+        {
+            logger.LogInformation("[ApiKey] {Count} API key(s) loaded from configuration", _entries.Length);
+        }
     }
 
     public ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILogger<ApiKeyMiddleware> logger, ApiKeyStore store)
@@ -39,20 +71,20 @@ public sealed class ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILo
         // CORS preflight, не-API маршруты и публичный health-check пропускаем без проверки.
         if (HttpMethods.IsOptions(context.Request.Method) || !path.StartsWithSegments("/api") || path.StartsWithSegments("/api/health"))
         {
-            await next(context);
+            await _next(context);
             return;
         }
 
-        // Если ни один ключ не настроен — режим открытого доступа (только для локали).
-        if (_expectedKeyBytes is null || _expectedKeyBytes.Length == 0 || _expectedKeyBytes.All(b => b is null || b.Length == 0))
+        // Ни одного ключа не настроено — открытый доступ (только для локали; см. ctor-лог).
+        if (_unauthenticated)
         {
-            await next(context);
+            await _next(context);
             return;
         }
 
         if (!context.Request.Headers.TryGetValue(HeaderName, out var provided))
         {
-            logger.LogWarning("Отклонён запрос {Path}: отсутствует {Header}", path, HeaderName);
+            _logger.LogWarning("Отклонён запрос {Path}: отсутствует {Header}", path, HeaderName);
             await Reject(context, "Требуется корректный заголовок X-Api-Key.");
             return;
         }
@@ -66,14 +98,16 @@ public sealed class ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILo
             if (!CryptographicOperations.FixedTimeEquals(providedBytes, expected)) continue;
 
             // Match — ставим role + entry в HttpContext.Items.
-            var role = cfg.ApiKeys[i].Role;
-            context.Items[RoleItemKey] = role;
-            context.Items[EntryItemKey] = cfg.ApiKeys[i];
-            await next(context);
+            // R5: index into the RESOLVED entries, not cfg.ApiKeys. The table can be built
+            // from store.LoadOrGenerate(...), whose length is not guaranteed to match
+            // cfg.ApiKeys — the previous code would have thrown IndexOutOfRange there.
+            context.Items[RoleItemKey] = _entries[i].Role;
+            context.Items[EntryItemKey] = _entries[i];
+            await _next(context);
             return;
         }
 
-        logger.LogWarning("Отклонён запрос {Path}: неверный {Header}", path, HeaderName);
+        _logger.LogWarning("Отклонён запрос {Path}: неверный {Header}", path, HeaderName);
         await Reject(context, "Требуется корректный заголовок X-Api-Key.");
     }
 
@@ -84,23 +118,49 @@ public sealed class ApiKeyMiddleware(RequestDelegate next, WebApiConfig cfg, ILo
     }
 
     /// <summary>
-    ///     Строит параллельную таблицу байт-ключей для constant-time сравнения.
-    ///     Если <paramref name="keys"/> пуст, выполняет backward-compat fallback на legacy
-    ///     <c>cfg.ApiKey</c> (role=contribute).
+    ///     R5: resolves the effective key set AND builds the parallel byte table.
+    ///     <para>
+    ///     The previous implementation documented a backward-compat fallback to the legacy
+    ///     <c>cfg.ApiKey</c> but returned <c>Array.Empty</c> instead — so any deployment
+    ///     relying on the single legacy key had it silently rejected. That fallback is now
+    ///     implemented here, for every construction path (including tests that pass an
+    ///     explicit key list), not only for the DI path.
+    ///     </para>
     /// </summary>
-    private static byte[]?[] BuildKeyTable(IReadOnlyList<ApiKeyEntry>? keys)
+    private static (ApiKeyEntry[] Entries, byte[]?[] Bytes) ResolveKeys(WebApiConfig cfg, IReadOnlyList<ApiKeyEntry>? keys)
     {
-        if (keys is not null && keys.Count > 0)
+        var source = keys ?? cfg.ApiKeys;
+
+        if (source is null || source.Count == 0)
         {
-            var table = new byte[]?[keys.Count];
-            for (var i = 0; i < keys.Count; i++)
+            // Legacy single-key fallback (task_097): treat WebApi:ApiKey as a contribute key.
+            if (!string.IsNullOrEmpty(cfg.ApiKey))
             {
-                table[i] = string.IsNullOrEmpty(keys[i].Key)
-                    ? null
-                    : Encoding.UTF8.GetBytes(keys[i].Key);
+                source =
+                [
+                    new ApiKeyEntry
+                    {
+                        Key = cfg.ApiKey,
+                        Role = ApiKeyRole.Contribute,
+                        Description = "legacy single key (WebApi:ApiKey)",
+                    }
+                ];
             }
-            return table;
         }
-        return Array.Empty<byte[]?>();
+
+        if (source is null || source.Count == 0)
+        {
+            return ([], []);
+        }
+
+        var entries = source.ToArray();
+        var table = new byte[]?[entries.Length];
+        for (var i = 0; i < entries.Length; i++)
+        {
+            var key = entries[i]?.Key;
+            table[i] = string.IsNullOrEmpty(key) ? null : Encoding.UTF8.GetBytes(key);
+        }
+
+        return (entries, table);
     }
 }

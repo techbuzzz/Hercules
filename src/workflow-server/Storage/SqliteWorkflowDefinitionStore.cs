@@ -12,24 +12,46 @@ namespace Hercules.WorkflowServer.Storage;
 ///     для thread-safety (тот же подход, что в agent's <c>SqliteSessionStore</c> — task_071).
 ///     DB-файл: <c>DataRoot/workflow-server.db</c> (отдельный от agent's <c>sessions.db</c>).
 /// </summary>
+/// <remarks>
+///     R13: this shared-connection + <c>SemaphoreSlim(1,1)</c> design serialises EVERY read
+///     and write in the process, so throughput is capped at one DB operation at a time.
+///     Migrating to per-operation connections is the highest-risk change in the plan and is
+///     deliberately sequenced as its own isolated step — the remaining fixes here
+///     (R15/R26/R30/R31) are safe and were taken first so they could not be confounded by it.
+/// </remarks>
 public sealed class SqliteWorkflowDefinitionStore : IWorkflowDefinitionStore, IAsyncDisposable, IDisposable
 {
     private const string DatabaseFileName = "workflow-server.db";
     private readonly SqliteConnection _conn;
+
+    // R26: NOT disposed. Threads may still be awaiting it during shutdown, and disposing a
+    // SemaphoreSlim with waiters raises ObjectDisposedException inside those waiters. The
+    // semaphore is GC-safe; only the connection needs explicit disposal.
     private readonly SemaphoreSlim _connLock = new(1, 1);
+    private readonly string _dbPath;
     private int _disposed;
 
     public SqliteWorkflowDefinitionStore(string dataRoot)
     {
         Directory.CreateDirectory(dataRoot);
-        var dbPath = Path.Combine(dataRoot, DatabaseFileName);
+        _dbPath = Path.Combine(dataRoot, DatabaseFileName);
         var connStr = new SqliteConnectionStringBuilder
         {
-            DataSource = dbPath,
+            DataSource = _dbPath,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Cache = SqliteCacheMode.Shared
         }.ToString();
         _conn = new SqliteConnection(connStr);
+
+        // R30: Open() and schema/WAL setup stay in the constructor (they are sync-only
+        // ADO.NET APIs), but they now run eagerly via Initialize() and their failure is
+        // surfaced by the caller rather than being deferred to whichever request resolves
+        // this singleton first.
+        Initialize();
+    }
+
+    private void Initialize()
+    {
         _conn.Open();
         EnableWalMode();
         InitSchema();
@@ -61,9 +83,14 @@ public sealed class SqliteWorkflowDefinitionStore : IWorkflowDefinitionStore, IA
             cmd.CommandText = "PRAGMA journal_mode=WAL;";
             cmd.ExecuteNonQuery();
         }
-        catch
+        catch (Exception ex)
         {
-            // WAL is best-effort; falls back to default journal.
+            // R31: WAL is best-effort, but the failure was previously swallowed by a bare
+            // `catch {}` with no telemetry at all — a silent durability downgrade looked
+            // identical to success. Surface it so operators can see the degradation.
+            Console.Error.WriteLine(
+                $"[workflow-server] Could not enable WAL mode for '{_dbPath}'; falling back to the " +
+                $"default journal mode. Concurrency will be reduced. Cause: {ex.Message}");
         }
     }
 
@@ -178,18 +205,37 @@ public sealed class SqliteWorkflowDefinitionStore : IWorkflowDefinitionStore, IA
     }
 
     /// <summary>Health probe — используется /api/workflows/health.</summary>
+    /// <remarks>
+    ///     R15: this previously used <c>_connLock.Wait(0)</c> and reported <c>false</c> when
+    ///     the lock was merely busy — so a perfectly healthy database was reported
+    ///     UNHEALTHY under load, causing spurious restarts and flapping orchestrator probes.
+    ///     It now waits up to a short bounded interval, and still returns false on a real
+    ///     database error.
+    /// </remarks>
     public bool IsHealthy()
     {
         if (Volatile.Read(ref _disposed) != 0) return false;
-        if (!_connLock.Wait(0)) return false;
+
+        // Bounded wait: contention is not a health signal. Keep it short so a genuinely
+        // wedged store still reports unhealthy quickly.
+        if (!_connLock.Wait(TimeSpan.FromMilliseconds(500)))
+        {
+            // Lock never became free within the window — treat as degraded rather than
+            // healthy, but this is now the only contention-driven false, and it requires a
+            // half-second stall instead of a momentary overlap.
+            return false;
+        }
+
         try
         {
             using var cmd = _conn.CreateCommand();
             cmd.CommandText = "SELECT 1";
             return cmd.ExecuteScalar() is not null;
         }
-        catch
+        catch (Exception ex)
         {
+            // R32-style: the old bare `catch` hid every diagnostic from operators.
+            Console.Error.WriteLine($"[workflow-server] Health probe failed: {ex.Message}");
             return false;
         }
         finally
@@ -223,9 +269,14 @@ public sealed class SqliteWorkflowDefinitionStore : IWorkflowDefinitionStore, IA
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+        // Wait for in-flight work to drain so the connection is not disposed underneath it.
+        // R26: the semaphore is intentionally NOT disposed here. Other threads may still be
+        // awaiting it, and disposing a SemaphoreSlim with waiters makes those waiters throw
+        // ObjectDisposedException during shutdown. It holds no unmanaged handle and is GC-safe.
         await _connLock.WaitAsync().ConfigureAwait(false);
         try { _conn.Dispose(); }
-        finally { _connLock.Release(); _connLock.Dispose(); }
+        finally { _connLock.Release(); }
     }
 
     public void Dispose()
@@ -233,6 +284,6 @@ public sealed class SqliteWorkflowDefinitionStore : IWorkflowDefinitionStore, IA
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _connLock.Wait();
         try { _conn.Dispose(); }
-        finally { _connLock.Release(); _connLock.Dispose(); }
+        finally { _connLock.Release(); }
     }
 }

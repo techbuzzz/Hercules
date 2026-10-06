@@ -6,7 +6,9 @@ namespace Hercules.Observability;
 /// <summary>
 ///     Metric instruments for Hercules.
 ///     All counters and histograms are pre-created once at static initialization.
-///     Zero-overhead no-op when OTel is disabled (ActivitySource returns NoopActivity).
+///     Zero-overhead no-op when OTel is disabled: <c>ActivitySource.StartActivity</c>
+///     returns <c>null</c> when no <c>ActivityListener</c> is registered — it does NOT
+///     return a NoopActivity. Callers must therefore null-check the Activity.
 /// </summary>
 public static class OtelMetrics
 {

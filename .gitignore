@@ -438,8 +438,21 @@ src/hercules-studio/.vite/
 *.msm
 *.msp
 *.db
+# SQLite WAL/SHM sidecars — NOT matched by the *.db rule above, and they churn on
+# every process that touches the database. These are runtime artifacts, never source.
+*.db-shm
+*.db-wal
+*.db-journal
 # Hercules runtime data directory (resolved outside repo by BuiltIn.ResolveDataRoot)
 HerculesData/
 
 # hercules-workflow-server runtime data (task_104)
 src/workflow-server/data/
+
+# hercules-webapi runtime data — the WebApi host pins a relative DataRoot in
+# appsettings.json; this keeps its SQLite state out of the working tree (R18).
+src/agent/Hercules.WebApi/data/
+
+# stray build/run logs and PowerShell redirect artifacts (R46)
+run*.txt
+$null

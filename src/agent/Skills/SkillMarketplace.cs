@@ -26,6 +26,7 @@ public sealed class SkillMarketplace
     private readonly IMarketplaceSigningService? _signing;
     private readonly DependencyResolver _resolver;
     private readonly IHttpClientFactory? _httpFactory;
+    private readonly MarketplaceConfig? _marketplace;
 
     public SkillMarketplace(StorageConfig cfg, SkillPackager packager)
         : this(cfg, packager, signing: null, httpFactory: null)
@@ -38,11 +39,17 @@ public sealed class SkillMarketplace
     }
 
     /// <summary>DI-friendly конструктор (task_078): использует named-клиент для HTTP-импорта.</summary>
+    /// <remarks>
+    ///     R1: <paramref name="marketplace"/> carries <c>AllowHttpImport</c> and friends.
+    ///     It is optional so existing two/three-argument call sites keep compiling, but URL
+    ///     import stays disabled when it is absent — fail-closed, never fail-open.
+    /// </remarks>
     public SkillMarketplace(
         StorageConfig cfg,
         SkillPackager packager,
         IMarketplaceSigningService? signing,
-        IHttpClientFactory? httpFactory)
+        IHttpClientFactory? httpFactory,
+        MarketplaceConfig? marketplace = null)
     {
         DirectoryPath = Path.Combine(cfg.DataRoot, cfg.SkillsDir, cfg.Phase2?.MarketplaceDir ?? Hercules.BuiltIn.MarketplaceSubdir);
         Directory.CreateDirectory(DirectoryPath);
@@ -50,6 +57,7 @@ public sealed class SkillMarketplace
         _signing = signing;
         _resolver = new DependencyResolver();
         _httpFactory = httpFactory;
+        _marketplace = marketplace;
     }
 
     /// <summary>Каталог маркетплейса (data/Skills/marketplace/).</summary>
@@ -250,20 +258,58 @@ public sealed class SkillMarketplace
     }
 
     /// <summary>
-    ///     Импортировать пакет по HTTP URL (если AllowHttpImport = true).
+    ///     Импортировать пакет по HTTP URL.
     /// </summary>
+    /// <remarks>
+    ///     R1/R2: the previous implementation fetched whatever URL it was given and then
+    ///     checked <c>bytes.Length > 50 MB</c> AFTER <c>GetByteArrayAsync</c> had already
+    ///     buffered the entire response, so neither the size cap nor any SSRF protection
+    ///     actually held. Validation and bounded streaming now happen before the download
+    ///     completes — see <see cref="SkillImportUrlGuard"/>.
+    /// </remarks>
     public async Task<Skill> ImportFromUrlAsync(string url, HttpClient? httpClient = null, CancellationToken ct = default)
     {
-        HttpClient client = httpClient
-            ?? _httpFactory?.CreateClient(HttpClientName)
-            ?? new HttpClient();
-        var bytes = await client.GetByteArrayAsync(url, ct);
+        var phase2 = _marketplace
+            ?? throw new InvalidOperationException(
+                "URL import is unavailable: Marketplace configuration was not supplied.");
 
-        // Проверяем размер
-        var maxBytes = 50 * 1024 * 1024; // 50 MB
-        if (bytes.Length > maxBytes)
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
-            throw new InvalidOperationException($"Package exceeds maximum size of 50 MB.");
+            throw new InvalidOperationException("Import URL must be an absolute URI.");
+        }
+
+        await SkillImportUrlGuard.EnsureAllowedAsync(uri, phase2, ct).ConfigureAwait(false);
+
+        var maxBytes = (phase2.MaxPackageSizeMb > 0 ? phase2.MaxPackageSizeMb : 50) * 1024L * 1024L;
+
+        // R45: only dispose the client when we created it — an injected or factory-owned
+        // client is not ours to close.
+        HttpClient? ownedClient = null;
+        HttpClient client;
+        if (httpClient is not null)
+        {
+            client = httpClient;
+        }
+        else if (_httpFactory is not null)
+        {
+            client = _httpFactory.CreateClient(HttpClientName);
+        }
+        else
+        {
+            ownedClient = new HttpClient();
+            client = ownedClient;
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = await SkillImportUrlGuard
+                .DownloadWithLimitAsync(client, uri, maxBytes, ct)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            ownedClient?.Dispose();
         }
 
         // Сохраняем во временный файл

@@ -31,10 +31,73 @@ public sealed class CacheService : ICacheService, IDisposable
     // The per-class design also gives O(k) InvalidateClass/Pattern for free.
     private readonly ConcurrentDictionary<CacheClass, ConcurrentDictionary<string, CacheEntry>> _byClass = new();
 
-    // Per-key stampede dedup. Lazily populated on first miss. The semaphores are kept around
-    // even after the entry is evicted/expired — they are tiny and the number of distinct keys
-    // is bounded by the cache capacity, so this is fine.
+    // Per-key stampede dedup. Lazily populated on first miss.
+    //
+    // R9: the previous comment claimed "the number of distinct keys is bounded by the
+    // cache capacity" — which is false. Cache keys derive from session ids, agent ids and
+    // prompt prefixes, so high-cardinality traffic adds a new entry to this map for every
+    // distinct key ever missed, and nothing ever removed it. The result was an unbounded
+    // memory leak in a long-running agent: one SemaphoreSlim retained per key, forever.
+    //
+    // The fix is the pattern this repo already uses for the same problem in
+    // ResilientTransport (task_087): track last-used alongside the semaphore and sweep.
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, long> _lockLastUsed = new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     R9: removes per-key semaphores idle for longer than <paramref name="idleThreshold"/>.
+    ///     Mirrors <c>ResilientTransport.TrimIdlePeers</c>. Returns the number trimmed.
+    /// </summary>
+    public int TrimIdleLocks(TimeSpan idleThreshold)
+    {
+        if (idleThreshold <= TimeSpan.Zero)
+        {
+            return 0;
+        }
+
+        var cutoffTicks = DateTime.UtcNow.Ticks - idleThreshold.Ticks;
+        var trimmed = 0;
+
+        foreach (var kvp in _lockLastUsed)
+        {
+            if (kvp.Value >= cutoffTicks)
+            {
+                continue; // recently used
+            }
+
+            // Only remove the semaphore when it is genuinely free. SemaphoreSlim does not
+            // expose CurrentCount atomically, so attempt a zero-wait acquire: if a thread is
+            // mid-computation it will finish against this instance (still correct), and we
+            // leave the entry in place for a later sweep.
+            //
+            // The removed semaphore is deliberately NOT disposed: another thread may already
+            // hold a reference obtained from GetOrAdd and be about to WaitAsync, and
+            // disposing underneath it would surface as ObjectDisposedException on the hot
+            // path. Dropping the dictionary reference is what reclaims the memory, and
+            // SemaphoreSlim only holds an OS handle if AvailableWaitHandle was touched.
+            if (_locks.TryGetValue(kvp.Key, out var sem) && sem.Wait(0))
+            {
+                try
+                {
+                    if (_locks.TryRemove(kvp.Key, out _))
+                    {
+                        trimmed++;
+                    }
+                }
+                finally
+                {
+                    sem.Release();
+                }
+            }
+
+            _lockLastUsed.TryRemove(kvp.Key, out _);
+        }
+
+        return trimmed;
+    }
+
+    /// <summary>Number of retained per-key semaphores. Exposed for leak regression tests.</summary>
+    internal int LockCount => _locks.Count;
 
     // Sorted expiry index: ticks (UTC, long) → (class, user key). Each entry is unique by
     // ticks resolution (100 ns). On the rare tick-collision (concurrent inserts at exactly
@@ -49,6 +112,10 @@ public sealed class CacheService : ICacheService, IDisposable
     private readonly Timer _cleanupTimer;
     private readonly int _maxEntries;
     private readonly bool _slidingExpiration;
+
+    // R9: a stampede lock idle for longer than this is eligible for reclamation. Chosen to
+    // comfortably exceed a slow LLM/tool computation while still bounding memory.
+    private static readonly TimeSpan _lockIdleThreshold = TimeSpan.FromMinutes(10);
 
     public CacheService(CacheConfig config, ILogger<CacheService> logger)
     {
@@ -101,7 +168,9 @@ public sealed class CacheService : ICacheService, IDisposable
         CancellationToken ct) where T : class?
     {
         // Stampede dedup: serialize per-key computation.
+        // R9: stamp last-used so TrimIdleLocks() can reclaim idle semaphores.
         var sem = _locks.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+        _lockLastUsed[key] = DateTime.UtcNow.Ticks;
         await sem.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -357,6 +426,14 @@ public sealed class CacheService : ICacheService, IDisposable
             if (removed > 0 && _logger.IsEnabled(LogLevel.Debug))
             {
                 _logger.LogDebug("[Cache] Cleanup removed {Count} expired entries", removed);
+            }
+
+            // R9: reclaim per-key stampede semaphores on the same sweep that reaps expired
+            // entries. Without this the _locks map grew for the process lifetime.
+            var trimmedLocks = TrimIdleLocks(_lockIdleThreshold);
+            if (trimmedLocks > 0 && _logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("[Cache] Cleanup trimmed {Count} idle stampede locks", trimmedLocks);
             }
         }
         catch (Exception ex)

@@ -101,8 +101,10 @@ public sealed class NatsMeshConfig
 
     /// <summary>
     ///     Data root directory for the local DLQ file. Resolved at construction time
-    ///     by <see cref="Hercules.Mesh.Backends.Nats.NatsTaskQueue"/>; defaults to
-    ///     <c>AppContext.BaseDirectory</c> when unset. task_074.
+    ///     by <see cref="Hercules.Mesh.Backends.Nats.NatsTaskQueue"/>; when null or
+    ///     empty it falls back to <c>Hercules.BuiltIn.ResolveDataRoot()</c> — the
+    ///     resolved data root OUTSIDE the repository, not AppContext.BaseDirectory.
+    ///     task_074.
     /// </summary>
     public string? DataRoot { get; set; }
 }

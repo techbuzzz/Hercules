@@ -8,8 +8,9 @@
     "/": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Meta"
         ],
+        "operationId": "GetServiceInfo",
         "responses": {
           "200": {
             "description": "OK"
@@ -20,8 +21,9 @@
     "/agent-card.json": {
       "get": {
         "tags": [
-          "Hercules.WebApi"
+          "Meta"
         ],
+        "operationId": "GetAgentCardFile",
         "responses": {
           "200": {
             "description": "OK"
@@ -50,7 +52,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills": {
@@ -63,7 +70,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -100,7 +112,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}": {
@@ -123,7 +140,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "put": {
         "tags": [
@@ -154,7 +176,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/improve": {
@@ -177,7 +204,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/export": {
@@ -200,7 +232,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/import": {
@@ -213,7 +250,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/evaluate": {
@@ -236,7 +278,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/deprecate": {
@@ -269,7 +316,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/rollback": {
@@ -292,7 +344,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/undeprecate": {
@@ -315,7 +372,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/deprecated": {
@@ -328,7 +390,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/quality": {
@@ -351,7 +418,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/quality/history": {
@@ -374,7 +446,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/quality/record": {
@@ -407,7 +484,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/quality/score": {
@@ -430,7 +512,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/memory/profile": {
@@ -443,7 +530,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "put": {
         "tags": [
@@ -464,7 +556,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/memory/reset": {
@@ -477,7 +574,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/stats": {
@@ -490,7 +592,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/reflect": {
@@ -503,7 +610,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/health/detailed": {
@@ -529,7 +641,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "put": {
         "tags": [
@@ -550,7 +667,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "patch": {
         "tags": [
@@ -571,7 +693,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/agent.manifest.json": {
@@ -597,7 +724,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/agents/{id}": {
@@ -620,7 +752,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "delete": {
         "tags": [
@@ -641,7 +778,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/agents/{id}/health": {
@@ -664,7 +806,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/agents/{id}/touch": {
@@ -687,7 +834,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/agents/cleanup": {
@@ -700,7 +852,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/agents/register": {
@@ -723,7 +880,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/capabilities": {
@@ -745,7 +907,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/capabilities/{name}": {
@@ -768,7 +935,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/capabilities/search": {
@@ -791,7 +963,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/intent": {
@@ -814,7 +991,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/fanout": {
@@ -837,7 +1019,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/circuits": {
@@ -850,7 +1037,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/circuits/{id}/reset": {
@@ -873,7 +1065,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/reflect": {
@@ -886,7 +1083,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/reflect/recommendations": {
@@ -899,7 +1101,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/shared-memory": {
@@ -912,7 +1119,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -933,7 +1145,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/shared-memory/for/{agentId}": {
@@ -956,7 +1173,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/shared-memory/sync": {
@@ -969,7 +1191,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/shared-memory/{factId}": {
@@ -992,7 +1219,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/accept": {
@@ -1015,7 +1247,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/{id}": {
@@ -1038,7 +1275,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/{id}/state": {
@@ -1071,7 +1313,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/{id}/await-input": {
@@ -1104,7 +1351,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/{id}/complete": {
@@ -1137,7 +1389,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/{id}/fail": {
@@ -1170,7 +1427,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/{id}/cancel": {
@@ -1203,7 +1465,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/{id}/callback": {
@@ -1236,7 +1503,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/{id}/poll": {
@@ -1272,7 +1544,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/{id}/expire-check": {
@@ -1295,7 +1572,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/tasks/{id}/notify": {
@@ -1318,7 +1600,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/discovery/sources": {
@@ -1331,7 +1618,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/discovery/agents": {
@@ -1353,7 +1645,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/discovery/refresh": {
@@ -1366,7 +1663,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/policy/status": {
@@ -1379,7 +1681,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/policy/dry-run": {
@@ -1402,7 +1709,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/router/routes": {
@@ -1437,7 +1749,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/router/health": {
@@ -1450,7 +1767,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/dashboard": {
@@ -1463,7 +1785,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/topology": {
@@ -1476,7 +1803,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/health": {
@@ -1489,7 +1821,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/denials": {
@@ -1517,7 +1854,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/skills/heatmap": {
@@ -1530,7 +1872,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/eval/summary": {
@@ -1543,7 +1890,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/profiles": {
@@ -1556,7 +1908,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/profiles/{name}": {
@@ -1579,7 +1936,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/profiles/{name}/backends": {
@@ -1602,7 +1964,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/backend-status": {
@@ -1615,7 +1982,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/backend-status/{role}": {
@@ -1638,7 +2010,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/observability/status": {
@@ -1651,7 +2028,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/observability/config": {
@@ -1664,7 +2046,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/observability/counters": {
@@ -1677,7 +2064,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/observability/traces": {
@@ -1704,7 +2096,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mesh/observability/logs": {
@@ -1738,7 +2135,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/inventory": {
@@ -1760,7 +2162,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/health": {
@@ -1782,7 +2189,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/agent/{agentId}/start": {
@@ -1805,7 +2217,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/agent/{agentId}/stop": {
@@ -1828,7 +2245,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/agent/{agentId}/drain": {
@@ -1851,7 +2273,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/agent/{agentId}/decommission": {
@@ -1874,7 +2301,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/agent/{agentId}/rollback": {
@@ -1897,7 +2329,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/packages/{packageId}/update": {
@@ -1930,7 +2367,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/packages/{packageId}/canary": {
@@ -1963,7 +2405,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/packages/{packageId}/promote": {
@@ -1996,7 +2443,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/lifecycle/packages/{packageId}/rollback": {
@@ -2029,7 +2481,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/budget": {
@@ -2057,7 +2514,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/budget/monthly": {
@@ -2084,7 +2546,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/budget/guardrails": {
@@ -2106,7 +2573,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/budget/guardrails/{type}": {
@@ -2136,7 +2608,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/quotas": {
@@ -2166,7 +2643,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/quotas/{scope}/{scopeId}": {
@@ -2197,7 +2679,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/quotas/{scope}/{scopeId}/{type}": {
@@ -2236,7 +2723,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/quotas/rate-limit": {
@@ -2273,7 +2765,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/audit": {
@@ -2301,7 +2798,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/audit/search": {
@@ -2378,7 +2880,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/audit/export": {
@@ -2427,7 +2934,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/audit/{target}": {
@@ -2463,7 +2975,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/llm/health": {
@@ -2476,7 +2993,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/llm/health/{provider}": {
@@ -2499,7 +3021,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/llm/capabilities": {
@@ -2512,7 +3039,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/llm/capabilities/{provider}": {
@@ -2535,7 +3067,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/llm/config": {
@@ -2548,7 +3085,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/a2a/agent-card": {
@@ -2561,7 +3103,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/a2a/agent-card/from": {
@@ -2584,7 +3131,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/a2a/discover": {
@@ -2610,7 +3162,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/a2a/agent-card/publish": {
@@ -2623,7 +3180,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/a2a/agent-card/fresh": {
@@ -2636,7 +3198,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/backups": {
@@ -2665,7 +3232,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
@@ -2676,7 +3248,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/backups/{backupId}/restore": {
@@ -2715,7 +3292,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/backups/{backupId}/verify": {
@@ -2745,7 +3327,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/backups/{backupId}": {
@@ -2768,7 +3355,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/fleet-templates": {
@@ -2781,7 +3373,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/fleet-templates/{fileName}": {
@@ -2804,7 +3401,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/fleet-templates/{fileName}/apply": {
@@ -2843,7 +3445,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/grants/{skillId}": {
@@ -2873,7 +3480,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "delete": {
         "tags": [
@@ -2901,7 +3513,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/grants": {
@@ -2924,7 +3541,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/grants/by-id/{grantId}": {
@@ -2947,7 +3569,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/grants/{skillId}/check": {
@@ -2985,7 +3612,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/simulation/templates": {
@@ -2998,7 +3630,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/simulation/templates/{templateName}/available": {
@@ -3021,7 +3658,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/simulation/sessions": {
@@ -3044,7 +3686,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/simulation/sessions/{templateName}/replay": {
@@ -3077,7 +3724,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/simulation/sessions/{templateName}": {
@@ -3100,7 +3752,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
@@ -3121,7 +3778,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/slos": {
@@ -3134,7 +3796,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/slos/{vertical}/definition": {
@@ -3157,7 +3824,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/slos/{vertical}": {
@@ -3180,7 +3852,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/slos/{vertical}/report": {
@@ -3203,7 +3880,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/slos/{vertical}/ack/{violationId}": {
@@ -3241,7 +3923,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/slos/{vertical}/ack": {
@@ -3271,7 +3958,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/approvals/pending": {
@@ -3293,7 +3985,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/approvals/{id}": {
@@ -3316,7 +4013,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/approvals/{id}/approve": {
@@ -3339,7 +4041,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/approvals/{id}/deny": {
@@ -3362,7 +4069,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/approvals": {
@@ -3384,7 +4096,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/escalations/pending": {
@@ -3413,7 +4130,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/escalations/{id}": {
@@ -3436,7 +4158,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/escalations/{id}/approve": {
@@ -3466,7 +4193,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/escalations/{id}/deny": {
@@ -3496,7 +4228,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/escalations/batch-approve": {
@@ -3528,7 +4265,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/observability/telemetry": {
@@ -3541,7 +4283,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/eval/harness": {
@@ -3564,7 +4311,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/eval/baseline": {
@@ -3603,7 +4355,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
@@ -3624,7 +4381,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/eval/history": {
@@ -3647,7 +4409,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/eval/baselines": {
@@ -3660,7 +4427,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/maintenance/run": {
@@ -3689,7 +4461,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/maintenance/run-all": {
@@ -3718,7 +4495,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/maintenance/proposals": {
@@ -3753,7 +4535,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/maintenance/proposals/{id}": {
@@ -3776,7 +4563,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/maintenance/proposals/{id}/approve": {
@@ -3815,7 +4607,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/maintenance/proposals/{id}/reject": {
@@ -3854,7 +4651,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/manifest": {
@@ -3877,7 +4679,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/{id}/manifest/validate": {
@@ -3919,7 +4726,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/skills/manifest/validate-all": {
@@ -3932,7 +4744,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tasks": {
@@ -3955,7 +4772,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
@@ -3988,7 +4810,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tasks/{id}": {
@@ -4011,7 +4838,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tasks/{id}/pause": {
@@ -4034,7 +4866,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tasks/{id}/resume": {
@@ -4064,7 +4901,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tasks/{id}/cancel": {
@@ -4094,7 +4936,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tasks/{id}/checkpoints": {
@@ -4127,7 +4974,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       },
       "get": {
         "tags": [
@@ -4148,7 +5000,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tasks/{id}/checkpoints/{ckptId}": {
@@ -4179,7 +5036,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/context/budget": {
@@ -4192,7 +5054,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/context/summary": {
@@ -4227,7 +5094,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/context/distill": {
@@ -4250,7 +5122,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/context/trace/compress": {
@@ -4286,7 +5163,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/cache/stats": {
@@ -4299,7 +5181,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/cache/invalidate": {
@@ -4322,7 +5209,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tools": {
@@ -4335,7 +5227,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tools/{name}": {
@@ -4358,7 +5255,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tools/{name}/health": {
@@ -4381,7 +5283,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tools/categories": {
@@ -4394,7 +5301,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tools/{name}/enable": {
@@ -4417,7 +5329,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/tools/{name}/disable": {
@@ -4440,7 +5357,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/marketplace": {
@@ -4453,7 +5375,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/marketplace/search": {
@@ -4475,7 +5402,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/marketplace/{file}/verify": {
@@ -4498,7 +5430,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/marketplace/{file}/deps": {
@@ -4521,7 +5458,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/marketplace/install": {
@@ -4544,7 +5486,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/marketplace/install-with-deps": {
@@ -4567,7 +5514,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/marketplace/{file}": {
@@ -4590,7 +5542,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/marketplace/publish": {
@@ -4603,7 +5560,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/marketplace/import": {
@@ -4625,7 +5587,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/marketplace/import-url": {
@@ -4648,7 +5615,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/templates": {
@@ -4661,7 +5633,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/templates/{fileName}": {
@@ -4684,7 +5661,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/templates/{fileName}/apply": {
@@ -4723,7 +5705,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/rollout/state": {
@@ -4736,7 +5723,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/rollout/apply": {
@@ -4759,7 +5751,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/rollout/promote": {
@@ -4782,7 +5779,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/rollout/rollback": {
@@ -4811,7 +5813,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/rollout/bundle/{id}": {
@@ -4834,7 +5841,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/security/vulnerabilities": {
@@ -4898,7 +5910,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/security/vulnerabilities/summary": {
@@ -4911,7 +5928,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/security/vulnerabilities/{id}": {
@@ -4934,7 +5956,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/security/vulnerabilities/{id}/status": {
@@ -4967,7 +5994,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/security/events": {
@@ -5011,7 +6043,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/security/compliance/{standard}": {
@@ -5034,7 +6071,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/system/checkin": {
@@ -5057,7 +6099,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/system/checkout": {
@@ -5080,7 +6127,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/system/checkin/heartbeat": {
@@ -5103,7 +6155,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/system/checkin/status": {
@@ -5116,7 +6173,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/system/checkin/force": {
@@ -5145,7 +6207,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/system/restart": {
@@ -5174,7 +6241,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/system/restart-pending": {
@@ -5187,7 +6259,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/system/restart/clear": {
@@ -5216,7 +6293,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mcp/servers": {
@@ -5229,7 +6311,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mcp/servers/{name}": {
@@ -5252,7 +6339,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     },
     "/api/mcp/servers/reload": {
@@ -5265,7 +6357,12 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "security": [
+          {
+            "ApiKey": [ ]
+          }
+        ]
       }
     }
   },
@@ -6686,11 +7783,19 @@
           }
         }
       }
+    },
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "description": "API key with a role (contribute | system). See WebApi:ApiKeys.",
+        "name": "X-Api-Key",
+        "in": "header"
+      }
     }
   },
   "tags": [
     {
-      "name": "Hercules.WebApi"
+      "name": "Meta"
     },
     {
       "name": "Chat"

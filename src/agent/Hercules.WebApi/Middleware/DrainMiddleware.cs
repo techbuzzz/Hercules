@@ -10,7 +10,7 @@ namespace Hercules.WebApi.Middleware;
 ///     Rejects new HTTP requests with <c>503 Service Unavailable</c> + <c>Retry-After</c>
 ///     header as soon as the local agent enters a draining/stopped state. The agent
 ///     continues to serve the in-flight requests it accepted before draining started
-///     (they are tracked separately by <see cref="IInFlightTracker" />).
+///     (they are tracked separately by the in-flight request tracker).
 ///     Health and liveness endpoints are exempt so K8s and load balancers can still
 ///     observe the process.
 ///     Specification: task_080.

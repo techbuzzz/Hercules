@@ -240,10 +240,62 @@ public class NumericValidatorTests
     [Fact]
     public void CanVerify_TrueWhenNumbersPresent()
     {
-        // Regex requires digits first: (\d[\d\s.,]*) — "$50." starts with $, not a digit → no match
-        // "50 dollars" starts with digit → matches
+        // R19: "dollars" was missing from the unit alternation, so this ordinary numeric
+        // claim matched nothing and CanVerify returned false.
         var ctx = new VerificationContext { ResponseText = "The cost is 50 dollars." };
         Assert.True(_validator.CanVerify(ctx));
+    }
+
+    // ---------------------------------------------------------------------
+    // R19 boundary coverage. The old pattern required a \b (word boundary) after the
+    // unit, which is unreachable when the unit ends on a non-word character — so EVERY
+    // percentage assertion was silently skipped, including the plausible ones. These
+    // tests pin both sides of the tightened bound and prove plausible values now match.
+    // ---------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("Success rate: 0 %")]
+    [InlineData("Success rate: 100 %")]
+    [InlineData("Conversion improved by 250 %")]
+    [InlineData("Roughly 85% of requests succeed")]
+    public async Task VerifyAsync_PlausiblePercentage_ReturnsPass(string text)
+    {
+        var ctx = new VerificationContext { ResponseText = text, VerificationId = "pct-ok" };
+        var result = await _validator.VerifyAsync(ctx);
+        Assert.True(result.Passed, $"'{text}' should pass plausibility, got: {result.Reason}");
+    }
+
+    [Theory]
+    [InlineData("Success rate is 99999 % in testing")]
+    [InlineData("Growth of 5000 % year over year")]
+    [InlineData("Improvement of -150 % observed")]
+    public async Task VerifyAsync_ImplausiblePercentage_IsDetected(string text)
+    {
+        var ctx = new VerificationContext { ResponseText = text, VerificationId = "pct-bad" };
+        var result = await _validator.VerifyAsync(ctx);
+        Assert.False(result.Passed, $"'{text}' should fail plausibility");
+        Assert.Equal("NUMERIC_IMPLAUSIBLE", result.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData("The cost is $50 usd")]
+    [InlineData("The cost is 50 dollars.")]
+    [InlineData("It took 30 seconds")]
+    [InlineData("File is 12 mb in size")]
+    [InlineData("It ran for 5 days")]
+    public void CanVerify_MatchesCommonNumericForms(string text)
+    {
+        var ctx = new VerificationContext { ResponseText = text };
+        Assert.True(_validator.CanVerify(ctx), $"'{text}' should be recognised as a numeric claim");
+    }
+
+    [Fact]
+    public void CanVerify_BareNumberWithoutUnit_IsNotANumericClaim()
+    {
+        // The validator looks for unit-bearing assertions; a bare number with no unit is not
+        // something a plausibility check can reason about.
+        var ctx = new VerificationContext { ResponseText = "The answer is 42" };
+        Assert.False(_validator.CanVerify(ctx));
     }
 }
 

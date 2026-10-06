@@ -507,8 +507,18 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
                         await conn.WaitAsync(ct).ConfigureAwait(false);
                     }
                 }
-                catch (OperationCanceledException) { }
-                catch (Exception) { }
+                catch (OperationCanceledException ex)
+                {
+                    // R32: was a silent empty catch. Cancellation during shutdown is
+                    // expected, but swallowing it hid genuine cancellation bugs.
+                    _log.LogDebug(ex, "[PostgresStateStore] LISTEN/NOTIFY loop cancelled for {Key}", key);
+                }
+                catch (Exception ex)
+                {
+                    // R32: was a silent empty catch — a persistent backend failure looked
+                    // identical to a clean shutdown, with no telemetry at all.
+                    _log.LogWarning(ex, "[PostgresStateStore] LISTEN/NOTIFY loop terminated unexpectedly for {Key}", key);
+                }
             }, ct);
         }
         catch (Exception ex)

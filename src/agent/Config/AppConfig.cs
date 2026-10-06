@@ -1415,8 +1415,23 @@ public sealed class MarketplaceConfig
 
     /// <summary>
     ///     Разрешить импорт пакетов по HTTP URL.
+    ///     R1: этот флаг РАНЬШЕ НИГДЕ НЕ ЧИТАЛСЯ — guard не существовал, и
+    ///     POST /api/marketplace/import-url позволял SSRF во внутреннюю сеть.
+    ///     Теперь enforced в SkillImportUrlGuard.EnsureAllowedAsync.
     /// </summary>
     public bool AllowHttpImport { get; set; } = false;
+
+    /// <summary>
+    ///     R1: разрешить импорт по незащищённому http:// (по умолчанию только https).
+    ///     Включайте только для локального реестра во внутренней сети.
+    /// </summary>
+    public bool AllowInsecureHttpImport { get; set; } = false;
+
+    /// <summary>
+    ///     Разрешённые хосты для импорта по URL. Если список непустой, импорт
+    ///     разрешён ТОЛЬКО с этих хостов (exact host match).
+    /// </summary>
+    public List<string> AllowedImportHosts { get; set; } = new();
 
     /// <summary>
     ///     Максимальный размер пакета в мегабайтах.

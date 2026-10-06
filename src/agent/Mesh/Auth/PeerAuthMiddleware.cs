@@ -125,8 +125,9 @@ public sealed class PeerAuthMiddleware
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var kvp in headers)
         {
-            // Join multi-value headers with comma (per HTTP spec)
-            result[kvp.Key] = string.Join(",", kvp.Value);
+            // Join multi-value headers with comma (per HTTP spec). StringValues can carry
+            // null elements, which string.Join's params overload flags.
+            result[kvp.Key] = string.Join(",", kvp.Value.Where(static v => v is not null));
         }
 
         return result;

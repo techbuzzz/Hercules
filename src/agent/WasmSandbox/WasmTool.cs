@@ -26,7 +26,21 @@ public sealed record WasmToolResult(
     string? CompilationError,
     WasmExecutionResult Execution,
     TimeSpan CompileDuration,
-    TimeSpan TotalDuration);
+    TimeSpan TotalDuration)
+{
+    /// <summary>
+    ///     True when the compiled module was served from <c>WasmTool</c>'s in-memory cache
+    ///     instead of being compiled.
+    /// </summary>
+    /// <remarks>
+    ///     R3d: callers previously had to infer a cache hit by comparing
+    ///     <see cref="CompileDuration"/> across two runs. That is a wall-clock comparison and
+    ///     was intermittently flaky under load — a cached run can measure marginally slower
+    ///     than the first compile purely from scheduler noise, which produced a red suite.
+    ///     This flag makes the cache state directly observable.
+    /// </remarks>
+    public bool FromCache { get; init; }
+}
 
 /// <summary>
 ///     Human-in-the-loop gate для одобрения нового кода.
@@ -109,6 +123,7 @@ public sealed class WasmTool
         }
 
         byte[] wasmBytes;
+        var fromCache = false;
         try
         {
             // Cache by (language, source-hash) — для повторных запусков того же кода.
@@ -117,6 +132,12 @@ public sealed class WasmTool
             {
                 wasmBytes = await compiler.CompileAsync(request.SourceCode, ct);
                 _wasmCache[cacheKey] = wasmBytes;
+            }
+            else
+            {
+                // R3d: record the cache hit explicitly rather than making callers infer it
+                // from CompileDuration.
+                fromCache = true;
             }
         }
         catch (CompilationException ex)
@@ -144,7 +165,10 @@ public sealed class WasmTool
             null,
             execResult,
             compileSw.Elapsed,
-            totalSw.Elapsed);
+            totalSw.Elapsed)
+        {
+            FromCache = fromCache,
+        };
     }
 
     private static string ComputeSourceHash(string source)

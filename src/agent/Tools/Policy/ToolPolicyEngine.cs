@@ -224,9 +224,15 @@ public sealed class ToolPolicyEngine : IConfigReload
     ///     Синхронная обёртка над <see cref="EvaluateAsync" /> для legacy callers, которые
     ///     ещё не перешли на async. По возможности избегайте: блокирует thread-pool.
     /// </summary>
+    /// <param name="ctx">Контекст запроса.</param>
+    /// <param name="ct">
+    ///     R28: cancellation token, previously hardcoded to <see cref="CancellationToken.None"/>.
+    ///     Without it a cancelled request could never stop policy evaluation, so a caller
+    ///     abandoning the request left the evaluation running to completion.
+    /// </param>
     [Obsolete("Use EvaluateAsync to avoid sync-over-async. Will be removed once all callers are async.")]
-    public ToolPolicyResult Evaluate(PolicyContext ctx)
-        => EvaluateAsync(ctx, CancellationToken.None).GetAwaiter().GetResult();
+    public ToolPolicyResult Evaluate(PolicyContext ctx, CancellationToken ct = default)
+        => EvaluateAsync(ctx, ct).GetAwaiter().GetResult();
 
     /// <summary>
     ///     Fire-and-forget audit logging of policy decision (task_014).

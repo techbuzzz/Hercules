@@ -133,7 +133,11 @@ public sealed class CertificateService : ICertificateService
 
         try
         {
-            using var cert = new X509Certificate2(certificateData);
+            // R36 (SYSLIB0057): the X509Certificate2(byte[]) constructor is obsolete in .NET 10.
+            // X509CertificateLoader loads the same DER bytes without the obsolete API and
+            // lets us state the key-storage intent explicitly. Ephemeral is correct here:
+            // the certificate is only inspected and then disposed.
+            using var cert = X509CertificateLoader.LoadCertificate(certificateData);
 
             // Check expiration
             if (cert.NotAfter < DateTime.UtcNow)

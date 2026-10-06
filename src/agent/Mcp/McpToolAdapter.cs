@@ -84,7 +84,7 @@ public sealed class McpToolAdapter : ITool
             _logger.LogDebug("MCP tool '{Name}': calling with {ArgCount} arguments", Name, arguments?.Count ?? 0);
 
             var result = await _tool.CallAsync(
-                arguments != null ? new Dictionary<string, object?>(arguments) : null,
+                arguments != null ? new Dictionary<string, object?>(arguments.Select(static kv => new KeyValuePair<string, object?>(kv.Key, kv.Value))) : null,
                 ct);
 
             var output = ExtractText(result);

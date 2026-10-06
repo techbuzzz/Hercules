@@ -220,6 +220,54 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddOpenApi(options =>
 {
     options.ShouldInclude = _ => true;
+
+    // R7: X-Api-Key gates every /api route, but the document declared NO security scheme
+    // and 0 of 223 operations carried a `security` requirement. Orval therefore generated
+    // clients that send no auth header, so every generated call 401'd. Nothing caught this
+    // because no test asserted anything about the document's security metadata.
+    options.AddDocumentTransformer((document, _context, _ct) =>
+    {
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+        document.Components.SecuritySchemes["ApiKey"] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.ApiKey,
+            Name = "X-Api-Key",
+            In = ParameterLocation.Header,
+            Description = "API key with a role (contribute | system). See WebApi:ApiKeys.",
+        };
+
+        return Task.CompletedTask;
+    });
+
+    // ApiKeyMiddleware exempts OPTIONS, non-/api routes, /api/health and /api/ready; the
+    // document must mirror that exactly or generated clients will send a key where none is
+    // needed (or omit one where it is required).
+    options.AddOperationTransformer((operation, context, ct) =>
+    {
+        var path = context.Description.RelativePath ?? string.Empty;
+
+        var requiresKey = path.StartsWith("api/", StringComparison.Ordinal)
+                          && !path.StartsWith("api/health", StringComparison.Ordinal)
+                          && !path.StartsWith("api/ready", StringComparison.Ordinal);
+
+        if (requiresKey)
+        {
+            operation.Security =
+            [
+                new OpenApiSecurityRequirement
+                {
+                    [new OpenApiSecuritySchemeReference("ApiKey", context.Document)] = [],
+                },
+            ];
+        }
+        else
+        {
+            operation.Security = null;
+        }
+
+        return Task.CompletedTask;
+    });
 });
 
 // [task_109] Bridges minimal API endpoints to MVC's IApiDescriptionProvider so
@@ -725,7 +773,9 @@ builder.Services.AddSingleton<SkillMarketplace>(sp =>
         sp.GetRequiredService<StorageConfig>(),
         sp.GetRequiredService<SkillPackager>(),
         sp.GetRequiredService<IMarketplaceSigningService>(),
-        sp.GetService<IHttpClientFactory>()));
+        sp.GetService<IHttpClientFactory>(),
+        // R1: supplies Marketplace:AllowHttpImport to the SSRF guard.
+        sp.GetRequiredService<MarketplaceConfig>()));
 builder.Services.AddSingleton<AgentTemplateManager>();
 
 // Template simulation (task_031)
@@ -845,8 +895,11 @@ builder.Services.AddSingleton<ISloService>(sp =>
         sp.GetRequiredService<SlosConfig>(),
         sp.GetRequiredService<IAuditService>(),
         sp.GetRequiredService<IMeshObservabilityService>(),
-        sp.GetService<Hercules.Offline.IOutboxStore>(),
-        sp.GetService<IBudgetService>(),
+        // R27: GetService<T>() returns null when unregistered and both parameters are
+        // non-nullable, so an accidental unregistration would have become a
+        // NullReferenceException on first SLO evaluation rather than a startup failure.
+        sp.GetRequiredService<Hercules.Offline.IOutboxStore>(),
+        sp.GetRequiredService<IBudgetService>(),
         sp.GetRequiredService<ILogger<SloService>>(),
         sp.GetService<Hercules.Slo.ISloLatencyTracker>(),
         sp.GetService<Hercules.Slo.IConnectivityStateProvider>()));
@@ -1129,7 +1182,11 @@ app.MapGet("/", () => Results.Ok(new
         "POST /api/system/checkin/heartbeat", "GET /api/system/checkin/status",
         "POST /api/system/checkin/force"
     ]
-}));
+}))
+// R41/R42: give the root endpoint an explicit operationId and a real tag, instead of
+// letting it land in the auto-generated "Hercules.WebApi" orphan bucket.
+.WithName("GetServiceInfo")
+.WithTags("Meta");
 // task_079: real health endpoints replacing the static /api/health stub.
 //   /api/health        — liveness, returns 200 if the process is alive (no checks)
 //   /api/ready         — readiness, returns 200 only if all "ready"-tagged checks pass
@@ -1165,7 +1222,12 @@ app.MapGet($"/{Hercules.BuiltIn.AgentCardFileName}", () =>
 
     var json = File.ReadAllText(cardPath);
     return Results.Text(json, "application/json");
-});
+})
+// R41: these two service endpoints previously had no operationId, so Orval emitted
+// invalid/duplicate client method names. R42: they also landed in the auto-generated
+// "Hercules.WebApi" orphan tag, which exists only to hold them.
+.WithName("GetAgentCardFile")
+.WithTags("Meta");
 
 // --- Доменные эндпоинты ---
 app.MapChat();
@@ -1344,9 +1406,26 @@ if (!isBuildTime)
 // served document are produced identically.
 if (openApiOutputPath is not null)
 {
-    // The OpenAPI service reads the app's EndpointDataSource, which is only finalised
-    // once the host has started. Without StartAsync the document serialises with
-    // `paths: {}` even though every MapXxx() call above already ran.
+    // [task_109] / R11-R12: the host MUST be started to finalise the endpoint table.
+    //
+    // Verified empirically twice during remediation: resolving EndpointDataSource from DI,
+    // and additionally forcing .Endpoints on every IEndpointRouteBuilder.DataSources
+    // member, both still serialised the document with `paths: {}` — the original task_109
+    // failure. WebApplication only materialises the minimal-API RouteEndpoints when the
+    // host pipeline is built, so StartAsync is unavoidable. (The hard gate below turns
+    // that regression into a loud build failure instead of a silently broken spec.)
+    //
+    // There is therefore NO port-collision risk during a build: builder.WebHost.UseUrls()
+    // above already pins generation to an ephemeral loopback port (http://127.0.0.1:0), so
+    // a build can neither collide with a running dev server on 8421 nor expose the real port.
+    //
+    // What R11/R12 actually required — and what is fixed here and in the csproj:
+    //   * generation is now OPT-IN, so a normal `dotnet build` never runs the app at all.
+    //     It previously executed the host on every build, which opened the SQLite database
+    //     and dirtied tracked files;
+    //   * the emitted JSON is normalised to the host line-ending convention, so the
+    //     committed document no longer drifts into LF and permanently dirties `git status`;
+    //   * the document is never written when it is empty.
     await app.StartAsync();
 
     // AddOpenApi registers the provider as a KEYED service ("v1" is the default
@@ -1361,12 +1440,26 @@ if (openApiOutputPath is not null)
     if (!string.IsNullOrEmpty(directory))
         Directory.CreateDirectory(directory);
 
-    // UTF-8 without BOM: the file is committed to git and consumed by Orval/Spectral,
-    // both of which choke on a BOM when parsing JSON.
-    await File.WriteAllTextAsync(fullPath, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    // R12: normalise to the host line-ending convention. The document is committed and
+    // consumed by Orval/Spectral, which choke on a BOM and on LF-in-a-CRLF-working-tree
+    // drift that made every build rewrite the tracked file and dirty `git status`.
+    var newline = Environment.NewLine;
+    var normalizedJson = json.Replace("\r\n", "\n").Replace("\n", newline);
+
+    await File.WriteAllTextAsync(fullPath, normalizedJson, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
     log.LogInformation("[OpenApi] Wrote {Path} ({Paths} paths, {Schemas} schemas)",
         fullPath, document.Paths?.Count ?? 0, document.Components?.Schemas?.Count ?? 0);
+
+    // Hard gate: an empty document is the task_109 regression. Fail the build loudly
+    // rather than committing a document with no paths. Top-level statements cannot
+    // return an exit code, so set it explicitly — MSBuild's Exec surfaces it as a failure.
+    if (document.Paths is null || document.Paths.Count == 0)
+    {
+        log.LogError("[OpenApi] Generated document contains no paths — aborting to avoid committing a broken spec");
+        Environment.ExitCode = 2;
+    }
+
     return;
 }
 
