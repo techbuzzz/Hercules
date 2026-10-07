@@ -87,8 +87,11 @@ export const useConnectionsStore = defineStore("connections", () => {
     error.value = null;
     try {
       list.value = await platform.connections.list();
-      if (list.value.length > 0 && !activeId.value) {
-        await setActive(list.value[0].id);
+      // Captured in a local before the await below: `setActive` is async, so the list
+      // can be replaced by `refresh`/`remove` while it is in flight.
+      const first = list.value[0];
+      if (first && !activeId.value) {
+        await setActive(first.id);
       }
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
@@ -130,7 +133,8 @@ export const useConnectionsStore = defineStore("connections", () => {
       if (activeId.value === id) {
         activeId.value = null;
         client.value = null;
-        if (list.value.length > 0) await setActive(list.value[0].id);
+        const next = list.value[0];
+        if (next) await setActive(next.id);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -178,9 +182,10 @@ export const useConnectionsStore = defineStore("connections", () => {
 
     const status = await platform.connections.healthCheck(id);
     const idx = list.value.findIndex((c) => c.id === id);
-    if (idx !== -1) {
-      list.value[idx].status = status.online ? "online" : "offline";
-      list.value[idx].lastSeen = new Date().toISOString();
+    const entry = idx === -1 ? undefined : list.value[idx];
+    if (entry) {
+      entry.status = status.online ? "online" : "offline";
+      entry.lastSeen = new Date().toISOString();
     }
     return status;
   }
@@ -223,7 +228,8 @@ export const useConnectionsStore = defineStore("connections", () => {
       await platform.session.exchange(id, conn.baseUrl, apiKey);
       sessionExpiredId.value = null;
       const idx = list.value.findIndex((c) => c.id === id);
-      if (idx !== -1) list.value[idx].hasSession = true;
+      const entry = idx === -1 ? undefined : list.value[idx];
+      if (entry) entry.hasSession = true;
       if (activeId.value === id) {
         startHeartbeat();
         void checkin(conn);
@@ -265,9 +271,10 @@ export const useConnectionsStore = defineStore("connections", () => {
         };
       }
       const idx = list.value.findIndex((c) => c.id === conn.id);
-      if (idx !== -1) {
-        list.value[idx].checkedOut = true;
-        list.value[idx].checkedOutBy = platform.app.studioId();
+      const entry = idx === -1 ? undefined : list.value[idx];
+      if (entry) {
+        entry.checkedOut = true;
+        entry.checkedOutBy = platform.app.studioId();
       }
     } catch (e) {
       if (e instanceof AgentError && (e.status === 409 || e.status === 423)) {
@@ -293,7 +300,8 @@ export const useConnectionsStore = defineStore("connections", () => {
       // Best-effort: the 60s TTL will release the slot anyway.
     }
     const idx = list.value.findIndex((c) => c.id === conn.id);
-    if (idx !== -1) list.value[idx].checkedOut = false;
+    const entry = idx === -1 ? undefined : list.value[idx];
+    if (entry) entry.checkedOut = false;
   }
 
   function startHeartbeat(): void {
@@ -363,7 +371,8 @@ export const useConnectionsStore = defineStore("connections", () => {
     unsubscribeExpiry = platform.session.onExpired((connectionId) => {
       sessionExpiredId.value = connectionId;
       const idx = list.value.findIndex((c) => c.id === connectionId);
-      if (idx !== -1) list.value[idx].hasSession = false;
+      const entry = idx === -1 ? undefined : list.value[idx];
+      if (entry) entry.hasSession = false;
       useToastStore().warn("Session expired — re-enter the API key to continue.");
     });
   }

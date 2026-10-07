@@ -148,7 +148,10 @@ export function validateGraph(graph: WorkflowGraph): GraphIssue[] {
   if (starts.length === 0) {
     issues.push({ nodeId: null, message: "Graph needs a StartNode" });
   } else if (starts.length > 1) {
-    issues.push({ nodeId: starts[1].id, message: "A graph can only have one StartNode" });
+    const extra = starts[1];
+    if (extra) {
+      issues.push({ nodeId: extra.id, message: "A graph can only have one StartNode" });
+    }
   }
 
   for (const edge of graph.edges) {

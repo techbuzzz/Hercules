@@ -184,7 +184,7 @@ describe("connections CRUD", () => {
 
     const list = await caps.connections.list();
     expect(list).toHaveLength(1);
-    expect(list[0].name).toBe("first");
+    expect(list[0]?.name).toBe("first");
 
     vi.unstubAllGlobals();
   });
@@ -213,6 +213,7 @@ describe("connections CRUD", () => {
     const caps = createWebCapabilities();
     await caps.connections.add({ name: "orig", baseUrl: AGENT, apiKey: "k" });
     const [conn] = await caps.connections.list();
+    if (!conn) throw new Error("connection was not created");
 
     const patched = await caps.connections.update(conn.id, {
       name: "renamed",
@@ -236,12 +237,13 @@ describe("connections CRUD", () => {
     const caps = createWebCapabilities();
     await caps.connections.add({ name: "a", baseUrl: AGENT, apiKey: "k" });
     const [conn] = await caps.connections.list();
+    if (!conn) throw new Error("connection was not created");
 
     const health = await caps.connections.healthCheck(conn.id);
     expect(health.online).toBe(true);
 
     const list = await caps.connections.list();
-    expect(list[0].status).toBe("online");
+    expect(list[0]?.status).toBe("online");
 
     vi.unstubAllGlobals();
   });
@@ -402,8 +404,8 @@ describe("storage resilience", () => {
 
     const list = await caps.connections.list();
     expect(list).toHaveLength(1);
-    expect(list[0].id).toBe("old-1");
-    expect(list[0].hasSession).toBe(false);
+    expect(list[0]?.id).toBe("old-1");
+    expect(list[0]?.hasSession).toBe(false);
 
     // Legacy secret must be dropped, not carried over.
     expect(localStorage.getItem("hercules-studio.connections.v1")).not.toContain("LEGACYSECRET");

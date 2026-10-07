@@ -204,7 +204,8 @@ async function load(): Promise<void> {
   try {
     skills.value = await client.value.listSkills();
     if (!selectedId.value && skills.value.length > 0) {
-      await select(skills.value[0].id);
+      const first = skills.value[0];
+        if (first) await select(first.id);
     }
   } catch (e) {
     toast.error(`${t("skills.loadFailed")}: ${e instanceof Error ? e.message : String(e)}`);

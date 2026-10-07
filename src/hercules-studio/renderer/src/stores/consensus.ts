@@ -213,6 +213,12 @@ export const useConsensusStore = defineStore("consensus", () => {
 
       // 1-based from the judge, 0-based here — the bounds check is in the parser.
       const winner = answers[verdict.bestIndex - 1];
+      // The parser already rejected an out-of-range index; this guard is the compiler's
+      // proof of the same invariant rather than a second source of truth.
+      if (!winner) {
+        status.value = "done";
+        return;
+      }
       pickedConnectionId.value = winner.connectionId;
       judgeRationale.value = verdict.rationale;
       aggregatedResult.value = winner.text;

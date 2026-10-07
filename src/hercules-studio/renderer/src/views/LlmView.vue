@@ -115,8 +115,10 @@ async function probe(): Promise<void> {
  * patch cannot clobber unrelated config or wipe API keys stored server-side.
  */
 function buildPatch(): Record<string, unknown> {
-  const provider = draft.value.provider.trim();
-  const fallback = draft.value.fallback
+  // `draft` is a Partial, so these fields are absent until loaded from the agent. The
+  // fallbacks match the agent's own defaults rather than sending empty strings.
+  const provider = (draft.value.provider ?? "yandexgpt").trim();
+  const fallback = (draft.value.fallback ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
@@ -125,7 +127,7 @@ function buildPatch(): Record<string, unknown> {
   const ollamaCloud = { model: draft.value.ollamaCloudModel };
   const ollamaLocal = { model: draft.value.ollamaLocalModel };
   const openAICompatible = {
-    endpoint: draft.value.openAICompatibleEndpoint.trim(),
+    endpoint: (draft.value.openAICompatibleEndpoint ?? "").trim(),
     model: draft.value.openAICompatibleModel,
   };
 

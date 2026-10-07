@@ -87,7 +87,7 @@ function edgeTargets(index: number): { from: string; to: string } {
   return { from: edge.from, to: edge.to };
 }
 
-function setEdge(index: number, key: "from" | "to", value: string): void {
+function setEdge(index: number, key: keyof WorkflowEdge, value: string): void {
   const edge = graph.value.edges[index];
   if (edge) edge[key] = value;
 }
@@ -318,10 +318,11 @@ function submit(): void {
             </option>
           </select>
           <input
-            v-model="graph.edges[index].label"
+            :value="graph.edges[index]?.label ?? ''"
             type="text"
             :placeholder="t('workflowEditor.edgeLabel')"
             class="w-24 rounded border border-app bg-tertiary px-2 py-1 text-[11px] text-app outline-none focus:border-emerald-500"
+            @input="setEdge(index, 'label', ($event.target as HTMLInputElement).value)"
           />
           <button
             type="button"

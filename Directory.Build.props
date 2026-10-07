@@ -11,6 +11,14 @@
     global.json pins the SDK; this file pins everything else.
   -->
   <PropertyGroup>
+    <!--
+      Release version, kept in one place so the assemblies, the Studio SPA
+      (src/hercules-studio/package.json) and CHANGELOG agree. Directory.Build.props is
+      imported before each csproj body, so a project that declares its own <Version>
+      still wins — Hercules.SkillSdk stays on its independent 0.4.0-preview NuGet
+      lineage. Bump this and the changelog together when cutting a release.
+    -->
+    <Version>2.0.0</Version>
     <LangVersion>latest</LangVersion>
     <Deterministic>true</Deterministic>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>

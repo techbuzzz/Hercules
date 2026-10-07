@@ -8,7 +8,7 @@
 
 
 **Epic:** Hercules Studio
-**Status:** cancelled for desktop packaging (PWA replaces it); CI, Biome, Vitest, Playwright and `strict` TypeScript are all in place. Follow-up: `noUncheckedIndexedAccess` is **not** enabled — it produces **49 errors across 12 files** (15 in `skills/promptDiff.ts` from 2-D LCS table indexing, 9 in `stores/connections.ts`, the rest spread across views, the workflow graph and tests). Scope it as its own change rather than folding it into another.
+**Status:** cancelled for desktop packaging (PWA replaces it); CI, Biome, Vitest, Playwright and TypeScript strictness are all in place. `noUncheckedIndexedAccess` is now **enabled** — all 49 errors it surfaced were fixed across `skills/promptDiff.ts`, `stores/connections.ts`, `platform/web.ts` + `web.test.ts`, `sdk/client.contract.test.ts`, `stores/consensus.ts`, `skills/skillPackage.ts`, `workflow/graph.ts`, `views/{LlmView,EmptyState,SkillsView}.vue` and `components/workflow/GraphEditor.vue`. The migration found two genuine defects, not just typing nits: a `list.value[0].id` read across an `await` (a live race with a concurrent refresh) and `connections.update()` reading `list[idx]` twice where one typed object belongs.
 **Estimate:** — (dropped)
 **Dependencies (backend):** нет
 **Dependencies (Studio):** Stage 8

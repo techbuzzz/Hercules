@@ -33,7 +33,9 @@ const CLIENT = resolve(PKG_ROOT, "renderer/src/sdk/client.ts");
  * must be preserved as a parameter.
  */
 function shape(path: string): string {
-  const withoutQuery = path.split("?")[0];
+  // `split`/`replace` yield `string | undefined` under noUncheckedIndexedAccess even
+  // though both always produce a string here.
+  const withoutQuery = path.split("?")[0] ?? path;
 
   const withoutTrailingVar = withoutQuery.replace(/\$\{[^}]+\}$/, "");
   const trailingVarWasQuery =
@@ -54,7 +56,8 @@ describe("sdk/client.ts ↔ agent OpenAPI contract", () => {
   const source = readFileSync(CLIENT, "utf8");
   const called = new Set<string>();
   for (const match of source.matchAll(/[`"](\/api\/[^`"]*)[`"]/g)) {
-    called.add(match[1]);
+    const path = match[1];
+    if (path) called.add(path);
   }
 
   it("finds endpoints in the client to check", () => {

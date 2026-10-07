@@ -433,12 +433,14 @@ export function createWebCapabilities(): PlatformCapabilities {
       async update(id: string, patch: Partial<Connection>): Promise<Connection> {
         const list = loadConnections();
         const idx = list.findIndex((c) => c.id === id);
-        if (idx === -1) throw new AgentError("Connection not found", 404);
+        const existing = idx === -1 ? undefined : list[idx];
+        if (!existing) throw new AgentError("Connection not found", 404);
         // Identity and credential fields are not client-writable.
         const { id: _i, baseUrl: _b, ...safe } = patch;
-        list[idx] = { ...list[idx], ...safe };
+        const updated: Connection = { ...existing, ...safe };
+        list[idx] = updated;
         saveConnections(list);
-        return list[idx];
+        return updated;
       },
 
       async healthCheck(id: string): Promise<HealthStatus> {
@@ -724,9 +726,10 @@ export function createWebCapabilities(): PlatformCapabilities {
   function patchStatus(id: string, health: HealthStatus): void {
     const list = loadConnections();
     const idx = list.findIndex((c) => c.id === id);
-    if (idx === -1) return;
-    list[idx].status = health.online ? "online" : "offline";
-    list[idx].lastSeen = new Date().toISOString();
+    const entry = idx === -1 ? undefined : list[idx];
+    if (!entry) return;
+    entry.status = health.online ? "online" : "offline";
+    entry.lastSeen = new Date().toISOString();
     saveConnections(list);
   }
 }

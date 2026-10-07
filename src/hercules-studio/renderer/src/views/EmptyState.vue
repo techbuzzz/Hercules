@@ -48,8 +48,8 @@ function addConnection() {
             </svg>
           </div>
           <div class="text-left">
-            <h3 class="font-medium text-app">{{ slides[0].title }}</h3>
-            <p class="text-sm text-secondary">{{ slides[0].desc }}</p>
+            <h3 class="font-medium text-app">{{ slides[0]?.title }}</h3>
+            <p class="text-sm text-secondary">{{ slides[0]?.desc }}</p>
           </div>
         </div>
         <div class="mt-4 flex justify-center gap-1.5">

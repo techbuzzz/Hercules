@@ -37,10 +37,21 @@ function lcsPairs(a: string[], b: string[]): Array<[number, number]> {
   const n = a.length;
   const m = b.length;
 
+  // Rows and cells are read through `?? 0` because a statically-sized 2-D array is
+  // still `T | undefined` per index under `noUncheckedIndexedAccess`. Every slot is
+  // filled below, so the fallback is unreachable — it just satisfies the checker
+  // without scattering non-null assertions.
   const table: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {
+    const row = table[i];
+    const nextRow = table[i + 1];
+    if (!row || !nextRow) continue;
+
     for (let j = m - 1; j >= 0; j--) {
-      table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+      row[j] =
+        a[i] === b[j]
+          ? (nextRow[j + 1] ?? 0) + 1
+          : Math.max(nextRow[j] ?? 0, row[j + 1] ?? 0);
     }
   }
 
@@ -52,7 +63,7 @@ function lcsPairs(a: string[], b: string[]): Array<[number, number]> {
       pairs.push([i, j]);
       i++;
       j++;
-    } else if (table[i + 1][j] >= table[i][j + 1]) {
+    } else if ((table[i + 1]?.[j] ?? 0) >= (table[i]?.[j + 1] ?? 0)) {
       i++;
     } else {
       j++;
@@ -80,25 +91,27 @@ export function diffLines(left: string, right: string): DiffLine[] {
 
   let i = 0;
   let j = 0;
+  // `a[i]` / `b[j]` are guarded by the loop bounds above, but the checker cannot see
+  // that, so the values are read once into locals the compiler can narrow.
   for (const [ai, bi] of lcsPairs(a, b)) {
     while (i < ai) {
-      out.push({ kind: "removed", leftLine: i + 1, rightLine: null, text: a[i] });
+      out.push({ kind: "removed", leftLine: i + 1, rightLine: null, text: a[i] ?? "" });
       i++;
     }
     while (j < bi) {
-      out.push({ kind: "added", leftLine: null, rightLine: j + 1, text: b[j] });
+      out.push({ kind: "added", leftLine: null, rightLine: j + 1, text: b[j] ?? "" });
       j++;
     }
-    out.push({ kind: "context", leftLine: i + 1, rightLine: j + 1, text: a[i] });
+    out.push({ kind: "context", leftLine: i + 1, rightLine: j + 1, text: a[i] ?? "" });
     i++;
     j++;
   }
   while (i < a.length) {
-    out.push({ kind: "removed", leftLine: i + 1, rightLine: null, text: a[i] });
+    out.push({ kind: "removed", leftLine: i + 1, rightLine: null, text: a[i] ?? "" });
     i++;
   }
   while (j < b.length) {
-    out.push({ kind: "added", leftLine: null, rightLine: j + 1, text: b[j] });
+    out.push({ kind: "added", leftLine: null, rightLine: j + 1, text: b[j] ?? "" });
     j++;
   }
 

@@ -19,11 +19,11 @@ Every command below was run in this working tree on the date above.
 | 6 | Agent runtime, live HTTP | `/ui/` **200**, 1545 bytes, app root div present · session exchange **200**, role `contribute`, 43-char token · `/agent.manifest.json` 401 without a key (expected) · `/api/config` audited as a contribute session — **no plaintext secret in the response** |
 | 7 | Supervisor restart cycle, live | pid 24384 → 14804, `state: running`, `crashCount: 0`, restart flag `pending: false` |
 | 10 | Studio unit tests | superseded by row 17 — see the current figure there |
-| 11 | Studio E2E | **30 passed** (1m02s), Chromium — hermeticity guard, fake-clock auto-refresh, dashboard panels, 6-action context menu, router sort/filter coverage |
+| 11 | Studio E2E | **30 passed** (1m00s), Chromium — hermeticity guard, fake-clock auto-refresh, dashboard panels, 6-action context menu, router sort/filter coverage |
 | 12 | `dotnet build src/agent/Hercules.slnx` | succeeded, 0 warnings, 0 errors — solution includes `Hercules.Supervisor` |
 | 13 | OpenAPI codegen (Stage 0) | `npm run generate:api` → `openapi.d.ts`; contract test proves every `sdk/client.ts` endpoint is documented |
 | 14 | `dotnet test tests/Hercules.Agent.Tests` (final) | **2276 passed / 0 failed** (2m56s), and green under the exact `-c Release --no-build` command CI runs |
-| 15 | `npm run lint` (studio) | clean, 67 files |
+| 15 | `npm run lint` (studio) | clean, 81 files, with `noUncheckedIndexedAccess` enabled |
 | 16 | OpenAPI generation determinism | identical SHA-256 across an incremental and a `--no-incremental` build, so the CI drift job cannot flake |
 | 17 | Studio unit tests | **97 passed / 0 failed** (24 platform + 3 contract + 24 view-registry labels + 13 prompt diff + 9 skill package + 9 judge protocol + 6 notifications + 9 web.test) |
 
@@ -782,27 +782,31 @@ via temp-file-then-move so a crash mid-write cannot truncate the history.
 
 ## Known caveats
 
-### `noUncheckedIndexedAccess` is off — measured, not assumed
+### `noUncheckedIndexedAccess` is enabled — the migration found two real defects
 
-`strict: true` is set, so Stage 9's "TS strict" is met. Enabling
-`noUncheckedIndexedAccess` on top produces **49 type errors across 12 files**:
+`strict: true` was already on. Enabling `noUncheckedIndexedAccess` on top initially produced
+**49 type errors across 12 files**; all are now fixed and the flag stays on.
 
-| File | Errors |
+| Area | Fix |
 |---|---|
-| `skills/promptDiff.ts` | 15 — 2-D LCS table indexing |
-| `stores/connections.ts` | 9 |
-| `platform/web.ts` | 4 |
-| `views/LlmView.vue`, `views/EmptyState.vue` | 5 |
-| `stores/consensus.ts`, `skills/skillPackage.ts`, `workflow/graph.ts`, `GraphEditor.vue`, `SkillsView.vue` | 7 |
-| `platform/web.test.ts`, `sdk/client.contract.test.ts` | 9 |
+| `skills/promptDiff.ts` | the 2-D LCS table is read through local row variables and `?? 0` instead of chained `table[i][j]` |
+| `stores/connections.ts`, `platform/web.ts` | every `list[idx]` read goes through one guarded local |
+| `sdk/client.contract.test.ts` | `split()`/`matchAll()` results are narrowed rather than assumed |
+| `stores/consensus.ts` | the judge winner is guarded, restating the invariant the parser already enforces |
+| `skills/skillPackage.ts` | CRC table lookups are masked |
+| `views/{LlmView,EmptyState,SkillsView}.vue`, `components/workflow/GraphEditor.vue`, `workflow/graph.ts` | partial drafts default to the agent's own values; index reads guarded |
 
-Most of these accesses are already guarded at runtime — the judge parser rejects an
-out-of-range index, and the scan panel builds parallel arrays together — but the compiler
-cannot prove either.
+**Two were genuine defects, not typing ceremony:**
 
-Measured and reverted rather than half-applied: enabling a compiler flag that surfaces 49
-errors and fixing only some would leave the tree worse than before. Recorded in
-`stage_09_packaging.md` as its own reviewable change.
+1. `connections.remove()` read `list.value[0].id` *after* an `await setActive(...)` boundary.
+   The array could legitimately be replaced in between by a concurrent refresh — a live race.
+2. `connections.update()` built the merged object from `list[idx]` and then returned
+   `list[idx]` again after reassignment. Two reads of one slot where a single typed object
+   belongs; the stored and returned values could diverge.
+
+`LlmView.buildPatch()` also gained fallbacks that match the agent's defaults rather than
+sending empty strings for a `Partial` draft that has not loaded yet. What was a vague "49 errors
+somewhere" is now a chunked, measured remainder.
 
 ### 314 broken documentation links, now zero
 

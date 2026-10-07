@@ -1,6 +1,6 @@
 {
   "name": "hercules-studio",
-  "version": "0.2.0",
+  "version": "2.0.0",
   "description": "Hercules Studio — web IDE for managing Hercules AI agents",
   "type": "module",
   "license": "AGPL-3.0",
