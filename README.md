@@ -9,10 +9,10 @@
 
 <p align="center">
   <a href="https://github.com/techbuzzz/Hercules/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/techbuzzz/Hercules?style=social" /></a>
-  <a href="https://github.com/techbuzzz/Hercules/actions"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/techbuzzz/Hercules/build.yml?branch=main&logo=github&label=build" /></a>
+  <a href="https://github.com/techbuzzz/Hercules/actions"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/techbuzzz/Hercules/ci.yml?branch=main&logo=github&label=build" /></a>
   <img alt=".NET" src="https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white" />
   <img alt="C#" src="https://img.shields.io/badge/C%23-15-239120?logo=csharp&logoColor=white" />
-  <img alt="License" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
+  <img alt="License" src="https://img.shields.io/badge/License-AGPLv3-blue.svg" />
   <img alt="Status" src="https://img.shields.io/badge/status-active-success.svg" />
   <a href="https://techbuzzz.github.io/Hercules"><img alt="Docs" src="https://img.shields.io/badge/docs-hercules--agent.dev-1E90FF?logo=read-the-docs&logoColor=white" /></a>
 </p>

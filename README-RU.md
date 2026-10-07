@@ -11,7 +11,7 @@
   <img alt=".NET" src="https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white" />
   <img alt="C#" src="https://img.shields.io/badge/C%23-15-239120?logo=csharp&logoColor=white" />
   <img alt="Vue" src="https://img.shields.io/badge/Vue-3-42b883?logo=vuedotjs&logoColor=white" />
-  <img alt="License" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
+  <img alt="License" src="https://img.shields.io/badge/License-AGPLv3-blue.svg" />
   <img alt="Status" src="https://img.shields.io/badge/status-active-success.svg" />
 </p>
 

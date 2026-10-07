@@ -1,10 +1,21 @@
 # Task 103 — PostgreSQL session store
 
 **Phase:** 8
-**Status:** in_progress
+**Status:** in_progress (shipped as staged + restart-gated; live switch needs an owner decision)
 **Owner:** —
 **Slug:** `postgres-session-store`
 **Studio Stage:** 6
+
+> **Status note (2026-10-07, 2.0.0 release prep).** Shipping as **partial, by design**
+> — `in_progress` is accurate and should not be tidied to `done`. The Postgres store
+> and the restart-gated selection UI are implemented; what is deliberately **not**
+> implemented is the live, no-restart switch, because `Storage:SessionStore` is read
+> from `IConfiguration` (not `AppConfig`) and switching backends at runtime risks data
+> loss. Closing the gap requires changing where the agent reads that setting, which is
+> an owner decision rather than a ticket to grind down.
+> Shipped as a documented limitation in `CHANGELOG-EN.md` /
+> `CHANGELOG-RU.md`. Evidence:
+> [VERIFICATION.md](../../EPIC_Hercules_Studio/VERIFICATION.md) § "Stage 6.12".
 
 ## Goal
 Абстракция `ISessionStore` + Postgres implementation для централизованного хранения сессий всех агентов. Опция "collective mind mode" — shared memory между агентами.

@@ -1,10 +1,22 @@
 # Task 113 — Studio: openapi-typescript + openapi-fetch + Orval setup
 
 **Phase:** 8
-**Status:** pending
+**Status:** skipped (deliberate — Orval not adopted)
 **Owner:** —
 **Slug:** `studio-openapi-codegen-setup`
 **Studio Stage:** 0
+
+> **Status note (2026-10-07, 2.0.0 release prep).** This task is **not outstanding
+> work** and is deliberately not being done. `openapi-typescript` ships and the
+> generated `openapi.d.ts` is committed, so the *codegen* half of this task is
+> delivered; Orval was evaluated and skipped in favour of a hand-written typed client
+> (`renderer/src/sdk/client.ts`) plus a contract test
+> (`renderer/src/sdk/client.contract.test.ts`) that fails if the agent document
+> drifts. There is no `orval.config.*` in the repo. Recorded here rather than
+> deleted so the decision is not re-litigated from scratch later — the same reason
+> `scripts/count-stage-tasks.cjs` keeps the stage files.
+> See [VERIFICATION.md](../../EPIC_Hercules_Studio/VERIFICATION.md) ("What remains",
+> Stage 0 row) for the authoritative statement.
 
 ## Goal
 Настроить pipeline генерации TypeScript API клиента в Hercules Studio из OpenAPI документа агента. Использовать openapi-typescript (types only) + openapi-fetch (typed fetch wrapper) + Orval (Vue Query hooks + Zod schemas + MSW mocks). Generated files коммитятся в git. Regen — ручной (`npm run gen:api`), можно запустить в любой момент.

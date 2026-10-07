@@ -41,6 +41,16 @@ runtime surface that existing installations depend on.
   - Environment variable prefix: `HERMES_` → `HERCULES_`.
   - `Skill.Meta.Triggers` renamed to `Skill.Meta.PhraseReceivers` (human-friendly term).
     Backward-compatible read of legacy `triggers:` key in `skill.{id}.meta.json`.
+- **Repository license changed: MIT → AGPL-3.0 + commercial** (ADR-0007).
+  - The root `LICENSE` is now AGPL-3.0, and `LICENSE-COMMERCIAL.md` has been added.
+  - **This affects consumers relying on the previous MIT terms.** The relicensing was
+    an owner decision, not an inferred fix; see the addendum in
+    [ADR-0007](docs/EPIC_Hercules_Studio/adr/0007-agpl-license.md).
+  - Why: web-first (ADR-0009) turned the agent into a network service that itself
+    serves the AGPL Studio SPA at `/ui`. That coupling can no longer stay one-way,
+    so the whole repository is licensed. AGPL §13 is now triggered in practice.
+  - Studio's license-consent dialog already exists (en + ru), so the relicensing
+    required no new product work.
 
 ### Added
 
@@ -160,6 +170,23 @@ runtime surface that existing installations depend on.
   `test-multi-role.cs`, `test-sandbox.cs`, `test-tools.cs`, `test-stage4.cs`.
 - Docs guards re-runnable via `scripts/`: `check-doc-links.cjs`,
   `check-backlog-status.cjs`, `check-ci-workflow.cjs`, `count-stage-tasks.cjs`.
+
+### Known limitations
+Deliberately shipped gaps, so nobody discovers them at runtime.
+
+- **Workflows can be authored, but not executed.** Stage 8 delivers the graph model,
+  structural validation and the editor; Studio stores and round-trips workflow
+  definitions. The **executor and the formal typed `WorkflowGraph` schema are not
+  implemented** (`task_105`, targeted at 2.1). The Run action reports this
+  explicitly rather than failing silently — in both English and Russian:
+  *"Execution is not implemented server-side yet (task_105)."* A hidden page is
+  still notified of a run attempt rather than silently doing nothing.
+- **Session-store backend cannot be switched live.** `POST /api/config` stages the
+  selection and requires an explicit restart; switching backends at runtime risks
+  data loss. Only SQLite is enabled by default.
+- **Orval was skipped deliberately.** Studio generates its client types with
+  `openapi-typescript`; an Orval pipeline is not configured, and
+  `docs/roadmap/tasks/task_113.md` records that as a decision rather than a gap.
 
 ## [1.0.0] - 2026-06-18
 

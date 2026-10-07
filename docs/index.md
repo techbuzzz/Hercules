@@ -10,10 +10,10 @@ title: Hercules — Self-improving AI agent on C# / .NET 10
 Creates skills from experience · improves them during use · remembers context between sessions · connects agents into a mesh.
 
 [![GitHub Stars](https://img.shields.io/github/stars/techbuzzz/Hercules?style=social)](https://github.com/techbuzzz/Hercules/stargazers)
-[![Build](https://img.shields.io/github/actions/workflow/status/techbuzzz/Hercules/build.yml?branch=main&logo=github&label=build)](https://github.com/techbuzzz/Hercules/actions)
+[![Build](https://img.shields.io/github/actions/workflow/status/techbuzzz/Hercules/ci.yml?branch=main&logo=github&label=build)](https://github.com/techbuzzz/Hercules/actions)
 ![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)
 ![C#](https://img.shields.io/badge/C%23-15-239120?logo=csharp&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+![License](https://img.shields.io/badge/License-AGPLv3-blue.svg)
 
 ---
 

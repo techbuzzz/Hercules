@@ -1,15 +1,24 @@
 /**
- * Validates .github/workflows/ci.yml.
+ * Validates .github/workflows/ci.yml, then every OTHER workflow in that directory.
  *
  * The workflow was written from local command knowledge and never executed, so a typo
  * in a path or a malformed YAML block would only surface on the first push. This parses
  * it and checks that every referenced file exists.
+ *
+ * WHY THE SECOND PASS EXISTS (D1, 2.0.0 release prep): this script originally
+ * hardcoded ci.yml and read nothing else. That blind spot is how `studio-ci.yml` sat
+ * in the repo invoking `npm run package:win` and `npm run lint:check` — neither script
+ * has existed since ADR-0009 removed the Electron shell — while this guard reported
+ * green. A guard that only inspects the file someone remembers is not a guard. So the
+ * second pass now sweeps EVERY *.yml here and fails on any `npm run <script>` that
+ * package.json does not define.
  */
 const fs = require("node:fs");
 const path = require("node:path");
 
 const repo = path.join(__dirname, "..");
-const wfPath = path.join(repo, ".github", "workflows", "ci.yml");
+const wfDir = path.join(repo, ".github", "workflows");
+const wfPath = path.join(wfDir, "ci.yml");
 const text = fs.readFileSync(wfPath, "utf8");
 
 const problems = [];
@@ -53,5 +62,44 @@ for (const script of ["typecheck", "lint", "test", "build", "test:e2e"]) {
 
 console.log(`jobs found: ${jobs.join(", ")}`);
 console.log(`npm scripts verified: typecheck, lint, test, build, test:e2e`);
+
+// --- Every other workflow must only invoke npm scripts that exist ---
+// Without this, a workflow can rot in silence: studio-ci.yml survived multiple
+// web-first migrations calling scripts deleted alongside the Electron shell.
+const allWorkflows = fs
+  .readdirSync(wfDir)
+  .filter((f) => /\.ya?ml$/.test(f))
+  .sort();
+
+const scriptProblems = [];
+let checkedScripts = 0;
+
+for (const file of allWorkflows) {
+  const body = fs.readFileSync(path.join(wfDir, file), "utf8");
+  // The pattern requires an explicit `run`, so bare `npm ci` / `npm install` — which
+  // package.json does not need to declare — are not matched and need no exemption.
+  for (const m of body.matchAll(/\bnpm\s+(?:run|run-script)\s+([A-Za-z0-9:_-]+)/g)) {
+    const script = m[1];
+    if (!pkg.scripts[script]) {
+      scriptProblems.push(
+        `${file} runs "npm run ${script}" but src/hercules-studio/package.json has no such script`,
+      );
+    }
+    checkedScripts++;
+  }
+
+  // Packaging a desktop installer is only meaningful with an Electron shell, which
+  // ADR-0009 removed. If a workflow comes back, make it a deliberate edit, not a copy.
+  if (/electron-builder|electron-vite|package:win/i.test(body)) {
+    scriptProblems.push(
+      `${file} still references the Electron packaging pipeline removed by ADR-0009`,
+    );
+  }
+}
+
+console.log(`workflows scanned: ${allWorkflows.length} (${allWorkflows.join(", ")})`);
+console.log(`npm script references verified: ${checkedScripts}`);
+problems.push(...scriptProblems);
+
 console.log(problems.length === 0 ? "\nci.yml looks structurally sound" : `\nPROBLEMS:\n- ${problems.join("\n- ")}`);
 process.exit(problems.length === 0 ? 0 : 1);
