@@ -195,9 +195,19 @@ public class InProcessTaskQueueTests : IDisposable
         Assert.Null(immediate);
 
         // Wait for the visibility timer to fire and re-enqueue.
-        await Task.Delay(900);
+        // Poll for the CONDITION rather than sleeping a fixed duration: the timer is a
+        // System.Threading.Timer, so on a loaded CI runner a 300 ms timer can fire
+        // well after 300 ms (thread-pool starvation). A fixed Task.Delay(900) turned
+        // that scheduler jitter into a red build — it asserted machine speed, not queue
+        // behaviour. The deadline below is generous enough to absorb the jitter while
+        // still failing fast if re-enqueue is genuinely broken.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        QueuedTask? redelivered = null;
+        while (redelivered is null && DateTime.UtcNow < deadline)
+        {
+            redelivered = await _queue.DequeueAsync("vis-q", TimeSpan.FromMilliseconds(200));
+        }
 
-        var redelivered = await _queue.DequeueAsync("vis-q", TimeSpan.FromMilliseconds(200));
         Assert.NotNull(redelivered);
         Assert.Equal("vis-test", redelivered!.Task.Intent);
         // DeliveryCount should be bumped because the visibility timer re-enqueued.

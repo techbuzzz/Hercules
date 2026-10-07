@@ -79,7 +79,13 @@ public class InMemoryEventBusBackpressureTests : IDisposable
         var cfg = new BusConfig
         {
             MaxChannelCapacity = 4,
-            BackpressureTimeoutMs = 200,
+            // Generous on purpose. With DropOnBackpressure=false the bus still DROPS once
+            // a write blocks longer than BackpressureTimeoutMs (documented in BusConfig),
+            // so a 200 ms budget made this test assert "the CI runner drained a 4-slot
+            // channel within 200 ms" rather than "a fast subscriber loses nothing". Under
+            // parallel test load one write timed out and the run went red with 9/10.
+            // A timeout the test can actually outlast keeps the no-drop contract honest.
+            BackpressureTimeoutMs = 10_000,
             DropOnBackpressure = false
         };
         var bus = new InMemoryEventBus(NullLogger<InMemoryEventBus>.Instance, cfg);
