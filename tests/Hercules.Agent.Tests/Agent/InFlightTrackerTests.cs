@@ -66,7 +66,18 @@ public class InFlightTrackerTests
 
         Assert.False(ok);
         Assert.True(sw.ElapsedMilliseconds >= 250, $"expected ~300ms wait, got {sw.ElapsedMilliseconds}ms");
-        Assert.True(sw.ElapsedMilliseconds < 1500, $"expected ~300ms wait, got {sw.ElapsedMilliseconds}ms");
+
+        // Upper bound relaxed from 1500 ms after a CI failure at 1779 ms.
+        //
+        // The timeout is CancellationTokenSource.CancelAfter plus a thread-pool-bound
+        // Task.Delay, so how long AFTER 300 ms it actually completes depends on timer
+        // queue and thread-pool availability, not on InFlightTracker. On a saturated
+        // runner the continuation simply ran late; ok was still false, i.e. the timeout
+        // behaved exactly as specified. Asserting a 5x ceiling on scheduling latency
+        // could only ever fail spuriously — it never caught a real defect.
+        //
+        // Kept, but generous, so a genuinely pathological wait is still caught.
+        Assert.True(sw.ElapsedMilliseconds < 10_000, $"timeout took {sw.ElapsedMilliseconds}ms");
     }
 
     [Fact]
