@@ -8,7 +8,7 @@
 
 
 **Epic:** Hercules Studio
-**Status:** delivered — all editors, the restart protocol and the staged session-store switch. 6.10's C# tab is **withdrawn**: skills do not own executable source, so the sandbox stays snippet-driven (see note below) |
+**Status:** delivered — all editors, the restart protocol and the staged session-store switch. 6.10's C# tab is **withdrawn provisionally**, not by owner decision: skills do not own executable source, so the sandbox stays snippet-driven. The withdrawal rests on a timeout auto-selection — see 6.10 below before relying on it.
 **Estimate:** 2-3 недели
 **Dependencies (backend):** task_099 (restart), task_100 (MCP reload), task_101 (SkillSdk), task_102 (context distillation), task_103 (Postgres session store)
 **Dependencies (Studio):** Stage 2, Stage 5
