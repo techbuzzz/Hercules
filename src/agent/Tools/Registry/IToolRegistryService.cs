@@ -36,4 +36,11 @@ public interface IToolRegistryService
 
     /// <summary>Зарегистрировать динамический tool (например, из MCP).</summary>
     void RegisterTool(ITool tool);
+
+    /// <summary>
+    ///     Снять регистрацию tool по имени (case-insensitive). Используется MCP hot-reload
+    ///     (task_100) для удаления инструментов отключённого/удалённого сервера.
+    ///     Возвращает true, если entry был найден и удалён.
+    /// </summary>
+    bool UnregisterEntry(string name);
 }

@@ -1,0 +1,327 @@
+---
+// Quotas Panel (Phase 7 task_095).
+// Per-scope quota status (Agent / Skill / User / Tenant) с progress-bar'ами
+// (current / limit / remaining), counters row (tokens / messages / requests /
+// storage / cost / concurrent), 15s auto-refresh (opt-in).
+---
+
+<div class="flex flex-col gap-5" id="quotas-panel">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">Quotas</h2>
+      <p class="text-xs text-gray-500">
+        Per-agent / per-skill / per-user / per-tenant лимиты: calls, tokens, storage, cost.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="qp-updated" class="text-xs text-gray-600"></span>
+      <label class="flex items-center gap-1 text-[11px] text-gray-400">
+        <input id="qp-autorefresh" type="checkbox" class="rounded border-white/20 bg-[#0a0a0b]" />
+        авто (15s)
+      </label>
+      <button id="qp-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- Banners -->
+  <div id="qp-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+  <div id="qp-ok" class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"></div>
+
+  <!-- Scope selector -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">Scope</h3>
+    <div class="flex flex-wrap items-end gap-2">
+      <div class="flex-1 min-w-[10rem]">
+        <label for="qp-scope" class="mb-1 block text-[11px] text-gray-500">Scope</label>
+        <select id="qp-scope"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 focus:border-violet-500/50 focus:outline-none">
+          <option value="Agent" selected>Agent</option>
+          <option value="Skill">Skill</option>
+          <option value="User">User</option>
+          <option value="Tenant">Tenant</option>
+        </select>
+      </div>
+      <div class="flex-1 min-w-[10rem]">
+        <label for="qp-scope-id" class="mb-1 block text-[11px] text-gray-500">
+          Scope ID <span class="text-gray-600">(пусто = "default")</span>
+        </label>
+        <input id="qp-scope-id" type="text" placeholder="default"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Counters -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">
+      Counters
+      <span id="qp-counters-scope" class="ml-1 text-xs font-normal text-gray-500 mono"></span>
+    </h3>
+    <div id="qp-counters-loading" class="hidden py-6 text-center text-xs text-gray-500">Загрузка…</div>
+    <div id="qp-counters-empty" class="hidden py-6 text-center text-xs text-gray-500">
+      Счётчики отсутствуют (scope без активности).
+    </div>
+    <div id="qp-counters-grid" class="grid gap-3 sm:grid-cols-4"></div>
+  </section>
+
+  <!-- Limits table -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-2 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Limits
+        <span id="qp-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+      </h3>
+    </div>
+    <div id="qp-limits-empty" class="hidden py-6 text-center text-xs text-gray-500">
+      Для выбранного scope лимиты не сконфигурированы.
+    </div>
+    <div id="qp-limits-loading" class="hidden py-6 text-center text-xs text-gray-500">Загрузка…</div>
+    <div id="qp-limits-table-wrap" class="hidden overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <th class="py-2 pr-3 font-medium">Type</th>
+            <th class="py-2 pr-3 font-medium text-right">Current</th>
+            <th class="py-2 pr-3 font-medium text-right">Limit</th>
+            <th class="py-2 pr-3 font-medium text-right">Remaining</th>
+            <th class="py-2 pr-3 font-medium">Usage</th>
+            <th class="py-2 pr-3 font-medium text-right">Reset</th>
+            <th class="py-2 pr-3 font-medium">Caps</th>
+          </tr>
+        </thead>
+        <tbody id="qp-tbody" class="divide-y divide-white/5"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+  import {
+    api,
+    type QuotaStatusListDto,
+    type QuotaStatusDto,
+    type QuotaCountersDto,
+  } from "../lib/api";
+
+  const errBanner = document.getElementById("qp-error")!;
+  const okBanner = document.getElementById("qp-ok")!;
+  const updatedEl = document.getElementById("qp-updated")!;
+  const refreshBtn = document.getElementById("qp-refresh")!;
+  const autorefreshChk = document.getElementById("qp-autorefresh") as HTMLInputElement;
+
+  const scopeSel = document.getElementById("qp-scope") as HTMLSelectElement;
+  const scopeIdInput = document.getElementById("qp-scope-id") as HTMLInputElement;
+
+  const countersScope = document.getElementById("qp-counters-scope")!;
+  const countersLoading = document.getElementById("qp-counters-loading")!;
+  const countersEmpty = document.getElementById("qp-counters-empty")!;
+  const countersGrid = document.getElementById("qp-counters-grid")!;
+
+  const countEl = document.getElementById("qp-count")!;
+  const limitsEmpty = document.getElementById("qp-limits-empty")!;
+  const limitsLoading = document.getElementById("qp-limits-loading")!;
+  const limitsTableWrap = document.getElementById("qp-limits-table-wrap")!;
+  const tbody = document.getElementById("qp-tbody")!;
+
+  let autorefreshTimer: number | null = null;
+  let currentScope = "Agent";
+  let currentScopeId = "";
+
+  function escapeHtml(s: string | null | undefined): string {
+    if (s == null) return "";
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = message;
+    errBanner.classList.remove("hidden");
+    okBanner.classList.add("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+  // okBanner reserved for future quota mutation feedback; reference it to
+  // keep the dom query alive for symmetry with the other panels.
+  void okBanner;
+
+  function usageColour(percent: number, isExceeded: boolean): string {
+    if (isExceeded || percent >= 100) return "bg-rose-500";
+    if (percent >= 80) return "bg-amber-500";
+    return "bg-emerald-500";
+  }
+
+  function usageTextColour(percent: number, isExceeded: boolean): string {
+    if (isExceeded || percent >= 100) return "text-rose-300";
+    if (percent >= 80) return "text-amber-300";
+    return "text-emerald-300";
+  }
+
+  function formatTimestamp(iso: string | null | undefined): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleString();
+  }
+
+  function pillFor(limit: QuotaStatusDto): string {
+    if (limit.isExceeded) {
+      return `<span class="rounded-full border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-rose-300">exceeded</span>`;
+    }
+    if (limit.usagePercent >= 80) {
+      return `<span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-300">warn</span>`;
+    }
+    return `<span class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-emerald-300">ok</span>`;
+  }
+
+  function capsFor(limit: QuotaStatusDto): string {
+    const tags: string[] = [];
+    if (limit.isHardCap) {
+      tags.push(`<span class="rounded-full border border-rose-500/30 bg-rose-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-rose-300">hard</span>`);
+    } else {
+      tags.push(`<span class="rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-sky-300">soft</span>`);
+    }
+    if (limit.isHardCap) tags.push(pillFor(limit));
+    return tags.join(" ");
+  }
+
+  function renderLimitRow(limit: QuotaStatusDto): string {
+    const pct = Math.max(0, Math.min(100, limit.usagePercent || 0));
+    const bar = usageColour(pct, limit.isExceeded);
+    const text = usageTextColour(pct, limit.isExceeded);
+    return `
+      <tr data-type="${escapeHtml(limit.type)}">
+        <td class="py-2 pr-3 mono text-gray-200">${escapeHtml(limit.type)}</td>
+        <td class="py-2 pr-3 text-right mono ${text}">${limit.current}</td>
+        <td class="py-2 pr-3 text-right mono text-gray-300">${limit.limit}</td>
+        <td class="py-2 pr-3 text-right mono text-gray-400">${limit.remaining}</td>
+        <td class="py-2 pr-3">
+          <div class="flex items-center gap-2">
+            <div class="h-1.5 w-24 overflow-hidden rounded-full bg-white/5">
+              <div class="${bar} h-full" style="width: ${pct.toFixed(1)}%"></div>
+            </div>
+            <span class="mono text-[11px] ${text}">${pct.toFixed(1)}%</span>
+          </div>
+        </td>
+        <td class="py-2 pr-3 text-right text-[11px] text-gray-500">${formatTimestamp(limit.resetAt)}</td>
+        <td class="py-2 pr-3">${capsFor(limit)}</td>
+      </tr>`;
+  }
+
+  function renderCounters(c: QuotaCountersDto): void {
+    // "active counters" — those with non-zero values
+    const cards: { label: string; value: string; pill: string }[] = [
+      { label: "Tokens / day", value: c.tokensUsedToday.toLocaleString(), pill: "border-violet-500/30 bg-violet-500/10 text-violet-300" },
+      { label: "Messages / day", value: c.messagesUsedToday.toLocaleString(), pill: "border-sky-500/30 bg-sky-500/10 text-sky-300" },
+      { label: "Requests / day", value: c.requestsUsedToday.toLocaleString(), pill: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" },
+      { label: "Storage (MB)", value: c.storageUsedMb.toLocaleString(), pill: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
+      { label: "Cost (¢ / day)", value: c.costUsedTodayCents.toLocaleString(), pill: "border-rose-500/30 bg-rose-500/10 text-rose-300" },
+      { label: "Active concurrent", value: c.activeConcurrentRequests.toString(), pill: "border-sky-500/30 bg-sky-500/10 text-sky-300" },
+      { label: "Active skills", value: c.activeSkillExecutions.toString(), pill: "border-violet-500/30 bg-violet-500/10 text-violet-300" },
+      { label: "Last reset", value: c.lastResetDate ? new Date(c.lastResetDate).toLocaleDateString() : "—", pill: "border-gray-500/30 bg-gray-500/10 text-gray-300" },
+    ];
+    const anyNonZero = c.tokensUsedToday > 0 || c.messagesUsedToday > 0 || c.requestsUsedToday > 0
+      || c.storageUsedMb > 0 || c.costUsedTodayCents > 0
+      || c.activeConcurrentRequests > 0 || c.activeSkillExecutions > 0;
+    if (!anyNonZero) {
+      countersEmpty.classList.remove("hidden");
+      countersGrid.innerHTML = "";
+      return;
+    }
+    countersEmpty.classList.add("hidden");
+    countersGrid.innerHTML = cards
+      .map(
+        (card) => `
+        <div class="rounded border border-white/5 bg-[#0a0a0b] p-3">
+          <div class="text-[10px] uppercase tracking-wide text-gray-500">${card.label}</div>
+          <div class="mt-1 flex items-baseline gap-2">
+            <span class="text-lg font-semibold text-white mono">${card.value}</span>
+            <span class="rounded-full border px-1.5 py-0.5 text-[10px] ${card.pill}">${escapeHtml(card.label.split(" ")[0].toLowerCase())}</span>
+          </div>
+        </div>`,
+      )
+      .join("");
+  }
+
+  async function loadQuotas(silent = false): Promise<void> {
+    if (!silent) clearError();
+    if (!silent) {
+      countersLoading.classList.remove("hidden");
+      limitsLoading.classList.remove("hidden");
+    }
+    countersEmpty.classList.add("hidden");
+    limitsEmpty.classList.add("hidden");
+
+    currentScope = scopeSel.value;
+    currentScopeId = scopeIdInput.value.trim();
+
+    try {
+      const data: QuotaStatusListDto = await api.getQuotas(currentScope, currentScopeId || undefined);
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+      countersScope.textContent = `${data.scope} / ${data.scopeId}`;
+
+      renderCounters(data.counters);
+
+      if (!data.limits || data.limits.length === 0) {
+        limitsTableWrap.classList.add("hidden");
+        limitsEmpty.classList.remove("hidden");
+        countEl.textContent = "";
+        tbody.innerHTML = "";
+      } else {
+        limitsEmpty.classList.add("hidden");
+        limitsTableWrap.classList.remove("hidden");
+        countEl.textContent = `(${data.limits.length})`;
+        tbody.innerHTML = data.limits.map(renderLimitRow).join("");
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить quotas: ${msg}`);
+      countersGrid.innerHTML = "";
+      tbody.innerHTML = "";
+      limitsTableWrap.classList.add("hidden");
+      countersEmpty.classList.add("hidden");
+    } finally {
+      countersLoading.classList.add("hidden");
+      limitsLoading.classList.add("hidden");
+    }
+  }
+
+  function startAutorefresh(): void {
+    if (autorefreshTimer != null) return;
+    autorefreshTimer = window.setInterval(() => {
+      void loadQuotas(true);
+    }, 15000);
+  }
+  function stopAutorefresh(): void {
+    if (autorefreshTimer != null) {
+      window.clearInterval(autorefreshTimer);
+      autorefreshTimer = null;
+    }
+  }
+
+  refreshBtn.addEventListener("click", () => {
+    void loadQuotas();
+  });
+  scopeSel.addEventListener("change", () => {
+    void loadQuotas();
+  });
+  scopeIdInput.addEventListener("change", () => {
+    void loadQuotas();
+  });
+  autorefreshChk.addEventListener("change", () => {
+    if (autorefreshChk.checked) startAutorefresh();
+    else stopAutorefresh();
+  });
+
+  void loadQuotas();
+</script>

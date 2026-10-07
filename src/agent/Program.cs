@@ -14,8 +14,10 @@ using Hercules.Context;
 using Hercules.Context.Summarizer;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.LLM.Providers;
 using Hercules.Lifecycle;
 using Hercules.Mesh.Transport;
+using Hercules.Mesh.Abstractions;
 using Hercules.Mcp;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
@@ -25,9 +27,6 @@ using Hercules.Observability;
 using Hercules.Quotas;
 using Hercules.Redaction;
 using Hercules.Security;
-using Hercules.Slo;
-using Hercules.Simulation;
-using Hercules.Reflection;
 using Hercules.Skills;
 using Hercules.Skills.Eval;
 using Hercules.Skills.Marketplace;
@@ -35,6 +34,9 @@ using Hercules.Skills.Quality;
 using Hercules.Skills.Routing;
 using Hercules.Skills.Routing.ScoringComponents;
 using Hercules.Skills.Routing.Deterministic;
+using Hercules.Slo;
+using Hercules.Simulation;
+using Hercules.Reflection;
 using Hercules.Storage;
 using Hercules.Tasks;
 using Hercules.Telegram;
@@ -50,6 +52,7 @@ using HerculesBus.InMemory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 
 // ============================================================================
@@ -68,6 +71,25 @@ builder.ConfigureAppConfiguration(config =>
         .AddUserSecrets<Program>()
         .AddJsonFile("appsettings.json", false, false)
         .AddEnvironmentVariables("HERCULES_");
+});
+
+// [task_085] Async-friendly JSON console logger. Replaces the default SimpleConsole
+// logger so logs are line-buffered, non-blocking on the I/O path, and
+// machine-parseable. SingleConsoleFormatter drops the extra blank line that
+// default console output emits between records.
+builder.ConfigureLogging(logging =>
+{
+    logging.ClearProviders();
+    logging.AddJsonConsole(options =>
+    {
+        options.IncludeScopes = true;
+        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+        options.UseUtcTimestamp = true;
+        options.JsonWriterOptions = new System.Text.Json.JsonWriterOptions
+        {
+            Indented = false
+        };
+    });
 });
 
 builder.ConfigureServices((context, services) =>
@@ -94,26 +116,142 @@ builder.ConfigureServices((context, services) =>
     // OpenTelemetry (task_013) — tracing + metrics
     services.AddHerculesOtel(appConfig.Otel);
 
+    // task_078: IHttpClientFactory + named clients with standard resilience handlers.
+    // Default factory for ad-hoc CreateClient() calls; named clients used by tools/transport.
+    services.AddHttpClient();
+
+    var httpResilience = appConfig.Http.Resilience ?? new HttpResilienceConfig();
+
+    // LLM health/probe clients (no resilience — these are already best-effort)
+    services.AddHttpClient(ProviderHealthChecker.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(ProviderHealthChecker.HealthCheckTimeout.TotalSeconds);
+        });
+    services.AddHttpClient(ProviderCapabilityDetector.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(8);
+        });
+    services.AddHttpClient(LMStudioClient.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(5);
+        });
+
+    // Degradation/network: short probe
+    services.AddHttpClient(NetworkMonitor.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(appConfig.OfflineSync.NetworkPollTimeoutSeconds);
+        });
+
+    // Inter-agent transports (retry + circuit breaker + timeout)
+    services.AddHttpClient(IntentTransport.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+        }).AddStandardResilienceHandler(o =>
+        {
+            o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+            o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+            o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+            o.Retry.UseJitter = true;
+            o.CircuitBreaker.FailureRatio = httpResilience.CircuitBreakerFailureRatio;
+            o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(httpResilience.CircuitBreakerSamplingDurationSeconds);
+            o.CircuitBreaker.MinimumThroughput = httpResilience.CircuitBreakerMinimumThroughput;
+            o.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(httpResilience.CircuitBreakerBreakDurationSeconds);
+        });
+
+    services.AddHttpClient(HttpTransportAdapter.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+        }).AddStandardResilienceHandler(o =>
+        {
+            o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+            o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+            o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+            o.Retry.UseJitter = true;
+        });
+
+    services.AddHttpClient(GrpcTransportAdapter.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+        });
+
+    // Outbound tool/agent clients (retry on transient)
+    services.AddHttpClient(HttpTool.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(appConfig.Http.TimeoutSeconds);
+        }).AddStandardResilienceHandler(o =>
+        {
+            o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+            o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+            o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+            o.Retry.UseJitter = true;
+        });
+
+    services.AddHttpClient(A2AClient.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(appConfig.A2A.TimeoutSeconds);
+        }).AddStandardResilienceHandler(o =>
+        {
+            o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+            o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+            o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+            o.Retry.UseJitter = true;
+        });
+
+    // Operator notify (webhook/telegram) — best effort, soft retry
+    services.AddHttpClient(OperatorNotificationService.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromSeconds(10);
+        }).AddStandardResilienceHandler(o =>
+        {
+            o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+            o.Retry.MaxRetryAttempts = Math.Max(1, httpResilience.RetryCount - 1);
+            o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+            o.Retry.UseJitter = true;
+        });
+
+    // Skill marketplace HTTP import
+    services.AddHttpClient(SkillMarketplace.HttpClientName, c =>
+        {
+            c.Timeout = TimeSpan.FromMinutes(2);
+        });
+
     // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
     services.AddSingleton<LlmClientFactory>(sp =>
         new LlmClientFactory(
             sp.GetRequiredService<LlmConfig>(),
-            sp.GetRequiredService<ICacheService>()));
+            sp.GetRequiredService<ICacheService>(),
+            sp.GetService<IHttpClientFactory>()));
+    services.AddSingleton<ILLMClientFactory>(sp => sp.GetRequiredService<LlmClientFactory>());
     services.AddSingleton<RoleRouter>();
     services.AddSingleton<IJsonRepairService, JsonRepairService>();
     services.AddSingleton<ResilientLLMClient>(sp =>
-        new ResilientLLMClient(
+    {
+        var client = new ResilientLLMClient(
             sp.GetRequiredService<LlmConfig>(),
             sp.GetRequiredService<LlmClientFactory>(),
             sp.GetRequiredService<RoleRouter>(),
-            sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
+            sp.GetRequiredService<ILogger<ResilientLLMClient>>());
+        // [task_085] Wire Otel.LoggingSampleRate into the LLM client so retry
+        // warnings are sampled at the same rate as the rest of the agent.
+        var otel = sp.GetService<OtelConfig>();
+        if (otel is not null)
+        {
+            client.SetLogSampleRate(otel.LoggingSampleRate);
+        }
+        return client;
+    });
     services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
-    services.AddSingleton<ProviderHealthChecker>();
+    services.AddSingleton<ProviderHealthChecker>(sp =>
+        new ProviderHealthChecker(
+            sp.GetRequiredService<LlmConfig>(),
+            sp.GetService<ILogger<ProviderHealthChecker>>(),
+            sp.GetService<IHttpClientFactory>()));
     services.AddSingleton<ProviderCapabilityDetector>(sp =>
         new ProviderCapabilityDetector(
             sp.GetRequiredService<LlmConfig>(),
             sp.GetService<ILogger<ProviderCapabilityDetector>>(),
-            sp.GetRequiredService<ICacheService>()));
+            sp.GetRequiredService<ICacheService>(),
+            sp.GetService<IHttpClientFactory>()));
 
     // Code execution (Stage 2, v2)
     services.AddSingleton<SandboxOptions>(sp =>
@@ -139,10 +277,33 @@ builder.ConfigureServices((context, services) =>
     });
     services.AddSingleton<ICodeExecutor, DotnetFileBasedExecutor>();
 
+    // SkillSdk context factory + in-process executor (task_101)
+    services.AddSingleton<ISkillContextFactory>(sp =>
+        new SkillSdkContextFactory(
+            sp.GetRequiredService<HttpConfig>(),
+            sp.GetRequiredService<ILLMClient>(),
+            sp.GetRequiredService<ToolRegistry>(),
+            sp.GetRequiredService<LayeredMemoryManager>(),
+            sp.GetRequiredService<IDurableFactsStore>(),
+            sp.GetRequiredService<ILoggerFactory>(),
+            sp.GetService<IHttpClientFactory>()));
+    services.AddSingleton<SkillSdkExecutor>(sp =>
+        new SkillSdkExecutor(
+            sp.GetRequiredService<SandboxOptions>(),
+            sp.GetRequiredService<ISkillContextFactory>()));
+    services.AddSingleton<ICodeExecutor>(sp => sp.GetRequiredService<SkillSdkExecutor>());
+
     // Tool ecosystem (Stage 3, v2)
-    services.AddSingleton<ITool, HttpTool>();
-    services.AddSingleton<ITool, A2AClient>();
-    services.AddSingleton<ITool, CodeExecutionTool>();
+    services.AddSingleton<ITool, HttpTool>(sp =>
+        new HttpTool(
+            sp.GetRequiredService<HttpConfig>(),
+            sp.GetRequiredService<ILogger<HttpTool>>(),
+            sp.GetService<IHttpClientFactory>()));
+    services.AddSingleton<ITool, A2AClient>(sp =>
+        new A2AClient(
+            sp.GetRequiredService<A2AConfig>(),
+            sp.GetService<IHttpClientFactory>()));
+    services.AddSingleton<ITool, CodeExecutionTool>(sp => new CodeExecutionTool(sp));
     // Tool policy engine (task_009) — registered before ToolRegistry so it can be injected
     services.AddSingleton(sp =>
     {
@@ -186,7 +347,11 @@ builder.ConfigureServices((context, services) =>
     // HerculesBus (v3.1)
     services.AddSingleton<IChannelStore, InMemoryChannelStore>();
     services.AddSingleton<IAgentRegistry, InMemoryAgentRegistry>();
-    services.AddSingleton<IEventBus, InMemoryEventBus>();
+    // task_086: pass BusConfig so the bus uses bounded channels with the
+    // configured backpressure / drop policy.
+    services.AddSingleton<IEventBus>(sp => new InMemoryEventBus(
+        sp.GetRequiredService<ILogger<InMemoryEventBus>>(),
+        appConfig.Bus));
     services.AddSingleton<Bus>();
 
     // Phase 3: Inter-agent mesh
@@ -212,10 +377,10 @@ builder.ConfigureServices((context, services) =>
     // task_026: Least-privilege grants
     services.AddSingleton(sp =>
         new Hercules.Tools.Grants.SkillGrantStore(
-            Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, "grants.db")));
+            Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, Hercules.BuiltIn.GrantsDatabaseFileName)));
     services.AddSingleton<Hercules.Tools.Grants.ISkillGrantService, Hercules.Tools.Grants.SkillGrantService>();
 
-    // Layered memory (task_011)
+    // Layered memory (task_011, task_075 H6)
     services.AddSingleton(appConfig.Memory);
     services.AddSingleton<LayeredMemoryConfig>(sp =>
     {
@@ -229,11 +394,17 @@ builder.ConfigureServices((context, services) =>
             MaxFactAgeDays = cfg.MaxFactAgeDays
         };
     });
-    services.AddScoped<IWorkingMemory, WorkingMemoryService>();
     services.AddSingleton<IDurableFactsStore, DurableFactsService>();
     services.AddSingleton<IEpisodicStore, EpisodicStore>();
     services.AddSingleton<LayerMetadataExtractor>();
-    services.AddSingleton<LayeredMemoryManager>();
+    // task_075 H6 fix: LayeredMemoryManager is now singleton and resolves working memory
+    // per session via ISessionStateStore (no more captive dependency on scoped IWorkingMemory).
+    services.AddSingleton<ISessionStateStore, InMemorySessionStateStore>();
+    services.AddSingleton<LayeredMemoryManager>(sp => new LayeredMemoryManager(
+        sp.GetRequiredService<ISessionStateStore>(),
+        sp.GetRequiredService<IDurableFactsStore>(),
+        sp.GetRequiredService<IEpisodicStore>(),
+        sp.GetRequiredService<LayeredMemoryConfig>()));
 
     // Hybrid storage services (task_003)
     services.AddSingleton<IBudgetService, BudgetService>();
@@ -250,15 +421,43 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<BudgetConfig>(),
             sp.GetRequiredService<ILogger<BudgetGuard>>()));
 
-    // Rate limits and quotas (task_056)
+    // Rate limits and quotas (task_056, task_072)
     services.AddSingleton(appConfig.Quotas);
-    services.AddSingleton<IQuotaService>(sp =>
+    services.AddSingleton<QuotaService>(sp =>
         new QuotaService(
             sp.GetRequiredService<QuotasConfig>(),
             sp.GetRequiredService<ILogger<QuotaService>>()));
+    // IQuotaService: distributed wrapper when Quotas.DistributedEnabled, in-memory otherwise.
+    // DistributedQuotaService is a decorator over QuotaService that mirrors rate-limit
+    // counters to IMeshStateStore and falls back to in-memory when the store is unreachable.
+    services.AddSingleton<IQuotaService>(sp =>
+    {
+        var cfg = sp.GetRequiredService<QuotasConfig>();
+        var inner = sp.GetRequiredService<QuotaService>();
+        if (cfg.DistributedEnabled && sp.GetService<Hercules.Mesh.Abstractions.IMeshStateStore>() is { } store)
+        {
+            return new DistributedQuotaService(
+                inner,
+                store,
+                cfg,
+                sp.GetRequiredService<ILogger<DistributedQuotaService>>());
+        }
+        return inner;
+    });
     services.AddSingleton<QuotaGuard>(sp =>
-        new QuotaGuard(
-            sp.GetRequiredService<ILogger<QuotaGuard>>()));
+    {
+        var guard = new QuotaGuard(
+            sp.GetRequiredService<ILogger<QuotaGuard>>());
+        // [task_085] Wire Otel.LoggingSampleRate.
+        var otel = sp.GetService<OtelConfig>();
+        if (otel is not null)
+        {
+            guard.SetLogSampleRate(otel.LoggingSampleRate);
+        }
+        return guard;
+    });
+    // Periodic sweep of rate-limit buckets so they don't accumulate between queries (task_072)
+    services.AddHostedService<QuotaCleanupBackgroundService>();
 
     // Phase 2: Skill packager
     services.AddSingleton(appConfig.Marketplace);
@@ -345,7 +544,11 @@ builder.ConfigureServices((context, services) =>
         new SkillMarketplace(
             sp.GetRequiredService<StorageConfig>(),
             sp.GetRequiredService<SkillPackager>(),
-            sp.GetRequiredService<IMarketplaceSigningService>()));
+            sp.GetRequiredService<IMarketplaceSigningService>(),
+            sp.GetService<IHttpClientFactory>(),
+            // R1: without MarketplaceConfig the URL-import guard has no feature flag and
+            // ImportFromUrlAsync refuses — fail-closed.
+            sp.GetRequiredService<MarketplaceConfig>()));
     services.AddSingleton<AgentTemplateManager>();
 
     // Fleet templates (task_062)
@@ -355,7 +558,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<ISensorSimulator>(sp =>
         new FileSensorSimulator(sp.GetRequiredService<ILogger<FileSensorSimulator>>())
         {
-            TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, "templates")
+            TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, Hercules.BuiltIn.TemplatesSubdir)
         });
     services.AddSingleton<FailureScenarioEngine>();
     services.AddSingleton<TemplateSimulationService>();
@@ -398,6 +601,7 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<ITaskExecutionService>(sp =>
         new TaskExecutionService(
             sp.GetRequiredService<ITaskRepository>(),
+            sp.GetRequiredService<ISessionStore>(),
             sp.GetRequiredService<TaskConfig>(),
             sp.GetRequiredService<ILogger<TaskExecutionService>>()));
 
@@ -470,15 +674,33 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<SqliteSessionStore>(),
             sp.GetRequiredService<OfflineSyncConfig>(),
             sp.GetRequiredService<ILogger<SqliteOutboxStore>>()));
-    services.AddSingleton<NetworkMonitor>();
+    services.AddSingleton<NetworkMonitor>(sp =>
+        new NetworkMonitor(
+            sp.GetRequiredService<OfflineSyncConfig>(),
+            sp.GetRequiredService<ILogger<NetworkMonitor>>(),
+            sp.GetService<IHttpClientFactory>()!));
     services.AddSingleton<INetworkMonitor>(sp => sp.GetRequiredService<NetworkMonitor>());
     services.AddSingleton<OfflineSyncService>(); // BackgroundService
 
     // task_061: Local-first degradation — deterministic fallback, operator notifications, observability
     services.AddSingleton(appConfig.Degradation);
     services.AddSingleton<DegradationObservability>();
-    services.AddSingleton<OperatorNotificationService>();
-    services.AddSingleton<DegradationManager>(); // BackgroundService
+    services.AddSingleton<OperatorNotificationService>(sp =>
+        new OperatorNotificationService(
+            sp.GetRequiredService<DegradationConfig>(),
+            sp.GetRequiredService<ILogger<OperatorNotificationService>>(),
+            sp.GetService<IHttpClientFactory>()!));
+    services.AddSingleton<DegradationManager>(sp =>
+        new DegradationManager(
+            sp.GetRequiredService<DegradationConfig>(),
+            sp.GetRequiredService<OperatorNotificationService>(),
+            sp.GetService<ILLMClient>(),
+            sp.GetService<INetworkMonitor>(),
+            sp.GetService<ProviderHealthChecker>(),
+            sp.GetService<LlmConfig>(),
+            sp.GetService<IMeshBus>(),
+            sp.GetService<FileSkillRepository>(),
+            sp.GetRequiredService<ILogger<DegradationManager>>())); // BackgroundService
 
     // task_063: Backup & Recovery — encrypted backup archives, scheduled backups, restore
     services.AddSingleton(appConfig.Backup);
@@ -493,14 +715,26 @@ builder.ConfigureServices((context, services) =>
 
     // task_064: Operational SLOs — availability, response-time, data-loss, recovery-time, cost targets
     services.AddSingleton(appConfig.Slos);
+    // task_087: real P95 latency tracker + connectivity provider feed the SLO
+    // service with measured values instead of the previous synthetic heuristics.
+    services.AddSingleton<Hercules.Slo.ISloLatencyTracker, Hercules.Slo.SloLatencyTracker>();
+    services.AddSingleton<Hercules.Slo.IConnectivityStateProvider>(sp =>
+        sp.GetRequiredService<Hercules.Offline.NetworkMonitor>());
     services.AddSingleton<ISloService>(sp =>
         new SloService(
             sp.GetRequiredService<SlosConfig>(),
             sp.GetRequiredService<IAuditService>(),
             sp.GetRequiredService<Hercules.Mesh.Observability.IMeshObservabilityService>(),
-            sp.GetService<Hercules.Offline.IOutboxStore>(),
-            sp.GetService<IBudgetService>(),
-            sp.GetRequiredService<ILogger<SloService>>()));
+            // R27: GetService<T>() returns null when unregistered, and these two are
+            // non-nullable ctor parameters — an accidental unregistration would have
+            // surfaced as a NullReferenceException on first SLO evaluation, long after
+            // startup. Both are registered unconditionally (see above), so GetRequiredService
+            // is behaviour-preserving and turns that class of failure into a startup error.
+            sp.GetRequiredService<Hercules.Offline.IOutboxStore>(),
+            sp.GetRequiredService<IBudgetService>(),
+            sp.GetRequiredService<ILogger<SloService>>(),
+            sp.GetService<Hercules.Slo.ISloLatencyTracker>(),
+            sp.GetService<Hercules.Slo.IConnectivityStateProvider>()));
 
     // Агент
     services.AddSingleton<SkillManager>();
@@ -516,7 +750,16 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<LayeredMemoryManager>(),
             sp.GetRequiredService<ContextConfig>(),
             sp.GetRequiredService<ILogger<ContextBuilder>>(),
-            sp.GetRequiredService<ITraceSummarizer>()));
+            sp.GetRequiredService<ITraceSummarizer>(),
+            sp.GetService<Hercules.Context.Distillation.ContextDistillationService>(),
+            sp.GetRequiredService<SqliteSessionStore>()));
+
+    // task_102: context distillation store + service.
+    services.AddSingleton<Hercules.Context.Distillation.IDistillationStore>(sp =>
+        new Hercules.Context.Distillation.SqliteDistillationStore(
+            sp.GetRequiredService<SqliteSessionStore>(),
+            sp.GetRequiredService<ILogger<Hercules.Context.Distillation.SqliteDistillationStore>>()));
+    services.AddSingleton<Hercules.Context.Distillation.ContextDistillationService>();
 
     // [task_028] Caching — unified cache service
     services.AddSingleton(appConfig.Cache);
@@ -525,6 +768,11 @@ builder.ConfigureServices((context, services) =>
     services.AddSingleton<ReflectionEngine>();
     services.AddSingleton<AgentCore>();
 
+    // task_080: shutdown & drain primitives
+    services.AddSingleton(appConfig.Shutdown);
+    services.AddSingleton<IAgentLifecycleState, AgentLifecycleStateHolder>();
+    services.AddSingleton<IInFlightTracker>(sp => new InFlightTracker(sp.GetService<ILogger<InFlightTracker>>()));
+
     // task_057: Lifecycle management
     services.AddSingleton<ILifecycleService>(sp =>
         new LifecycleService(
@@ -532,7 +780,13 @@ builder.ConfigureServices((context, services) =>
             sp.GetRequiredService<SkillManager>(),
             sp.GetRequiredService<CapabilityRegistry>(),
             sp.GetRequiredService<ITransport>(),
-            sp.GetRequiredService<ILogger<LifecycleService>>()));
+            sp.GetRequiredService<ILogger<LifecycleService>>(),
+            sp.GetRequiredService<IAgentLifecycleState>(),
+            sp.GetRequiredService<IInFlightTracker>(),
+            sp.GetRequiredService<ShutdownConfig>()));
+
+    // task_080: graceful drain — runs on host shutdown, awaits in-flight requests
+    services.AddHostedService<DrainHostedService>();
 
     // Интерфейсы
     services.AddSingleton<ConsoleUI>();
@@ -618,10 +872,16 @@ catch (Exception ex)
 
 // --- Выбор режима запуска ---
 using var cts = new CancellationTokenSource();
+var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
 Console.CancelKeyPress += (_, e) =>
 {
     e.Cancel = true;
+    // task_080: route shutdown through IHostApplicationLifetime so the
+    // DrainHostedService gets a chance to wait for in-flight work before
+    // the process exits. We still cancel the local CTS so the active run
+    // loop (ConsoleUI / Telegram) can stop accepting new input.
     cts.Cancel();
+    lifetime.StopApplication();
 };
 
 var telegramMode = args.Contains("--telegram") || (appConfig.Telegram.Enabled && args.Contains("--bot"));

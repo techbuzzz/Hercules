@@ -32,11 +32,13 @@ public sealed class SignedBundleValidator : ISignedBundleValidator
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        var dataRoot = Path.Combine(AppContext.BaseDirectory, _config.BundlesPath);
+        var dataRoot = Hercules.BuiltIn.ResolvePathUnderDataRoot(
+            Hercules.BuiltIn.ResolveDataRoot(),
+            _config.BundlesPath);
         Directory.CreateDirectory(dataRoot);
 
-        _signingKeyPath = Path.Combine(dataRoot, "rollout-signing-key.key");
-        _signersPath = Path.Combine(dataRoot, "trusted-signers.json");
+        _signingKeyPath = Path.Combine(dataRoot, Hercules.BuiltIn.RolloutSigningKeyFileName);
+        _signersPath = Path.Combine(dataRoot, Hercules.BuiltIn.TrustedSignersFileName);
 
         // Generate or load HMAC key
         if (File.Exists(_signingKeyPath))

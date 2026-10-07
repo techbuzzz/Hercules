@@ -23,7 +23,7 @@ public static class A2AController
                 logger.LogError(ex, "Failed to generate Agent Card");
                 return Results.StatusCode(500);
             }
-        }).WithName("GetAgentCard");
+        }).WithName("GetAgentCard").WithTags("A2A");
 
         // GET /api/a2a/agent-card/from?url=xxx — импортировать remote Agent Card.
         app.MapGet("/api/a2a/agent-card/from", async (string url, IAgentCardService agentCardService, ILoggerFactory loggerFactory, CancellationToken ct) =>
@@ -49,7 +49,7 @@ public static class A2AController
                 logger.LogError(ex, "Unexpected error importing Agent Card from {Url}", url);
                 return Results.StatusCode(500);
             }
-        }).WithName("ImportAgentCardFromUrl");
+        }).WithName("ImportAgentCardFromUrl").WithTags("A2A");
 
         // POST /api/a2a/discover — discover Agent Cards из списка URLs.
         // Body: array of URLs, e.g. ["https://peer1.com/agent-card.json", "..."]
@@ -75,7 +75,7 @@ public static class A2AController
                     skills = r.Card.Skills.Select(s => new { s.Id, s.Name }).ToList()
                 }).ToList()
             });
-        }).WithName("DiscoverAgentCards");
+        }).WithName("DiscoverAgentCards").WithTags("A2A");
 
         // POST /api/a2a/agent-card/publish — принудительно опубликовать локальный Agent Card.
         app.MapPost("/api/a2a/agent-card/publish", async (IAgentCardService agentCardService, ILoggerFactory loggerFactory, CancellationToken ct) =>
@@ -96,13 +96,13 @@ public static class A2AController
                 logger.LogError(ex, "Failed to publish Agent Card");
                 return Results.StatusCode(500);
             }
-        }).WithName("PublishAgentCard");
+        }).WithName("PublishAgentCard").WithTags("A2A");
 
         // GET /api/a2a/agent-card/fresh — проверить freshness кэша Agent Card.
         app.MapGet("/api/a2a/agent-card/fresh", (IAgentCardService agentCardService) =>
         {
             bool isCurrent = agentCardService.IsCurrent();
             return Results.Ok(new { isCurrent });
-        }).WithName("AgentCardIsFresh");
+        }).WithName("AgentCardIsFresh").WithTags("A2A");
     }
 }

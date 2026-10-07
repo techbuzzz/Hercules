@@ -1,6 +1,10 @@
 using System.Text;
 using System.Text.Encodings.Web;
+using System.Threading.RateLimiting;
+using Microsoft.Extensions.FileProviders;
+using Scalar.AspNetCore;
 using Hercules.Agent;
+using Hercules.WebApi.Logging;
 using Hercules.Audit;
 using Hercules.Budget;
 using Hercules.Cache;
@@ -9,14 +13,17 @@ using Hercules.Config;
 using Hercules.Config.Rollout;
 using Hercules.Context;
 using Hercules.Context.Summarizer;
+using Hercules.Degradation;
 using Hercules.Lifecycle;
 using Hercules.LLM;
 using Hercules.LLM.JsonRepair;
+using Hercules.LLM.Providers;
 using Hercules.Memory.Layers;
 using Hercules.Mesh;
 using Hercules.Mesh.A2A;
 using Hercules.Mesh.Auth;
 using Hercules.Observability;
+using Hercules.Offline;
 using Hercules.Quotas;
 using Hercules.Redaction;
 using Hercules.Simulation;
@@ -29,6 +36,11 @@ using Hercules.Skills.Routing.ScoringComponents;
 using Hercules.Skills.Routing.Deterministic;
 using Hercules.Storage;
 using Hercules.Mesh.Transport;
+using Hercules.Fleet;
+using Hercules.Slo;
+using Hercules.Security;
+using Hercules.Mesh.Escalation;
+using Hercules.Mesh.Observability;
 using Hercules.Tasks;
 using Hercules.Telegram;
 using Hercules.Tools;
@@ -37,38 +49,127 @@ using Hercules.Tools.Policy;
 using Hercules.Tools.Registry;
 using Hercules.WasmSandbox;
 using Hercules.WasmSandbox.Compilation;
+using Hercules.WebApi;
 using Hercules.WebApi.Auth;
 using Hercules.WebApi.Config;
 using Hercules.WebApi.Controllers;
+using Hercules.WebApi.Middleware;
+using Hercules.Health;
 using HerculesBus;
 using HerculesBus.Core;
 using HerculesBus.InMemory;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.OpenApi;
+using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Http.Resilience;
+using Microsoft.OpenApi;
 
 // ============================================================================
 //  Hercules Web API — ASP.NET Core Minimal API поверх ядра агента.
 //  Предоставляет HTTP-доступ к чату, навыкам, памяти, статистике и конфигурации.
-//  Запуск: dotnet run --project Hercules.WebApi   (порт 5000)
+//  Запуск: dotnet run --project Hercules.WebApi   (порт 8421, см. ADR-0003)
 // ============================================================================
+
+// [task_109] Build-time detection: when the document is generated at build time we must
+// skip side-effecting service registration (DB-touching singletons, OpenTelemetry
+// exporters, file I/O) and post-build bootstrap (key generation, manifest publishing,
+// MCP init). Generation never serves HTTP requests.
+//
+// Two triggers, both of which must skip the side effects below:
+//   1. `GetDocument.Insider` entry assembly — the legacy
+//      Microsoft.Extensions.ApiDescription.Server build tool. Kept for compatibility;
+//      see the csproj for why it is no longer the primary path.
+//   2. `--openapi-output <path>` — our own deterministic generator, invoked by the
+//      `GenerateOpenApiDocument` MSBuild target. This resolves the very same
+//      IOpenApiDocumentProvider that backs the runtime `/openapi/v1.json` endpoint,
+//      so the committed artifact cannot drift from the document we actually serve.
+var openApiOutputPath = ReadOpenApiOutputPath(args);
+var isBuildTime = openApiOutputPath is not null
+    || System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == "GetDocument.Insider";
+
+// [task_109] Reads `--openapi-output <path>` / `--openapi-output=<path>` from the command
+// line. Returns null when the flag is absent (normal runtime mode).
+static string? ReadOpenApiOutputPath(string[] args)
+{
+    const string flag = "--openapi-output";
+    for (var i = 0; i < args.Length; i++)
+    {
+        var arg = args[i];
+        if (arg.StartsWith(flag + "=", StringComparison.Ordinal))
+            return arg[(flag.Length + 1)..];
+        if (string.Equals(arg, flag, StringComparison.Ordinal) && i + 1 < args.Length)
+            return args[i + 1];
+    }
+
+    return null;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --- Кодировка консоли для кириллицы ---
 Console.OutputEncoding = Encoding.UTF8;
 
-// --- Конфигурация (наследует appsettings.json + переменные окружения HERCULES_) ---
-builder.Configuration.AddEnvironmentVariables("HERCULES_");
-
-var appConfig = builder.Configuration.Get<AppConfig>() ?? new AppConfig();
-var webCfg = builder.Configuration.GetSection("WebApi").Get<WebApiConfig>() ?? new WebApiConfig();
-
-// Делаем хранилище общим с CLI-приложением: проект Hercules лежит на уровень выше.
-var sharedData = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "data"));
-if (Directory.Exists(Path.GetDirectoryName(sharedData)!))
+// [task_085] Async-friendly JSON console logger (Web API). Mirrors the
+// configuration in the console entry point so both surfaces emit
+// machine-parseable JSON with scopes and UTC timestamps.
+builder.Logging.ClearProviders();
+if (builder.Environment.IsDevelopment())
 {
-    appConfig.Storage.DataRoot = sharedData;
+    builder.Logging.AddSimpleConsole(options =>
+    {
+        options.IncludeScopes = true;
+        options.TimestampFormat = "HH:mm:ss ";
+        options.SingleLine = true;
+    });
+    builder.Logging.AddDebug();
+}
+else
+{
+    builder.Logging.AddJsonConsole(options =>
+    {
+        options.IncludeScopes = true;
+        options.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+        options.UseUtcTimestamp = true;
+        options.JsonWriterOptions = new System.Text.Json.JsonWriterOptions
+        {
+            Indented = false
+        };
+    });
 }
 
-var runtimeConfigFile = Path.Combine(appConfig.Storage.DataRoot, "runtime-config.json");
+// --- Конфигурация (наследует appsettings.json + переменные окружения HERCULES_) ---
+builder.Configuration.AddEnvironmentVariables("HERCULES_");
+if(builder.Environment.IsDevelopment()) builder.Configuration.AddUserSecrets<Program>();
+
+var appConfig = builder.Configuration.Get<AppConfig>() ?? new AppConfig();
+
+var webCfg = builder.Configuration.GetSection("WebApi").Get<WebApiConfig>() ?? new WebApiConfig();
+// task_079: health checks configuration (liveness, readiness, LLM ping timeout, disk/outbox thresholds)
+var healthCfg = builder.Configuration.GetSection("HealthChecks").Get<HealthChecksConfig>() ?? new HealthChecksConfig();
+
+// task_097: backward-compat fallback — если ApiKeys не сконфигурированы, используем
+// legacy ApiKey как contribute. Это позволяет существующим развёртываниям не ломаться.
+if (webCfg.ApiKeys.Count == 0 && !string.IsNullOrEmpty(webCfg.ApiKey))
+{
+    webCfg.ApiKeys.Add(new ApiKeyEntry
+    {
+        Key = webCfg.ApiKey,
+        Role = ApiKeyRole.Contribute,
+        Description = "legacy single key (forwarded as contribute)"
+    });
+}
+
+// The data root is already resolved by BuiltIn.ResolveDataRoot at AppConfig init.
+// Web API intentionally shares the same runtime data directory as the console host.
+var sharedData = appConfig.Storage.DataRoot;
+
+var runtimeConfigFile = Path.Combine(appConfig.Storage.DataRoot, Hercules.BuiltIn.RuntimeConfigFileName);
+
+var logsDir = Path.Combine(appConfig.Storage.DataRoot, Hercules.BuiltIn.LogsSubdir);
+Directory.CreateDirectory(logsDir);
+builder.Logging.AddProvider(new FileLoggerProvider(logsDir));
 
 // --- Регистрация сервисов ядра (как в консольном приложении) ---
 builder.Services.AddSingleton(sp => new RuntimeConfigStore(
@@ -99,6 +200,10 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Eval);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SelfImprovement);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Tasks);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.OfflineSync);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Degradation);
+// task_079: health check thresholds (LLM ping timeout, disk/outbox limits)
+builder.Services.AddSingleton(healthCfg);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Phase2);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.SkillQuality);
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.LeastPrivilege);
@@ -106,28 +211,255 @@ builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().
 
     // OpenTelemetry (task_013) — tracing + metrics
     builder.Services.AddHerculesOtel(appConfig.Otel);
+
+// [task_109] OpenAPI document generation (built-in .NET 10, OpenAPI 3.1).
+// Exposes /openapi/v1.json at runtime and feeds the build-time `openapi.json`
+// artefact produced by Microsoft.Extensions.ApiDescription.Server.
+// `ShouldInclude = _ => true` opts every endpoint into the document — without
+// this, minimal API routes are skipped unless they call `.WithOpenApi()`
+// explicitly (see task_110 for WithTags / task_111 for Produces<T>).
+builder.Services.AddOpenApi(options =>
+{
+    options.ShouldInclude = _ => true;
+
+    // R7: X-Api-Key gates every /api route, but the document declared NO security scheme
+    // and 0 of 223 operations carried a `security` requirement. Orval therefore generated
+    // clients that send no auth header, so every generated call 401'd. Nothing caught this
+    // because no test asserted anything about the document's security metadata.
+    options.AddDocumentTransformer((document, _context, _ct) =>
+    {
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+        document.Components.SecuritySchemes["ApiKey"] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.ApiKey,
+            Name = "X-Api-Key",
+            In = ParameterLocation.Header,
+            Description = "API key with a role (contribute | system). See WebApi:ApiKeys.",
+        };
+
+        return Task.CompletedTask;
+    });
+
+    // ApiKeyMiddleware exempts OPTIONS, non-/api routes, /api/health and /api/ready; the
+    // document must mirror that exactly or generated clients will send a key where none is
+    // needed (or omit one where it is required).
+    options.AddOperationTransformer((operation, context, ct) =>
+    {
+        var path = context.Description.RelativePath ?? string.Empty;
+
+        var requiresKey = path.StartsWith("api/", StringComparison.Ordinal)
+                          && !path.StartsWith("api/health", StringComparison.Ordinal)
+                          && !path.StartsWith("api/ready", StringComparison.Ordinal);
+
+        if (requiresKey)
+        {
+            operation.Security =
+            [
+                new OpenApiSecurityRequirement
+                {
+                    [new OpenApiSecuritySchemeReference("ApiKey", context.Document)] = [],
+                },
+            ];
+        }
+        else
+        {
+            operation.Security = null;
+        }
+
+        return Task.CompletedTask;
+    });
+});
+
+// [task_109] Bridges minimal API endpoints to MVC's IApiDescriptionProvider so
+// that downstream tooling (Spectral in task_117, dotnet-getdocument build target)
+// can enumerate them. The runtime OpenAPI service has its own minimal-API
+// provider, so this is a no-op for `app.MapOpenApi()` but required for the
+// build-time document to contain the routes.
+builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSingleton(webCfg);
+// task_097: ApiKeyStore (load-or-generate API keys с ролями, см. ADR-0004).
+// Регистрируем ДО app.Build(), чтобы можно было resolve при первом запросе.
+builder.Services.AddSingleton<Hercules.WebApi.Auth.ApiKeyStore>();
+
+// ADR-0009: in-memory session registry for the browser Studio client. A browser
+// cannot hold an API key safely, so the key is exchanged once for a short-lived
+// opaque token that the client keeps only in tab memory.
+builder.Services.AddSingleton<Hercules.WebApi.Auth.StudioSessionStore>();
+
+// Stage 2: append-only skill prompt history, so the Studio diff view has a
+// previous version to compare against. Edits were previously destructive.
+builder.Services.AddSingleton<Hercules.WebApi.Skills.SkillPromptHistoryStore>(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<Hercules.WebApi.Skills.SkillPromptHistoryStore>>();
+    var dataRoot = Hercules.BuiltIn.ResolveDataRoot();
+    return new Hercules.WebApi.Skills.SkillPromptHistoryStore(
+        logger,
+        Path.Combine(dataRoot, "skill-history"));
+});
+
+// ADR-0009: in-memory registry for sandbox code runs observed over SSE.
+builder.Services.AddSingleton<Hercules.WebApi.CodeRuns.SkillRunStore>();
+    builder.Services.AddSingleton<Hercules.WebApi.Consensus.ConsensusSessionStore>();
+
+// task_098: CheckInService для Studio-протокола (ADR-0005). Singleton — состояние
+// CheckIn'ов живёт в памяти процесса, общий для всех запросов. IAuditService
+// resolve'ится лениво через IServiceProvider, чтобы оставаться опциональным.
+builder.Services.AddSingleton<Hercules.CheckIn.CheckInService>(sp =>
+    new Hercules.CheckIn.CheckInService(
+        sp.GetRequiredService<ILogger<Hercules.CheckIn.CheckInService>>(),
+        sp.GetService<Hercules.Audit.IAuditService>()));
+
+// task_099: RestartService для supervisor-протокола. Singleton — состояние
+// restart-флага персистится в {DataRoot}/restart-state.json. IAuditService
+// resolve'ится лениво через IServiceProvider (опционально).
+builder.Services.AddSingleton<Hercules.Restart.RestartService>(sp =>
+    new Hercules.Restart.RestartService(
+        sp.GetRequiredService<ILogger<Hercules.Restart.RestartService>>(),
+        sp.GetService<Hercules.Audit.IAuditService>(),
+        Path.Combine(sp.GetRequiredService<Hercules.Config.StorageConfig>().DataRoot, Hercules.BuiltIn.RestartStateFileName)));
+
+// task_078: IHttpClientFactory + named clients with standard resilience handlers
+builder.Services.AddHttpClient();
+
+// task_079: real health checks (liveness + readiness) replacing the static /api/health stub
+builder.Services.AddSingleton<ILLMProviderProbe>(sp => new ProviderHealthCheckerAdapter(sp.GetRequiredService<ProviderHealthChecker>()));
+builder.Services.AddHealthChecks()
+    .AddCheck<SqliteHealthCheck>("sqlite", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
+    .AddCheck<LlmHealthCheck>("llm", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
+    .AddCheck<MeshBusHealthCheck>("mesh-bus", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
+    .AddCheck<DiskSpaceHealthCheck>("disk-space", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" })
+    .AddCheck<OutboxHealthCheck>("outbox", failureStatus: HealthStatus.Degraded, tags: new[] { "ready" })
+    .AddCheck<SkillRegistryHealthCheck>("skill-registry", failureStatus: HealthStatus.Unhealthy, tags: new[] { "ready" });
+
+var httpResilience = appConfig.Http.Resilience ?? new HttpResilienceConfig();
+
+// LLM health/probe clients
+builder.Services.AddHttpClient(ProviderHealthChecker.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(ProviderHealthChecker.HealthCheckTimeout.TotalSeconds);
+});
+builder.Services.AddHttpClient(ProviderCapabilityDetector.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(8);
+});
+builder.Services.AddHttpClient(LMStudioClient.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(5);
+});
+builder.Services.AddHttpClient(NetworkMonitor.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(appConfig.OfflineSync.NetworkPollTimeoutSeconds);
+});
+
+// Inter-agent transports (retry + circuit breaker + timeout)
+builder.Services.AddHttpClient(IntentTransport.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+}).AddStandardResilienceHandler(o =>
+{
+    o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+    o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+    o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+    o.Retry.UseJitter = true;
+    o.CircuitBreaker.FailureRatio = httpResilience.CircuitBreakerFailureRatio;
+    o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(httpResilience.CircuitBreakerSamplingDurationSeconds);
+    o.CircuitBreaker.MinimumThroughput = httpResilience.CircuitBreakerMinimumThroughput;
+    o.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(httpResilience.CircuitBreakerBreakDurationSeconds);
+});
+
+builder.Services.AddHttpClient(HttpTransportAdapter.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+}).AddStandardResilienceHandler(o =>
+{
+    o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+    o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+    o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+    o.Retry.UseJitter = true;
+});
+
+builder.Services.AddHttpClient(GrpcTransportAdapter.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromMilliseconds(appConfig.Mesh.IntentTimeoutMs);
+});
+
+// Outbound tool/agent clients
+builder.Services.AddHttpClient(HttpTool.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(appConfig.Http.TimeoutSeconds);
+}).AddStandardResilienceHandler(o =>
+{
+    o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+    o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+    o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+    o.Retry.UseJitter = true;
+});
+
+builder.Services.AddHttpClient(A2AClient.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(appConfig.A2A.TimeoutSeconds);
+}).AddStandardResilienceHandler(o =>
+{
+    o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+    o.Retry.MaxRetryAttempts = httpResilience.RetryCount;
+    o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+    o.Retry.UseJitter = true;
+});
+
+builder.Services.AddHttpClient(OperatorNotificationService.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(10);
+}).AddStandardResilienceHandler(o =>
+{
+    o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(httpResilience.TimeoutSeconds);
+    o.Retry.MaxRetryAttempts = Math.Max(1, httpResilience.RetryCount - 1);
+    o.Retry.Delay = TimeSpan.FromMilliseconds(httpResilience.RetryBaseDelayMs);
+    o.Retry.UseJitter = true;
+});
+
+builder.Services.AddHttpClient(SkillMarketplace.HttpClientName, c =>
+{
+    c.Timeout = TimeSpan.FromMinutes(2);
+});
 
 // LLM-слой (отказоустойчивый клиент с fallback + multi-role routing v2)
 builder.Services.AddSingleton<LlmClientFactory>(sp =>
         new LlmClientFactory(
             sp.GetRequiredService<LlmConfig>(),
-            sp.GetRequiredService<ICacheService>()));
+            sp.GetRequiredService<ICacheService>(),
+            sp.GetService<IHttpClientFactory>()));
+builder.Services.AddSingleton<ILLMClientFactory>(sp => sp.GetRequiredService<LlmClientFactory>());
 builder.Services.AddSingleton<RoleRouter>();
 builder.Services.AddSingleton<IJsonRepairService, JsonRepairService>();
 builder.Services.AddSingleton<ResilientLLMClient>(sp =>
-    new ResilientLLMClient(
+{
+    var client = new ResilientLLMClient(
         sp.GetRequiredService<LlmConfig>(),
         sp.GetRequiredService<LlmClientFactory>(),
         sp.GetRequiredService<RoleRouter>(),
-        sp.GetRequiredService<ILogger<ResilientLLMClient>>()));
+        sp.GetRequiredService<ILogger<ResilientLLMClient>>());
+    // [task_085] Wire Otel.LoggingSampleRate.
+    var otel = sp.GetService<OtelConfig>();
+    if (otel is not null)
+    {
+        client.SetLogSampleRate(otel.LoggingSampleRate);
+    }
+    return client;
+});
 builder.Services.AddSingleton<ILLMClient>(sp => sp.GetRequiredService<ResilientLLMClient>());
-builder.Services.AddSingleton<ProviderHealthChecker>();
+builder.Services.AddSingleton<ProviderHealthChecker>(sp =>
+    new ProviderHealthChecker(
+        sp.GetRequiredService<LlmConfig>(),
+        sp.GetService<ILogger<ProviderHealthChecker>>(),
+        sp.GetService<IHttpClientFactory>()));
 builder.Services.AddSingleton<ProviderCapabilityDetector>(sp =>
     new ProviderCapabilityDetector(
         sp.GetRequiredService<LlmConfig>(),
         sp.GetService<ILogger<ProviderCapabilityDetector>>(),
-        sp.GetRequiredService<ICacheService>()));
+        sp.GetRequiredService<ICacheService>(),
+        sp.GetService<IHttpClientFactory>()));
 
 // Code execution (Stage 2, v2)
 builder.Services.AddSingleton<SandboxOptions>(sp =>
@@ -153,10 +485,43 @@ builder.Services.AddSingleton<SandboxOptions>(sp =>
 });
 builder.Services.AddSingleton<ICodeExecutor, DotnetFileBasedExecutor>();
 
+// SkillSdk context factory (task_101)
+builder.Services.AddSingleton<ISkillContextFactory>(sp =>
+    new SkillSdkContextFactory(
+        sp.GetRequiredService<HttpConfig>(),
+        sp.GetRequiredService<ILLMClient>(),
+        sp.GetRequiredService<ToolRegistry>(),
+        sp.GetRequiredService<LayeredMemoryManager>(),
+        sp.GetRequiredService<IDurableFactsStore>(),
+        sp.GetRequiredService<ILoggerFactory>(),
+        sp.GetService<IHttpClientFactory>()));
+
+// SkillSdk in-process executor (task_101). Registered separately so it can be resolved by CodeExecutionTool.
+builder.Services.AddSingleton<SkillSdkExecutor>(sp =>
+    new SkillSdkExecutor(
+        sp.GetRequiredService<SandboxOptions>(),
+        sp.GetRequiredService<ISkillContextFactory>()));
+builder.Services.AddSingleton<ICodeExecutor>(sp => sp.GetRequiredService<SkillSdkExecutor>());
+
 // Tool ecosystem (Stage 3, v2)
-builder.Services.AddSingleton<ITool, HttpTool>();
-builder.Services.AddSingleton<ITool, A2AClient>();
-builder.Services.AddSingleton<ITool, CodeExecutionTool>();
+builder.Services.AddSingleton<ITool, HttpTool>(sp =>
+    new HttpTool(
+        sp.GetRequiredService<HttpConfig>(),
+        sp.GetRequiredService<ILogger<HttpTool>>(),
+        sp.GetService<IHttpClientFactory>()));
+builder.Services.AddSingleton<ITool, A2AClient>(sp =>
+    new A2AClient(
+        sp.GetRequiredService<A2AConfig>(),
+        sp.GetService<IHttpClientFactory>()));
+// [task_109] CodeExecutionTool registration skipped at build-time:
+// its ambiguous constructors (IEnumerable<ICodeExecutor> vs ICodeExecutor) trip
+// DI scope validation when the OpenAPI build target boots the host in a stripped
+// environment. The tool itself is documented in task_024 and re-registered at
+// runtime via `dotnet run` / `dotnet exec` where validation is properly scoped.
+if (!isBuildTime)
+{
+    builder.Services.AddSingleton<ITool, CodeExecutionTool>(sp => new CodeExecutionTool(sp));
+}
 // Tool policy engine (task_009)
 builder.Services.AddSingleton(sp =>
 {
@@ -199,7 +564,11 @@ builder.Services.AddSingleton<ITool, WasmToolAdapter>();
 // HerculesBus (v3.1) — мессенджер для ИИ агентов (in-memory pub/sub + registry + channel store).
 builder.Services.AddSingleton<IChannelStore, InMemoryChannelStore>();
 builder.Services.AddSingleton<IAgentRegistry, InMemoryAgentRegistry>();
-builder.Services.AddSingleton<IEventBus, InMemoryEventBus>();
+// task_086: pass BusConfig so the bus uses bounded channels with the
+// configured backpressure / drop policy.
+builder.Services.AddSingleton<IEventBus>(sp => new InMemoryEventBus(
+    sp.GetRequiredService<ILogger<InMemoryEventBus>>(),
+    appConfig.Bus));
 builder.Services.AddSingleton<Bus>();
 
 // Phase 3: Inter-agent mesh (manifest, capability registry, intent routing, transport)
@@ -217,15 +586,75 @@ builder.Services.AddSingleton<MemoryStore>(sp =>
         sp.GetRequiredService<ISecretMaskingService>()));
 builder.Services.AddSingleton<SqliteSessionStore>();
 
+// task_103: session store backend selection (sqlite | postgres). The
+// ISessionStore contract is satisfied by SqliteSessionStore by default; set
+// Storage.SessionStore.Provider = "postgres" + ConnectionString to switch
+// to the shared Npgsql-backed store. SqliteSessionStore stays registered as
+// a concrete type so consumers that need the SQLite-specific escape
+// hatches (SqliteOutboxStore, SqliteTaskRepository, SqliteDistillationStore,
+// SkillQualityStore) keep compiling unchanged.
+var sessionStoreCfg = builder.Configuration.GetSection("Storage:SessionStore").Get<SessionStoreBackendConfig>()
+    ?? new SessionStoreBackendConfig();
+if (string.Equals(sessionStoreCfg.Provider, "postgres", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<ISessionStore>(sp => new PostgresSessionStore(
+        sessionStoreCfg,
+        sp.GetRequiredService<StorageConfig>()));
+}
+else
+{
+    builder.Services.AddSingleton<ISessionStore>(sp => sp.GetRequiredService<SqliteSessionStore>());
+}
+
+// task_079: Outbox store (optional, used by OutboxHealthCheck and DegradationManager)
+builder.Services.AddSingleton<IOutboxStore>(sp =>
+    new SqliteOutboxStore(
+        sp.GetRequiredService<SqliteSessionStore>(),
+        sp.GetRequiredService<OfflineSyncConfig>(),
+        sp.GetRequiredService<ILogger<SqliteOutboxStore>>()));
+builder.Services.AddSingleton<NetworkMonitor>(sp =>
+    new NetworkMonitor(
+        sp.GetRequiredService<OfflineSyncConfig>(),
+        sp.GetRequiredService<ILogger<NetworkMonitor>>(),
+        sp.GetService<IHttpClientFactory>()!));
+builder.Services.AddSingleton<INetworkMonitor>(sp => sp.GetRequiredService<NetworkMonitor>());
+
 // task_026: Least-privilege grants
 builder.Services.AddSingleton(sp =>
     new Hercules.Tools.Grants.SkillGrantStore(
-        Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, "grants.db")));
+        Path.Combine(sp.GetRequiredService<StorageConfig>().DataRoot, Hercules.BuiltIn.GrantsDatabaseFileName)));
 builder.Services.AddSingleton<Hercules.Tools.Grants.ISkillGrantService, Hercules.Tools.Grants.SkillGrantService>();
 
 // Hybrid storage services (task_003)
 builder.Services.AddSingleton<IBudgetService, BudgetService>();
 builder.Services.AddSingleton<IAuditLog, AuditLogService>();
+
+// Backup & Recovery (task_063)
+builder.Services.AddSingleton(appConfig.Backup);
+builder.Services.AddSingleton<Hercules.Backup.EncryptionService>();
+builder.Services.AddSingleton<Hercules.Backup.IBackupService>(sp =>
+    new Hercules.Backup.BackupService(
+        sp.GetRequiredService<Hercules.Backup.BackupConfig>(),
+        sp.GetRequiredService<Hercules.Backup.EncryptionService>(),
+        sp.GetRequiredService<ILogger<Hercules.Backup.BackupService>>(),
+        sp.GetRequiredService<StorageConfig>().DataRoot));
+
+// Fleet templates (task_062)
+builder.Services.AddSingleton<AgentTemplateManager>();
+builder.Services.AddSingleton<IFleetTemplateManager, FleetTemplateManager>();
+
+// Security operations (task_055)
+builder.Services.AddSingleton(appConfig.SecurityOps);
+builder.Services.AddSingleton<IVulnerabilityReporter>(sp =>
+    new VulnerabilityReporterService(
+        sp.GetRequiredService<SecurityOpsConfig>(),
+        sp.GetRequiredService<IAuditService>(),
+        sp.GetRequiredService<ILogger<VulnerabilityReporterService>>()));
+builder.Services.AddSingleton<ISecurityAuditExporter>(sp =>
+    new SecurityAuditExporterService(
+        sp.GetRequiredService<SecurityOpsConfig>(),
+        sp.GetRequiredService<IAuditService>(),
+        sp.GetRequiredService<ILogger<SecurityAuditExporterService>>()));
 
 // Durable task lifecycle (task_018)
 builder.Services.AddSingleton<ITaskRepository>(sp =>
@@ -234,6 +663,7 @@ builder.Services.AddSingleton<TaskRetryHandler>();
 builder.Services.AddSingleton<ITaskExecutionService>(sp =>
     new TaskExecutionService(
         sp.GetRequiredService<ITaskRepository>(),
+        sp.GetRequiredService<ISessionStore>(),
         sp.GetRequiredService<TaskConfig>(),
         sp.GetRequiredService<ILogger<TaskExecutionService>>()));
 
@@ -254,15 +684,37 @@ builder.Services.AddSingleton<IQuotaService>(sp =>
         sp.GetRequiredService<QuotasConfig>(),
         sp.GetRequiredService<ILogger<QuotaService>>()));
 builder.Services.AddSingleton<QuotaGuard>(sp =>
-    new QuotaGuard(
-        sp.GetRequiredService<ILogger<QuotaGuard>>()));
+{
+    var guard = new QuotaGuard(
+        sp.GetRequiredService<ILogger<QuotaGuard>>());
+    // [task_085] Wire Otel.LoggingSampleRate.
+    var otel = sp.GetService<OtelConfig>();
+    if (otel is not null)
+    {
+        guard.SetLogSampleRate(otel.LoggingSampleRate);
+    }
+    return guard;
+});
 
-// Layered memory (task_011)
-builder.Services.AddScoped<IWorkingMemory, WorkingMemoryService>();
+// Layered memory (task_011, task_075 H6)
 builder.Services.AddSingleton<IDurableFactsStore, DurableFactsService>();
 builder.Services.AddSingleton<IEpisodicStore, EpisodicStore>();
 builder.Services.AddSingleton<LayerMetadataExtractor>();
-builder.Services.AddSingleton<LayeredMemoryManager>();
+// task_075 H6 fix: LayeredMemoryManager is now singleton and resolves working memory
+// per session via ISessionStateStore (no more captive dependency on scoped IWorkingMemory).
+builder.Services.AddSingleton<ISessionStateStore, InMemorySessionStateStore>();
+builder.Services.AddSingleton<LayeredMemoryManager>(sp => new LayeredMemoryManager(
+    sp.GetRequiredService<ISessionStateStore>(),
+    sp.GetRequiredService<IDurableFactsStore>(),
+    sp.GetRequiredService<IEpisodicStore>(),
+    new LayeredMemoryConfig
+    {
+        MaxWorkingMemoryEntries = sp.GetRequiredService<MemoryConfig>().MaxWorkingMemoryEntries,
+        MaxEpisodesInContext = sp.GetRequiredService<MemoryConfig>().MaxEpisodesInContext,
+        DefaultFactTtlMinutes = sp.GetRequiredService<MemoryConfig>().DefaultFactTtlMinutes,
+        SensitivityRedactionEnabled = sp.GetRequiredService<MemoryConfig>().SensitivityRedactionEnabled,
+        MaxFactAgeDays = sp.GetRequiredService<MemoryConfig>().MaxFactAgeDays
+    }));
 
 // Phase 2: Skill packager (export/import .skillpkg) + signing (task_021)
 builder.Services.AddSingleton(appConfig.Marketplace);
@@ -341,14 +793,17 @@ builder.Services.AddSingleton<SkillMarketplace>(sp =>
     new SkillMarketplace(
         sp.GetRequiredService<StorageConfig>(),
         sp.GetRequiredService<SkillPackager>(),
-        sp.GetRequiredService<IMarketplaceSigningService>()));
+        sp.GetRequiredService<IMarketplaceSigningService>(),
+        sp.GetService<IHttpClientFactory>(),
+        // R1: supplies Marketplace:AllowHttpImport to the SSRF guard.
+        sp.GetRequiredService<MarketplaceConfig>()));
 builder.Services.AddSingleton<AgentTemplateManager>();
 
 // Template simulation (task_031)
 builder.Services.AddSingleton<ISensorSimulator>(sp =>
     new FileSensorSimulator(sp.GetRequiredService<ILogger<FileSensorSimulator>>())
     {
-        TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, "templates")
+        TemplatesBaseDir = Path.Combine(AppContext.BaseDirectory, Hercules.BuiltIn.TemplatesSubdir)
     });
 builder.Services.AddSingleton<FailureScenarioEngine>();
 builder.Services.AddSingleton<TemplateSimulationService>();
@@ -415,7 +870,15 @@ builder.Services.AddSingleton<IContextBuilder>(sp =>
         sp.GetRequiredService<LayeredMemoryManager>(),
         sp.GetRequiredService<ContextConfig>(),
         sp.GetRequiredService<ILogger<Hercules.Context.ContextBuilder>>(),
-        sp.GetRequiredService<ITraceSummarizer>()));
+        sp.GetRequiredService<ITraceSummarizer>(),
+        sp.GetService<Hercules.Context.Distillation.ContextDistillationService>(),
+        sp.GetRequiredService<Hercules.Storage.SqliteSessionStore>()));
+// task_102: context distillation store + service.
+builder.Services.AddSingleton<Hercules.Context.Distillation.IDistillationStore>(sp =>
+    new Hercules.Context.Distillation.SqliteDistillationStore(
+        sp.GetRequiredService<Hercules.Storage.SqliteSessionStore>(),
+        sp.GetRequiredService<ILogger<Hercules.Context.Distillation.SqliteDistillationStore>>()));
+builder.Services.AddSingleton<Hercules.Context.Distillation.ContextDistillationService>();
 
 // [task_028] Caching — unified cache service
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Cache);
@@ -427,9 +890,40 @@ builder.Services.AddSingleton<AgentCore>();
 // чтобы RuntimeConfigReactor мог прокидывать им новые настройки без перезагрузки.
 builder.Services.AddSingleton<IConfigReload>(sp => sp.GetRequiredService<AgentCore>());
 builder.Services.AddSingleton<IConfigReload>(sp => sp.GetRequiredService<SkillManager>());
+// [task_100] MCP hot-reload: при PATCH /api/config с mcp.servers секцией
+// RuntimeConfigReactor вызовет McpClientService.Reload и применит изменения без рестарта.
+builder.Services.AddSingleton<IConfigReload>(sp => sp.GetRequiredService<Hercules.Mcp.McpClientService>());
 
 // Адаптер Web API
 builder.Services.AddSingleton<WebApiAdapter>();
+
+// task_080: shutdown & drain primitives
+builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.Shutdown);
+builder.Services.AddSingleton<IAgentLifecycleState, AgentLifecycleStateHolder>();
+builder.Services.AddSingleton<IInFlightTracker>(sp => new InFlightTracker(sp.GetService<ILogger<InFlightTracker>>()));
+
+// Escalations (task_049)
+builder.Services.AddSingleton(appConfig.Escalation);
+builder.Services.AddSingleton<IEscalationService, Hercules.Mesh.Escalation.EscalationService>();
+
+// Operational SLOs (task_064)
+builder.Services.AddSingleton(appConfig.Slos);
+builder.Services.AddSingleton<Hercules.Slo.ISloLatencyTracker, Hercules.Slo.SloLatencyTracker>();
+builder.Services.AddSingleton<Hercules.Slo.IConnectivityStateProvider>(sp =>
+    sp.GetRequiredService<Hercules.Offline.NetworkMonitor>());
+builder.Services.AddSingleton<ISloService>(sp =>
+    new SloService(
+        sp.GetRequiredService<SlosConfig>(),
+        sp.GetRequiredService<IAuditService>(),
+        sp.GetRequiredService<IMeshObservabilityService>(),
+        // R27: GetService<T>() returns null when unregistered and both parameters are
+        // non-nullable, so an accidental unregistration would have become a
+        // NullReferenceException on first SLO evaluation rather than a startup failure.
+        sp.GetRequiredService<Hercules.Offline.IOutboxStore>(),
+        sp.GetRequiredService<IBudgetService>(),
+        sp.GetRequiredService<ILogger<SloService>>(),
+        sp.GetService<Hercules.Slo.ISloLatencyTracker>(),
+        sp.GetService<Hercules.Slo.IConnectivityStateProvider>()));
 
 // task_057: Lifecycle management
 builder.Services.AddSingleton<ILifecycleService>(sp =>
@@ -438,7 +932,13 @@ builder.Services.AddSingleton<ILifecycleService>(sp =>
         sp.GetRequiredService<SkillManager>(),
         sp.GetRequiredService<CapabilityRegistry>(),
         sp.GetRequiredService<ITransport>(),
-        sp.GetRequiredService<ILogger<LifecycleService>>()));
+        sp.GetRequiredService<ILogger<LifecycleService>>(),
+        sp.GetRequiredService<IAgentLifecycleState>(),
+        sp.GetRequiredService<IInFlightTracker>(),
+        sp.GetRequiredService<ShutdownConfig>()));
+
+// task_080: graceful drain — runs on host shutdown, awaits in-flight requests
+builder.Services.AddHostedService<DrainHostedService>();
 
 // task_058: Config & policy rollout — staged signed bundles with expiry and LKG fallback
 builder.Services.AddSingleton(sp => sp.GetRequiredService<RuntimeConfigStore>().Current.ConfigRollout);
@@ -448,55 +948,258 @@ builder.Services.AddSingleton<IRolloutManager, RolloutManager>();
 builder.Services.AddHostedService<RolloutExpiryChecker>();
 
 // --- CORS: разрешаем localhost-источники фронтенда ---
+// task_081: заменили "AllowAnyOrigin" по умолчанию на dev whitelist (localhost).
+// Для production укажите AllowedCorsOrigins в appsettings.json.
 const string corsPolicy = "frontend";
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(corsPolicy, policy =>
     {
-        switch (webCfg.AllowedCorsOrigins.Count)
+        if (webCfg.AllowAnyOrigin)
         {
-            case > 0:
-                policy.WithOrigins(webCfg.AllowedCorsOrigins.ToArray())
-                    .AllowAnyHeader()
-                    .AllowAnyMethod();
-                break;
-            default:
-                policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
-                break;
+            // Явный opt-in для dev/edge — НЕ рекомендуется для production.
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+            return;
         }
+
+        if (webCfg.AllowedCorsOrigins.Count > 0)
+        {
+            policy.WithOrigins(webCfg.AllowedCorsOrigins.ToArray())
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+            return;
+        }
+
+        // Dev fallback: разрешаем только localhost-источники.
+        // 4322 = hercules-web (astro dev), 4330 = Hercules Studio (Vite dev, ADR-0009),
+        // 8421 = сам WebApi (в т.ч. раздача SPA на /ui — same-origin, CORS не нужен).
+        string[] devOrigins =
+        {
+            "http://localhost:4322",
+            "http://localhost:4330",
+            "http://localhost:8421",
+            "http://127.0.0.1:4322",
+            "http://127.0.0.1:4330",
+            "http://127.0.0.1:8421"
+        };
+        policy.WithOrigins(devOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
     });
+});
+
+// --- Kestrel server tuning (task_081) ---
+// Поднимаем лимиты до production-grade значений и ограничиваем request body.
+builder.WebHost.ConfigureKestrel((ctx, opts) =>
+{
+    var k = webCfg.Kestrel;
+    opts.Limits.MaxConcurrentConnections = k.MaxConcurrentConnections;
+    opts.Limits.MaxConcurrentUpgradedConnections = k.MaxConcurrentUpgradedConnections;
+    opts.Limits.MaxRequestBodySize = k.MaxRequestBodySize;
+    opts.Limits.KeepAliveTimeout = TimeSpan.FromSeconds(k.KeepAliveTimeoutSeconds);
+    opts.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(k.RequestHeadersTimeoutSeconds);
+});
+
+// --- Framework rate limiter (task_081) ---
+// Заменяет кастомный RateLimitMiddleware: fixed window per-IP для /api/chat и
+// concurrency limiter для дорогих эндпоинтов (reflection, eval, SLO).
+builder.Services.AddRateLimiter(o =>
+{
+    // Rejection handler сохраняет X-RateLimit-* headers + Retry-After.
+    o.OnRejected = async (context, ct) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            var seconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
+            context.HttpContext.Response.Headers["Retry-After"] = seconds.ToString();
+            context.HttpContext.Response.Headers["X-RateLimit-Reset"] = seconds.ToString();
+        }
+
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsync(
+            "{\"error\":\"Rate limit exceeded. Try again later.\"}", ct);
+    };
+
+    // /api/chat — fixed window per IP (30/min по умолчанию).
+    o.AddPolicy(RateLimitPolicies.Chat, httpContext =>
+    {
+        var key = RateLimitPolicies.GetClientKey(httpContext);
+        return RateLimitPartition.GetFixedWindowLimiter(key, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = Math.Max(1, webCfg.RateLimiting.ChatPerMinute),
+            Window = TimeSpan.FromSeconds(Math.Max(1, webCfg.RateLimiting.ChatWindowSeconds)),
+            QueueLimit = Math.Max(0, webCfg.RateLimiting.ChatQueueLimit),
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+            AutoReplenishment = true
+        });
+    });
+
+    // Expensive endpoints (reflection, eval, SLO) — глобальный concurrency cap.
+    o.AddPolicy(RateLimitPolicies.Expensive, _ =>
+        RateLimitPartition.GetConcurrencyLimiter("expensive", _ => new ConcurrencyLimiterOptions
+        {
+            PermitLimit = Math.Max(1, webCfg.RateLimiting.ExpensiveConcurrency),
+            QueueLimit = 0,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+        }));
+});
+
+// --- Response compression (task_081) ---
+// Brotli + Gzip для application/json, text/plain и SSE (text/event-stream).
+builder.Services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.Providers.Add<BrotliCompressionProvider>();
+    o.Providers.Add<GzipCompressionProvider>();
+    o.MimeTypes =
+    [
+        "application/json",
+        "text/plain",
+        "text/event-stream",
+        "application/xml",
+        "text/html"
+    ];
+});
+
+// --- Output cache (task_081) ---
+// Кэшируем read-only GET-эндпоинты на короткий TTL.
+builder.Services.AddOutputCache(o =>
+{
+    o.AddBasePolicy(b => b.Expire(TimeSpan.FromSeconds(30)));
+    o.AddPolicy(OutputCachePolicies.Skills, b => b
+        .Expire(TimeSpan.FromMinutes(5))
+        .Tag("skills")
+        .SetVaryByQuery("skillId", "includeDeprecated"));
+    o.AddPolicy(OutputCachePolicies.Config, b => b
+        .Expire(TimeSpan.FromSeconds(30))
+        .Tag("config"));
 });
 
 // JSON: не экранировать кириллицу в ответах
 builder.Services.ConfigureHttpJsonOptions(o => { o.SerializerOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping; });
 
-// Порт по умолчанию — 5000 (если не переопределён через --urls / ASPNETCORE_URLS / launchSettings)
+// Порт по умолчанию — 8421 (см. ADR-0003, диапазон 8421-8521).
+// Если не переопределён через --urls / ASPNETCORE_URLS / launchSettings.
 // launchSettings.json в Development может навязать другой URL, поэтому отключаем его влияние.
-if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")) &&
+if (openApiOutputPath is not null)
+{
+    // [task_109] Build-time document generation. StartAsync below needs a live listener,
+    // so bind an ephemeral loopback port: a build must never fail because 8421 is already
+    // taken by a running dev server, and must never expose the real port while doing so.
+    builder.WebHost.UseUrls("http://127.0.0.1:0");
+}
+else if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")) &&
     !args.Any(a => a.StartsWith("--urls")) &&
     builder.Environment.IsProduction())
 {
-    builder.WebHost.UseUrls("http://0.0.0.0:5000");
+    builder.WebHost.UseUrls("http://0.0.0.0:8421");
 }
-else if (builder.Environment.IsDevelopment())
+else if (builder.Environment.IsDevelopment() &&
+         string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")) &&
+         !args.Any(a => a.StartsWith("--urls")))
 {
-    // В Development игнорируем launchSettings URL и фиксируем порт 5000,
+    // В Development игнорируем launchSettings URL и фиксируем порт 8421,
     // чтобы не зависеть от случайного порта в Properties/launchSettings.json.
-    builder.WebHost.UseUrls("http://localhost:5000");
+    //
+    // Только если URL не задан ЯВНО. Раньше этот UseUrls() был безусловным и
+    // молча перебивал ASPNETCORE_URLS — тогда как ветка Production (выше) его
+    // уважает. Из-за этого агент нельзя было запустить в контейнере с
+    // Development: `ASPNETCORE_URLS=http://+:8421` превращался в
+    // `http://localhost:8421`, published-порт становился недостижим, и healthcheck
+    // проходил (он ходит по localhost), хотя снаружи соединение обрывалось.
+    // Локальный `dotnet run` не меняется: launchSettings.json задаёт
+    // applicationUrl=http://localhost:8421, поэтому результат тот же.
+    builder.WebHost.UseUrls("http://localhost:8421");
 }
 
 var app = builder.Build();
+var log = app.Services.GetRequiredService<ILogger<Program>>();
+
+// [task_109] OpenAPI document is exposed on /openapi/v1.json and Scalar
+// interactive UI on /scalar. Both paths live outside /api/* so ApiKeyMiddleware
+// already lets them through without X-Api-Key (open access to documentation).
+// Important: MapOpenApi() MUST be called after all domain `MapXxx()` calls so
+// the route table is complete before the OpenAPI document provider snapshots it.
+app.MapOpenApi();
+app.MapScalarApiReference();
+
+// --- task_097: финализируем список API-ключей до первого запроса ---
+// Если ни в appsettings, ни в legacy ApiKey ничего нет — генерируем пару и сохраняем
+// в data/security/keys.json (ADR-0004). Делаем это ДО app.Run(), чтобы оператор увидел
+// ключи в логах при первом старте.
+if (!isBuildTime)
+{
+    var keyStore = app.Services.GetRequiredService<ApiKeyStore>();
+    var resolved = keyStore.LoadOrGenerate(webCfg.ApiKeys);
+    if (resolved.Count > 0)
+    {
+        // Перезаписываем snapshot конфига: middleware читает именно webCfg.ApiKeys.
+        webCfg.ApiKeys.Clear();
+        webCfg.ApiKeys.AddRange(resolved);
+    }
+}
 
 // --- Middleware ---
+// ADR-0009: Hercules Studio is served by the agent itself on /ui, so the SPA
+// runs same-origin and does not depend on the CORS allowlist above (that only
+// matters for `npm run dev` on its own port). Mounted before the API middlewares
+// so asset requests are never rate-limited, API-key-gated or drain-blocked.
+const string StudioUiRequestPath = "/ui";
+IFileProvider? studioUiProvider = ResolveStudioUiProvider(webCfg, app.Environment.ContentRootPath, log);
+if (studioUiProvider is not null)
+{
+    // Resolves /ui → /ui/index.html. Must precede UseStaticFiles.
+    app.UseDefaultFiles(new DefaultFilesOptions
+    {
+        FileProvider = studioUiProvider,
+        RequestPath = StudioUiRequestPath,
+    });
+
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = studioUiProvider,
+        RequestPath = StudioUiRequestPath,
+        OnPrepareResponse = ctx =>
+        {
+            // Hashed asset filenames are immutable; index.html must not be cached.
+            var isIndex = ctx.File.Name.Equals("index.html", StringComparison.OrdinalIgnoreCase);
+            ctx.Context.Response.Headers.CacheControl = isIndex ? "no-cache" : "public, max-age=31536000, immutable";
+        },
+    });
+}
+// task_081: response compression first so downstream responses are emitted
+// compressed (RateLimiter, ApiKey, Drain, OutputCache все пишут в поток).
+app.UseResponseCompression();
 app.UseCors(corsPolicy);
+// task_080: drain check runs as early as possible so even a request that would be
+// rejected by another middleware (e.g. CORS, ApiKey) still gets a clean 503.
+app.UseMiddleware<DrainMiddleware>();
 app.UseMiddleware<RequestBodyLimitMiddleware>();
 app.UseMiddleware<ApiKeyMiddleware>();
-app.UseMiddleware<RateLimitMiddleware>();
+// task_081: framework rate limiter replaces legacy RateLimitMiddleware.
+app.UseRateLimiter();
+// task_081: output cache (должен быть после ApiKey/Auth, чтобы не кэшировать 401/429).
+app.UseOutputCache();
 // task_039: peer auth middleware for /api/mesh/* endpoints
 app.UseMiddleware<PeerAuthMiddleware>();
 
 // --- Инициализация сессии агента ---
-app.Services.GetRequiredService<WebApiAdapter>().EnsureSessionStarted();
+// [task_109] skipped at build-time (touches SQLite via SqliteSessionStore)
+if (!isBuildTime)
+{
+    try
+    {
+        log.LogInformation("Initializing agent session...");
+        app.Services.GetRequiredService<WebApiAdapter>().EnsureSessionStarted();
+        log.LogInformation("Agent session initialized");
+    }
+    catch (Exception ex)
+    {
+        log.LogError(ex, "Failed to initialize agent session");
+        throw;
+    }
+}
 
 // --- Служебные эндпоинты ---
 app.MapGet("/", () => Results.Ok(new
@@ -531,23 +1234,49 @@ app.MapGet("/", () => Results.Ok(new
         "GET /api/maintenance/proposals", "GET /api/maintenance/proposals/{id}",
         "POST /api/maintenance/proposals/{id}/approve",
         "POST /api/maintenance/proposals/{id}/reject",
-        "GET /agent.manifest.json", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
+        $"GET /{Hercules.BuiltIn.AgentManifestFileName}", "GET /api/mesh/agents", "POST /api/mesh/agents/register",
         "GET /api/mesh/agents/{id}", "DELETE /api/mesh/agents/{id}",
         "GET /api/mesh/capabilities", "GET /api/mesh/capabilities/{name}",
         "GET /api/mesh/capabilities/search", "POST /api/mesh/intent",
         "GET /api/tools", "GET /api/tools/{name}", "GET /api/tools/{name}/health",
-        "GET /api/tools/categories", "POST /api/tools/{name}/enable", "POST /api/tools/{name}/disable"
+        "GET /api/tools/categories", "POST /api/tools/{name}/enable", "POST /api/tools/{name}/disable",
+        "POST /api/system/checkin", "POST /api/system/checkout",
+        "POST /api/system/checkin/heartbeat", "GET /api/system/checkin/status",
+        "POST /api/system/checkin/force"
     ]
-}));
-app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", time = DateTime.UtcNow }));
+}))
+// R41/R42: give the root endpoint an explicit operationId and a real tag, instead of
+// letting it land in the auto-generated "Hercules.WebApi" orphan bucket.
+.WithName("GetServiceInfo")
+.WithTags("Meta");
+// task_079: real health endpoints replacing the static /api/health stub.
+//   /api/health        — liveness, returns 200 if the process is alive (no checks)
+//   /api/ready         — readiness, returns 200 only if all "ready"-tagged checks pass
+//   /api/health/detail — JSON per-check breakdown (auth-gated by ApiKeyMiddleware)
+app.MapHealthChecks("/api/health", new HealthCheckOptions
+{
+    Predicate = _ => false, // liveness: process-alive only
+    ResponseWriter = Hercules.WebApi.Health.HealthCheckResponseWriter.WriteLiveness
+});
+app.MapHealthChecks("/api/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = Hercules.WebApi.Health.HealthCheckResponseWriter.WriteReadiness
+});
+app.MapHealthChecks("/api/health/detail", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = Hercules.WebApi.Health.HealthCheckResponseWriter.WriteDetail,
+    AllowCachingResponses = false
+}).AllowAnonymous(); // ApiKeyMiddleware already guards /api/* — no extra attribute needed
 
 // A2A Agent Card — статический файл по спецификации (task_033)
-app.MapGet("/agent-card.json", () =>
+app.MapGet($"/{Hercules.BuiltIn.AgentCardFileName}", () =>
 {
     // agent-card.json публикуется в dataRoot при старте;.TryReadFromFile чтобы избежать
     // NRE если файл ещё не создан (например, CLI-only запуск)
     var dataRoot = app.Services.GetRequiredService<StorageConfig>().DataRoot;
-    var cardPath = Path.Combine(dataRoot, "agent-card.json");
+    var cardPath = Path.Combine(dataRoot, Hercules.BuiltIn.AgentCardFileName);
     if (!File.Exists(cardPath))
     {
         return Results.NotFound(new { error = "agent-card.json not published yet" });
@@ -555,7 +1284,12 @@ app.MapGet("/agent-card.json", () =>
 
     var json = File.ReadAllText(cardPath);
     return Results.Text(json, "application/json");
-});
+})
+// R41: these two service endpoints previously had no operationId, so Orval emitted
+// invalid/duplicate client method names. R42: they also landed in the auto-generated
+// "Hercules.WebApi" orphan tag, which exists only to hold them.
+.WithName("GetAgentCardFile")
+.WithTags("Meta");
 
 // --- Доменные эндпоинты ---
 app.MapChat();
@@ -572,52 +1306,62 @@ app.MapMeshObservability();
 app.MapLifecycle();
 
 // Agent manifest — публикация на startup (task_032)
-try
+// [task_109] skipped at build-time (writes files into DataRoot)
+if (!isBuildTime)
 {
-    var manifestService = app.Services.GetRequiredService<AgentManifestService>();
-    var manifest = manifestService.Save();
-    var errors = manifestService.Validate();
-    if (errors.Count > 0)
+    try
     {
-        Console.WriteLine($"[Manifest] Опубликован с предупреждениями: {manifestService.ManifestPath}");
-        foreach (var err in errors)
+        var manifestService = app.Services.GetRequiredService<AgentManifestService>();
+        var manifest = manifestService.Save();
+        var errors = manifestService.Validate();
+        if (errors.Count > 0)
         {
-            Console.WriteLine($"  ⚠ {err}");
+                log.LogInformation("Manifest published with warnings: {Path}", manifestService.ManifestPath);
+                foreach (var err in errors)
+                {
+                    log.LogWarning("  ⚠ {Warning}", err);
+                }
+        }
+        else
+        {
+            log.LogInformation("Manifest published: {Path}", manifestService.ManifestPath);
         }
     }
-    else
+    catch (Exception ex)
     {
-        Console.WriteLine($"[Manifest] Опубликован: {manifestService.ManifestPath}");
+        log.LogError(ex, "Manifest publishing failed");
     }
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[Manifest] Publishing failed: {ex.Message}");
 }
 
 // A2A Agent Card — публикация на startup (task_033)
-try
+// [task_109] skipped at build-time (writes files)
+if (!isBuildTime)
 {
-    var agentCardService = app.Services.GetRequiredService<IAgentCardService>();
-    var a2aConfig = app.Services.GetRequiredService<A2AConfig>();
-    if (a2aConfig.AgentCard.Publish)
+    try
     {
-        var path = await agentCardService.PublishAsync();
-        Console.WriteLine($"[AgentCard] Published: {path}");
+        var agentCardService = app.Services.GetRequiredService<IAgentCardService>();
+        var a2aConfig = app.Services.GetRequiredService<A2AConfig>();
+        if (a2aConfig.AgentCard.Publish)
+        {
+            var path = await agentCardService.PublishAsync();
+            log.LogInformation("AgentCard published: {Path}", path);
+        }
+        else
+        {
+            log.LogInformation("AgentCard publishing disabled (A2A.AgentCard.Publish = false)");
+        }
     }
-    else
+    catch (Exception ex)
     {
-        Console.WriteLine("[AgentCard] Publishing disabled (A2A.AgentCard.Publish = false)");
+        log.LogError(ex, "AgentCard publishing failed");
     }
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[AgentCard] Publishing failed: {ex.Message}");
 }
 
 app.MapBudget();
 app.MapQuotas();
 app.MapAudit();
+app.MapSecurityOps();
+app.MapSystem();
 app.MapLlm();
 app.MapA2A();
 app.MapBackups();
@@ -627,6 +1371,10 @@ app.MapSimulation();
 app.MapSlos();
 app.MapApprovals();
 app.MapEscalations();
+app.MapStudio();
+app.MapAuth();
+app.MapCodeRuns();
+app.MapConsensus();
 app.MapObservability();
 app.MapSkillHarness();
 app.MapSelfImprovement();
@@ -634,38 +1382,201 @@ app.MapSkillManifest();
 app.MapTasks();
 app.MapContext();
 app.MapCache();
-app.MapCache();
 app.MapToolRegistry();
 app.MapMcpEndpoints();
+app.MapMarketplace();
+app.MapTemplate();
 
-Console.WriteLine("🌐 Hercules Web API запущен на http://localhost:5000");
-Console.WriteLine($"🔑 X-Api-Key: {(string.IsNullOrEmpty(webCfg.ApiKey) ? "(отключён)" : webCfg.ApiKey)}");
-Console.WriteLine($"💾 Данные: {appConfig.Storage.DataRoot}");
+log.LogInformation("Hercules Web API started on http://localhost:8421");
+if (webCfg.ApiKeys.Count > 0)
+{
+    foreach (var entry in webCfg.ApiKeys)
+    {
+        var role = entry.Role == ApiKeyRole.System ? "system" : "contribute";
+        log.LogInformation("X-Api-Key [{Role}]: {Key}", role, entry.Key);
+    }
+    if (webCfg.ApiKeys.Count > 0)
+    {
+        var keyStore = app.Services.GetRequiredService<Hercules.WebApi.Auth.ApiKeyStore>();
+        if (File.Exists(keyStore.KeysFilePath))
+        {
+            log.LogInformation("Keys file: {Path}", keyStore.KeysFilePath);
+        }
+    }
+}
+else
+{
+    log.LogWarning("X-Api-Key: disabled (auth bypass)");
+}
+log.LogInformation("Data root: {DataRoot}", appConfig.Storage.DataRoot);
 
 // Tool registry discovery (task_024)
-try
+// [task_109] skipped at build-time (filesystem I/O and side effects)
+if (!isBuildTime)
 {
-    var registry = app.Services.GetRequiredService<IToolRegistryService>();
-    var policyEngine = app.Services.GetService<ToolPolicyEngine>();
-    var logger = app.Services.GetService<ILogger<Program>>();
-    var discovered = ToolDiscovery.Discover(appConfig, registry, policyEngine, logger);
-    Console.WriteLine($"[ToolRegistry] {discovered} tools discovered from file system");
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[ToolRegistry] Discovery failed: {ex.Message}");
+    try
+    {
+        var registry = app.Services.GetRequiredService<IToolRegistryService>();
+        var policyEngine = app.Services.GetService<ToolPolicyEngine>();
+        var logger = app.Services.GetService<ILogger<Program>>();
+        var discovered = ToolDiscovery.Discover(appConfig, registry, policyEngine, logger);
+        log.LogInformation("[ToolRegistry] {Count} tools discovered from file system", discovered);
+    }
+    catch (Exception ex)
+    {
+        log.LogError(ex, "ToolRegistry discovery failed");
+    }
 }
 
 // MCP client initialization (task_025)
-try
+// [task_109] skipped at build-time (network I/O via MCP servers)
+if (!isBuildTime)
 {
-    var mcpService = app.Services.GetRequiredService<Hercules.Mcp.McpClientService>();
-    await mcpService.InitializeAsync();
-    Console.WriteLine($"[MCP] Client initialized: {mcpService.ServerStates.Count} servers configured");
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"[MCP] Initialization failed: {ex.Message}");
+    try
+    {
+        var mcpService = app.Services.GetRequiredService<Hercules.Mcp.McpClientService>();
+        await mcpService.InitializeAsync();
+        log.LogInformation("[MCP] Client initialized: {Count} servers configured", mcpService.ServerStates.Count);
+    }
+    catch (Exception ex)
+    {
+        log.LogError(ex, "MCP initialization failed");
+    }
+
+    // task_108: recover durable tasks (Running/Paused) after a process restart and
+    // apply checkpoint retention cleanup. Failures are logged but do not block startup.
+    try
+    {
+        var taskExec = app.Services.GetRequiredService<ITaskExecutionService>();
+        var recovered = await taskExec.RecoverIncompleteTasksAsync();
+        if (recovered > 0)
+        {
+            log.LogInformation("[Tasks] Recovered {Count} incomplete durable task(s) on startup", recovered);
+        }
+    }
+    catch (Exception ex)
+    {
+        log.LogError(ex, "Tasks startup recovery failed");
+    }
 }
 
-app.Run();
+// [task_109] Build-time document emission. Placed at the very end of the program, after
+// every MapXxx() call and OUTSIDE the `if (!isBuildTime)` bootstrap block above, so the
+// endpoint data sources are fully populated and the block is not skipped in build mode.
+//
+// Why not the Microsoft.Extensions.ApiDescription.Server build tool: it resolves the
+// document through MVC's action-descriptor provider, and this API surface is 100%
+// minimal API, so it logged "No action descriptors found" and emitted a document with
+// `paths: {}` (210 paths missing). Resolving IOpenApiDocumentProvider directly uses the
+// same code path as the runtime /openapi/v1.json endpoint, so the committed file and the
+// served document are produced identically.
+if (openApiOutputPath is not null)
+{
+    // [task_109] / R11-R12: the host MUST be started to finalise the endpoint table.
+    //
+    // Verified empirically twice during remediation: resolving EndpointDataSource from DI,
+    // and additionally forcing .Endpoints on every IEndpointRouteBuilder.DataSources
+    // member, both still serialised the document with `paths: {}` — the original task_109
+    // failure. WebApplication only materialises the minimal-API RouteEndpoints when the
+    // host pipeline is built, so StartAsync is unavoidable. (The hard gate below turns
+    // that regression into a loud build failure instead of a silently broken spec.)
+    //
+    // There is therefore NO port-collision risk during a build: builder.WebHost.UseUrls()
+    // above already pins generation to an ephemeral loopback port (http://127.0.0.1:0), so
+    // a build can neither collide with a running dev server on 8421 nor expose the real port.
+    //
+    // What R11/R12 actually required — and what is fixed here and in the csproj:
+    //   * generation is now OPT-IN, so a normal `dotnet build` never runs the app at all.
+    //     It previously executed the host on every build, which opened the SQLite database
+    //     and dirtied tracked files;
+    //   * the emitted JSON is normalised to the host line-ending convention, so the
+    //     committed document no longer drifts into LF and permanently dirties `git status`;
+    //   * the document is never written when it is empty.
+    await app.StartAsync();
+
+    // AddOpenApi registers the provider as a KEYED service ("v1" is the default
+    // document name used by both AddOpenApi() and MapOpenApi()). Unkeyed
+    // resolution returns null, hence GetRequiredKeyedService here.
+    var documentProvider = app.Services.GetRequiredKeyedService<IOpenApiDocumentProvider>("v1");
+    var document = await documentProvider.GetOpenApiDocumentAsync(CancellationToken.None);
+    var json = await document.SerializeAsJsonAsync(OpenApiSpecVersion.OpenApi3_1);
+
+    var fullPath = Path.GetFullPath(openApiOutputPath);
+    var directory = Path.GetDirectoryName(fullPath);
+    if (!string.IsNullOrEmpty(directory))
+        Directory.CreateDirectory(directory);
+
+    // R12: normalise to the host line-ending convention. The document is committed and
+    // consumed by Orval/Spectral, which choke on a BOM and on LF-in-a-CRLF-working-tree
+    // drift that made every build rewrite the tracked file and dirty `git status`.
+    var newline = Environment.NewLine;
+    var normalizedJson = json.Replace("\r\n", "\n").Replace("\n", newline);
+
+    await File.WriteAllTextAsync(fullPath, normalizedJson, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+    log.LogInformation("[OpenApi] Wrote {Path} ({Paths} paths, {Schemas} schemas)",
+        fullPath, document.Paths?.Count ?? 0, document.Components?.Schemas?.Count ?? 0);
+
+    // Hard gate: an empty document is the task_109 regression. Fail the build loudly
+    // rather than committing a document with no paths. Top-level statements cannot
+    // return an exit code, so set it explicitly — MSBuild's Exec surfaces it as a failure.
+    if (document.Paths is null || document.Paths.Count == 0)
+    {
+        log.LogError("[OpenApi] Generated document contains no paths — aborting to avoid committing a broken spec");
+        Environment.ExitCode = 2;
+    }
+
+    return;
+}
+
+// Serve HTTP. Guarded so the legacy GetDocument.Insider path (kept for compatibility,
+// no longer wired by the csproj) can never block the build on a listening socket.
+if (!isBuildTime)
+{
+    app.Run();
+}
+
+// --- Hercules Studio static hosting (ADR-0009) ---
+
+// Resolves the built Studio bundle for hosting at /ui.
+// Path resolution order: WebApi:StudioUiPath when absolute, otherwise relative to
+// the content root; finally a default that walks up from the content root to the
+// repo layout (src/hercules-studio/dist).
+// Returns null when nothing is found — static hosting is opt-in by presence, so an
+// agent without a built Studio simply does not serve /ui.
+static IFileProvider? ResolveStudioUiProvider(WebApiConfig cfg, string contentRoot, ILogger log)
+{
+    var candidates = new List<string>();
+
+    if (!string.IsNullOrWhiteSpace(cfg.StudioUiPath))
+    {
+        candidates.Add(Path.IsPathRooted(cfg.StudioUiPath)
+            ? cfg.StudioUiPath
+            : Path.Combine(contentRoot, cfg.StudioUiPath));
+    }
+
+    // Default: walk up from src/agent/Hercules.WebApi to src/hercules-studio/dist.
+    var dir = new DirectoryInfo(contentRoot);
+    for (var i = 0; i < 6 && dir is not null; i++, dir = dir.Parent)
+    {
+        var probe = Path.Combine(dir.FullName, "hercules-studio", "dist");
+        candidates.Add(probe);
+    }
+
+    foreach (var candidate in candidates)
+    {
+        if (!Directory.Exists(candidate)) continue;
+        if (!File.Exists(Path.Combine(candidate, "index.html")))
+        {
+            log.LogWarning("[StudioUi] {Path} has no index.html — skipping", candidate);
+            continue;
+        }
+        log.LogInformation("[StudioUi] Serving Hercules Studio from {Path} at {RequestPath}", candidate, StudioUiRequestPath);
+        return new PhysicalFileProvider(candidate);
+    }
+
+    if (!string.IsNullOrWhiteSpace(cfg.StudioUiPath))
+        log.LogWarning("[StudioUi] Configured path {Path} not found — /ui disabled", cfg.StudioUiPath);
+
+    return null;
+}

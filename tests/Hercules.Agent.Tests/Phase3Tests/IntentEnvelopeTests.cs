@@ -14,7 +14,7 @@ public class IntentEnvelopeTests
          "agent-a",
          "code-review",
          """{"message":"check this code"}""",
-         "http://localhost:5000/api/mesh/callback",
+         "http://localhost:8421/api/mesh/callback",
          15_000,
          "trace-123");
 
@@ -27,7 +27,7 @@ public class IntentEnvelopeTests
       Assert.Equal("req-001", restored.RequestId);
       Assert.Equal("agent-a", restored.Sender);
       Assert.Equal("code-review", restored.Intent);
-      Assert.Equal("http://localhost:5000/api/mesh/callback", restored.ReplyTo);
+      Assert.Equal("http://localhost:8421/api/mesh/callback", restored.ReplyTo);
       Assert.Equal("trace-123", restored.TraceId);
       Assert.NotNull(restored.Deadline);
       Assert.Equal("1.0", restored.Version);

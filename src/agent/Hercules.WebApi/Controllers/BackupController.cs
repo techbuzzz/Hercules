@@ -14,14 +14,14 @@ public static class BackupController
         {
             var result = await backup.CreateBackupAsync(request?.Passphrase, ct);
             return Results.Ok(result);
-        }).WithName("CreateBackup");
+        }).WithName("CreateBackup").WithTags("Backups");
 
         // GET /api/backups — список всех доступных backups.
         app.MapGet("/api/backups", async (IBackupService backup, CancellationToken ct) =>
         {
             var backups = await backup.ListBackupsAsync(ct);
             return Results.Ok(backups);
-        }).WithName("ListBackups");
+        }).WithName("ListBackups").WithTags("Backups");
 
         // POST /api/backups/{backupId}/restore — восстановить из backup archive.
         app.MapPost("/api/backups/{backupId}/restore", async (string backupId, RestoreBackupRequest? request, IBackupService backup, CancellationToken ct) =>
@@ -33,7 +33,7 @@ public static class BackupController
             }
 
             return Results.Ok(result);
-        }).WithName("RestoreBackup");
+        }).WithName("RestoreBackup").WithTags("Backups");
 
         // GET /api/backups/{backupId}/verify — проверить целостность backup archive.
         app.MapGet("/api/backups/{backupId}/verify", async (string backupId, string? passphrase, IBackupService backup, CancellationToken ct) =>
@@ -45,14 +45,14 @@ public static class BackupController
             }
 
             return Results.Ok(result);
-        }).WithName("VerifyBackup");
+        }).WithName("VerifyBackup").WithTags("Backups");
 
         // DELETE /api/backups/{backupId} — удалить backup archive.
         app.MapDelete("/api/backups/{backupId}", async (string backupId, IBackupService backup, CancellationToken ct) =>
         {
             await backup.DeleteBackupAsync(backupId, ct);
             return Results.NoContent();
-        }).WithName("DeleteBackup");
+        }).WithName("DeleteBackup").WithTags("Backups");
     }
 }
 

@@ -1,4 +1,5 @@
 using System.Net.Http;
+using Hercules.Slo;
 using Microsoft.Extensions.Logging;
 
 namespace Hercules.Offline;
@@ -8,15 +9,24 @@ namespace Hercules.Offline;
 ///     Raises <see cref="OnReconnected"/> when the network transitions from offline to online.
 ///     Raises <see cref="OnDisconnected"/> when the network transitions from online to offline.
 /// </summary>
-public sealed class NetworkMonitor : INetworkMonitor, IDisposable
+public sealed class NetworkMonitor : INetworkMonitor, IConnectivityStateProvider, IDisposable
 {
+    /// <summary>Имя named HttpClient-клиента для health-check polling (task_078).</summary>
+    public const string HttpClientName = "network-monitor";
+
     private readonly OfflineSyncConfig _config;
     private readonly ILogger<NetworkMonitor> _log;
-    private readonly HttpClient _http;
+    private readonly IHttpClientFactory? _httpFactory;
+    private readonly HttpClient? _ownedHttp; // legacy fallback
     private readonly object _lock = new();
 
     private volatile bool _isOnline;
     private volatile bool _disposed;
+    // task_087: track the wall-clock duration of the most recent offline→online
+    // transition so the SLO service can report real recovery time. Reset to
+    // TimeSpan.Zero on each successful reconnect.
+    private DateTimeOffset? _offlineSince;
+    private TimeSpan _lastOutageDuration;
 
     /// <summary>Fired when network becomes available after being offline.</summary>
     public event EventHandler? OnReconnected;
@@ -24,12 +34,54 @@ public sealed class NetworkMonitor : INetworkMonitor, IDisposable
     /// <summary>Fired when network goes offline.</summary>
     public event EventHandler? OnDisconnected;
 
-    public NetworkMonitor(OfflineSyncConfig config, ILogger<NetworkMonitor> log, HttpClient? http = null)
+    public NetworkMonitor(OfflineSyncConfig config, ILogger<NetworkMonitor> log)
+        : this(config, log, httpFactory: null, http: null)
+    {
+    }
+
+    /// <summary>
+    ///     Legacy / DI-test ctor: explicit <paramref name="http"/> для unit-тестов.
+    /// </summary>
+    public NetworkMonitor(OfflineSyncConfig config, ILogger<NetworkMonitor> log, HttpClient? http)
+        : this(config, log, httpFactory: null, http: http)
+    {
+    }
+
+    /// <summary>
+    ///     DI-friendly конструктор (task_078): использует <see cref="IHttpClientFactory"/>
+    ///     named-клиент "network-monitor" с short-lived <see cref="HttpClient"/> per check.
+    /// </summary>
+    public NetworkMonitor(
+        OfflineSyncConfig config,
+        ILogger<NetworkMonitor> log,
+        IHttpClientFactory httpFactory)
+        : this(config, log, httpFactory, http: null)
+    {
+    }
+
+    private NetworkMonitor(
+        OfflineSyncConfig config,
+        ILogger<NetworkMonitor> log,
+        IHttpClientFactory? httpFactory,
+        HttpClient? http)
     {
         _config = config;
         _log = log;
-        _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(config.NetworkPollTimeoutSeconds) };
+        _httpFactory = httpFactory;
+        _ownedHttp = http ?? (httpFactory is null
+            ? new HttpClient { Timeout = TimeSpan.FromSeconds(config.NetworkPollTimeoutSeconds) }
+            : null);
         _isOnline = false; // start assuming offline until first check
+    }
+
+    /// <summary>Короткоживущий клиент per check — через factory или legacy owned-экземпляр.</summary>
+    private HttpClient ResolveClient()
+    {
+        if (_httpFactory is not null)
+        {
+            return _httpFactory.CreateClient(HttpClientName);
+        }
+        return _ownedHttp!;
     }
 
     /// <summary>Current connectivity state.</summary>
@@ -62,19 +114,39 @@ public sealed class NetworkMonitor : INetworkMonitor, IDisposable
         try
         {
             using var req = new HttpRequestMessage(HttpMethod.Head, url);
-            var resp = await _http.SendAsync(req, ct);
+            using var client = ResolveClient();
+            var resp = await client.SendAsync(req, ct);
             var reachable = resp.IsSuccessStatusCode || resp.StatusCode == System.Net.HttpStatusCode.Unauthorized;
 
             if (reachable && !IsOnline)
             {
                 _log.LogInformation("NetworkMonitor: connectivity restored ({Url})", url);
                 IsOnline = true;
+                // task_087: capture outage duration for the SLO service. The
+                // measurement is taken under the lock so a concurrent
+                // IsOnline read cannot see a half-applied state.
+                lock (_lock)
+                {
+                    if (_offlineSince.HasValue)
+                    {
+                        _lastOutageDuration = DateTimeOffset.UtcNow - _offlineSince.Value;
+                        _offlineSince = null;
+                    }
+                }
                 OnReconnected?.Invoke(this, EventArgs.Empty);
             }
             else if (!reachable && IsOnline)
             {
                 _log.LogWarning("NetworkMonitor: connectivity lost ({Url})", url);
                 IsOnline = false;
+                // task_087: stamp the start of the outage.
+                lock (_lock)
+                {
+                    if (!_offlineSince.HasValue)
+                    {
+                        _offlineSince = DateTimeOffset.UtcNow;
+                    }
+                }
                 OnDisconnected?.Invoke(this, EventArgs.Empty);
             }
 
@@ -101,15 +173,32 @@ public sealed class NetworkMonitor : INetworkMonitor, IDisposable
         if (!string.IsNullOrWhiteSpace(_config.NetworkPollUrl))
             return _config.NetworkPollUrl;
 
-        // Fallback: use Mesh bus health endpoint if available
-        // The actual URL will be provided via NetworkPollUrl in config
-        return null;
+        // [task_087] Fall back to a well-known external endpoint instead of
+        // returning null (which would make NetworkMonitor report offline forever).
+        // The default points at Cloudflare 1.1.1.1; operators can override via
+        // OfflineSync.NetworkFallbackPollUrl in appsettings.json.
+        return string.IsNullOrWhiteSpace(_config.NetworkFallbackPollUrl) ? null : _config.NetworkFallbackPollUrl;
+    }
+
+    // ── IConnectivityStateProvider (task_087) ────────────────────────────────
+
+    /// <summary>
+    ///     Duration of the most recent offline→online transition. Returns
+    ///     <see cref="TimeSpan.Zero"/> when the node has not yet recovered
+    ///     from an outage during this process lifetime.
+    /// </summary>
+    public TimeSpan LastOutageDuration
+    {
+        get
+        {
+            lock (_lock) return _lastOutageDuration;
+        }
     }
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        _http.Dispose();
+        _ownedHttp?.Dispose();
     }
 }

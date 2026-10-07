@@ -1,0 +1,29 @@
+name: Add Discord bot
+description: Add a second chat interface — Discord bot alongside Telegram.
+labels: ["good first issue", "interface", "discord"]
+title: "[Good first issue] Add Discord bot interface"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hercules already has a Telegram bot (`src/agent/Hercules/Telegram/TelegramBot.cs`).
+        This issue asks for the same idea implemented for Discord.
+  - type: checkboxes
+    id: tasks
+    attributes:
+      label: Checklist
+      options:
+        - label: Read existing `TelegramBot.cs` to understand the adapter pattern
+        - label: Add a new project reference or package for Discord (e.g., `Discord.Net`)
+        - label: Implement `DiscordBot.cs` under `src/agent/Hercules/Discord/`
+        - label: Wire it into `Program.cs` behind `--discord` CLI flag
+        - label: Add config section `Discord: { Enabled, Token }` to `appsettings.json`
+        - label: Add minimal README in `docs/` or update `examples/`
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Tips for the implementer.
+      value: |
+        Reuse `AgentCore` via `WebApiAdapter` or call directly.
+        Keep parity with Telegram commands: `/start`, `/skills`, `/profile`, `/reset`.

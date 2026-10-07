@@ -43,20 +43,28 @@ dotnet run --project Hercules
 ```
 Введите запрос в REPL. Повторите один и тот же запрос 3 раза — агент предложит создать навык.
 
-## 5. Запуск Web API + фронтенда (plug-and-play конфигурация)
+## 5. Запуск Web API со Studio (plug-and-play конфигурация)
 ```bash
-# Терминал 1 — бэкенд (порт :5000)
+# Один процесс — агент сам раздаёт SPA Studio на /ui (ADR-0009)
 dotnet run --project Hercules.WebApi
-
-# Терминал 2 — фронтенд (порт :4321)
-cd hercules-web
-npm install
-cp .env.example .env   # при необходимости поправьте PUBLIC_API_BASE / PUBLIC_API_KEY
-npm run dev
 ```
-Откройте `http://localhost:4321` и перейдите в раздел **Настройки**.
+Откройте `http://localhost:8421/ui/` и перейдите в раздел **Конфигурация**.
 Там можно изменить LLM-провайдера, ключи, системный промпт и другие параметры —
 изменения применяются сразу, без перезагрузки сервера, и сохраняются в `data/runtime-config.json`.
+Секреты возвращаются замаскированными и никогда не записываются обратно.
+
+Для работы над UI с hot reload запустите dev-сервер Studio параллельно:
+
+```bash
+# Терминал 2 — dev-сервер Studio (порт :4330, base path /ui/)
+cd src/hercules-studio
+npm install
+npm run dev
+```
+Откройте `http://localhost:4330/ui/`.
+
+Отдельного процесса фронтенда и Electron-оболочки нет. Старый фронтенд на Astro
+(`src/hercules-web`) устарел — см. `src/hercules-web/DEPRECATED.md`.
 
 ## 6. Запуск Telegram-бота (опционально)
 ```bash
@@ -70,30 +78,24 @@ Hercules распространяется как папка с приложен�
 
 ### Публикация
 ```bash
-# Публикация бэкенда (self-contained или framework-dependent)
-dotnet publish src/agent/Hercules.WebApi -c Release -o ./dist/webapi
+# Сборка бандла Studio -> src/dist (раздаётся агентом на /ui)
+cd src/hercules-studio && npm ci && npm run build && cd ../..
 
-# Публикация фронтенда
-cd src/hercules-web
-npm install
-npm run build
-# статика окажется в src/hercules-web/dist
+# Публикация агента
+dotnet publish src/agent/Hercules.WebApi -c Release -o ./dist/webapi
 ```
 
 ### Запуск из папки
 ```bash
-# Бэкенд
+# Агент: отдаёт и API, и интерфейс на /ui
 ./dist/webapi/Hercules.WebApi
-
-# Фронтенд — можно раздать любым статическим сервером
-npx serve src/hercules-web/dist -p 4321
 ```
+Откройте `http://localhost:8421/ui/`.
 
 ### Рекомендуемая структура для пользователя
 ```
 Hercules/
-├── webapi/                 # публикация .NET
-├── web/                    # статика Astro
+├── webapi/                 # публикация .NET (включая раздачу UI на /ui)
 ├── data/                   # навыки, память, БД и runtime-config.json
 └── start.bat / start.sh    # удобные скрипты запуска
 ```
@@ -101,6 +103,6 @@ Hercules/
 > Важно: папка `data/` не должна попадать в git. В репозитории она уже в `.gitignore`.
 
 ## Что дальше
-- [Архитектура](ARCHITECTURE.md) — как устроен агент
-- [Конфигурация](CONFIGURATION.md) — все параметры
-- [API](API.md) — справочник REST-эндпоинтов
+- [Архитектура](ARCHITECTURE-RU.md) — как устроен агент
+- [Конфигурация](CONFIGURATION-RU.md) — все параметры
+- [API](API-RU.md) — справочник REST-эндпоинтов

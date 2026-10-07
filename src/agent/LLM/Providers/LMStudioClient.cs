@@ -11,15 +11,29 @@ namespace Hercules.LLM.Providers;
 /// </summary>
 public sealed class LMStudioClient : ILLMClient
 {
+    /// <summary>Имя named HttpClient-клиента для LM Studio detection (task_078).</summary>
+    public const string HttpClientName = "lm-studio-info";
+
     private readonly OpenAICompatibleConfig _cfg;
     private readonly ILLMClient _delegate;
     private readonly ILogger<LMStudioClient>? _logger;
+    private readonly IHttpClientFactory? _httpFactory;
 
     public LMStudioClient(OpenAICompatibleConfig cfg, ILogger<LMStudioClient>? logger = null)
+        : this(cfg, logger, httpFactory: null)
+    {
+    }
+
+    /// <summary>DI-friendly конструктор (task_078): использует named-клиент "lm-studio-info".</summary>
+    public LMStudioClient(
+        OpenAICompatibleConfig cfg,
+        ILogger<LMStudioClient>? logger,
+        IHttpClientFactory? httpFactory)
     {
         _cfg = cfg;
         _delegate = new OpenAICompatibleClient(cfg, "lmstudio");
         _logger = logger;
+        _httpFactory = httpFactory;
     }
 
     public string ProviderName => "lmstudio";
@@ -51,8 +65,8 @@ public sealed class LMStudioClient : ILLMClient
                 baseUrl = baseUrl[..^3];
             }
 
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            var response = await http.GetStringAsync($"{baseUrl}/api/info", ct);
+            using var client = ResolveClient();
+            var response = await client.GetStringAsync($"{baseUrl}/api/info", ct);
             return JsonSerializer.Deserialize<LMStudioInfo>(response, LMStudioInfoOptions);
         }
         catch (Exception ex)
@@ -60,6 +74,15 @@ public sealed class LMStudioClient : ILLMClient
             _logger?.LogWarning(ex, "LM Studio /api/info failed at {Endpoint}", _cfg.Endpoint);
             return null;
         }
+    }
+
+    private HttpClient ResolveClient()
+    {
+        if (_httpFactory is not null)
+        {
+            return _httpFactory.CreateClient(HttpClientName);
+        }
+        return new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
     }
 
     private static readonly JsonSerializerOptions LMStudioInfoOptions = new()

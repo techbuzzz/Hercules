@@ -16,7 +16,7 @@ public sealed class DurableFactsService : IDurableFactsStore
 
     public DurableFactsService(StorageConfig storageConfig)
     {
-        _dir = Path.Combine(storageConfig.DataRoot, storageConfig.MemoryDir, "DurableFacts");
+        _dir = Path.Combine(storageConfig.DataRoot, storageConfig.MemoryDir, Hercules.BuiltIn.DurableFactsSubdir);
         Directory.CreateDirectory(_dir);
     }
 

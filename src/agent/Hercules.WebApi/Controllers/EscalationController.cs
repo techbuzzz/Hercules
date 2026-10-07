@@ -1,5 +1,7 @@
 using Hercules.Mesh.Escalation;
 
+using Hercules.WebApi.Contracts;
+
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
@@ -28,7 +30,8 @@ public static class EscalationController
                 count = pending.Count,
                 escalations = pending.Select(ToDto).ToList()
             });
-        }).WithName("ListPendingEscalations");
+        }).WithName("ListPendingEscalations").WithTags("Escalations")
+          .Produces<PendingEscalationsResponseDto>(200);
 
         // GET /api/escalations/{id} — get specific escalation
         app.MapGet("/api/escalations/{id}", (
@@ -39,7 +42,7 @@ public static class EscalationController
             return result is null
                 ? Results.NotFound(new { error = $"Escalation '{id}' not found." })
                 : Results.Ok(ToDto(result));
-        }).WithName("GetEscalation");
+        }).WithName("GetEscalation").WithTags("Escalations");
 
         // POST /api/escalations/{id}/approve — approve one escalation
         app.MapPost("/api/escalations/{id}/approve", async (
@@ -58,7 +61,7 @@ public static class EscalationController
                 id,
                 status = "Approved"
             });
-        }).WithName("ApproveEscalation");
+        }).WithName("ApproveEscalation").WithTags("Escalations");
 
         // POST /api/escalations/{id}/deny — deny one escalation
         app.MapPost("/api/escalations/{id}/deny", async (
@@ -77,7 +80,7 @@ public static class EscalationController
                 id,
                 status = "Denied"
             });
-        }).WithName("DenyEscalation");
+        }).WithName("DenyEscalation").WithTags("Escalations");
 
         // POST /api/escalations/batch-approve — batch approve multiple escalations
         app.MapPost("/api/escalations/batch-approve", async (
@@ -96,7 +99,7 @@ public static class EscalationController
                 approved,
                 total = body.Ids.Count
             });
-        }).WithName("BatchApproveEscalations");
+        }).WithName("BatchApproveEscalations").WithTags("Escalations");
     }
 
     private static object ToDto(EscalationResult r) => new

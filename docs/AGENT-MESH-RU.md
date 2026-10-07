@@ -106,7 +106,7 @@ Hercules спроектирован как **микро-агент**: миним
     "message": "Refactor this method to use async/await",
     "context": { "file": "Program.cs", "line": 42 }
   },
-  "replyTo": "http://localhost:5000/api/mesh/callback",
+  "replyTo": "http://localhost:8421/api/mesh/callback",
   "timeoutMs": 30000,
   "traceId": "abc123"
 }

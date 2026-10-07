@@ -1,9 +1,11 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hercules.LLM;
 using Hercules.Mesh.Router;
 using Hercules.Mesh.Schema;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
 
 namespace Hercules.Mesh.Aggregation;
 
@@ -14,6 +16,10 @@ namespace Hercules.Mesh.Aggregation;
 /// </summary>
 public sealed class ResponseAggregator
 {
+    // task_084: pooled StringBuilder for LLM-judge prompt assembly.
+    private static readonly ObjectPool<StringBuilder> SbPool =
+        new DefaultObjectPoolProvider().CreateStringBuilderPool();
+
     private readonly FanOutOptions _options;
     private readonly ILLMClient? _llm;
     private readonly ILogger<ResponseAggregator> _logger;
@@ -205,28 +211,37 @@ public sealed class ResponseAggregator
 
         try
         {
-            var sb = new System.Text.StringBuilder();
-            for (var i = 0; i < responses.Count; i++)
+            // task_084: pooled StringBuilder.
+            var sb = SbPool.Get();
+            string prompt;
+            try
             {
-                var r = responses[i];
-                sb.Append($"### [{i + 1}] от {r.Agent} (confidence={r.Confidence?.ToString("P0") ?? "n/a"}, mode={r.Mode})\n");
-                sb.Append(r.Result ?? "(пустой ответ)");
-                sb.Append("\n\n");
-            }
+                for (var i = 0; i < responses.Count; i++)
+                {
+                    var r = responses[i];
+                    sb.Append($"### [{i + 1}] от {r.Agent} (confidence={r.Confidence?.ToString("P0") ?? "n/a"}, mode={r.Mode})\n");
+                    sb.Append(r.Result ?? "(пустой ответ)");
+                    sb.Append("\n\n");
+                }
 
-            var prompt = string.Join("\n",
-                "Ты — судья (LLM-judge) в multi-agent системе. Пользователь задал вопрос,",
-                "и несколько агентов дали ответы. Выбери лучший ответ.",
-                "",
-                $"Вопрос: {envelope.Payload}",
-                "",
-                sb.ToString(),
-                "",
-                "Верни СТРОГО валидный JSON:",
-                "{",
-                "  \"best_index\": <номер лучшего варианта, начиная с 1>,",
-                "  \"rationale\": \"<краткое объяснение выбора на русском, 1-2 предложения>\"",
-                "}");
+                prompt = string.Join("\n",
+                    "Ты — судья (LLM-judge) в multi-agent системе. Пользователь задал вопрос,",
+                    "и несколько агентов дали ответы. Выбери лучший ответ.",
+                    "",
+                    $"Вопрос: {envelope.Payload}",
+                    "",
+                    sb.ToString(),
+                    "",
+                    "Верни СТРОГО валидный JSON:",
+                    "{",
+                    "  \"best_index\": <номер лучшего варианта, начиная с 1>,",
+                    "  \"rationale\": \"<краткое объяснение выбора на русском, 1-2 предложения>\"",
+                    "}");
+            }
+            finally
+            {
+                SbPool.Return(sb);
+            }
 
             LlmResponse llmResp = await _llm.CompleteAsync([
                 new ChatTurn(ChatRole.System, "Ты — LLM-judge. Возвращаешь только валидный JSON."),

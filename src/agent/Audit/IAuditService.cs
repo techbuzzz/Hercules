@@ -81,4 +81,28 @@ public interface IAuditService
         DateTime? to = null,
         int limit = 100,
         CancellationToken ct = default);
+
+    /// <summary>
+    ///     Aggregated counts for an <paramref name="action" /> within a time window.
+    ///     Use instead of <see cref="QueryAsync" /> with a large <c>limit</c> when only
+    ///     totals are needed (avoids loading N rows into memory). Returns total + counts
+    ///     grouped by result class (success, failure, timeout, denied).
+    /// </summary>
+    Task<AuditActionStats> GetActionStatsAsync(
+        string action,
+        DateTime? from = null,
+        DateTime? to = null,
+        CancellationToken ct = default);
 }
+
+/// <summary>
+///     Aggregate stats for a single audit action within a time window.
+///     Returned by <see cref="IAuditService.GetActionStatsAsync" />; replaces the
+///     100k-row <c>QueryAsync</c> hot path in SLO evaluation.
+/// </summary>
+public sealed record AuditActionStats(
+    int Total,
+    int Successes,
+    int Failures,
+    int Timeouts,
+    int Denied);

@@ -41,18 +41,25 @@ dotnet run --project Hercules
 ```
 Enter a query in the REPL. Repeat the same query 3 times — the agent will propose creating a skill.
 
-## 5. Run the Web API + Frontend (optional)
+## 5. Run the Web API with Studio (optional)
 ```bash
-# Terminal 1 — backend (port :5000)
+# Single process — the agent serves the Studio SPA at /ui (ADR-0009)
 dotnet run --project Hercules.WebApi
+```
+Open `http://localhost:8421/ui/`.
 
-# Terminal 2 — frontend (port :4321)
-cd hercules-web
+For UI work with hot reload, run the Studio dev server alongside it:
+
+```bash
+# Terminal 2 — Studio dev server (port :4330, base path /ui/)
+cd src/hercules-studio
 npm install
-cp .env.example .env   # adjust PUBLIC_API_BASE / PUBLIC_API_KEY if needed
 npm run dev
 ```
-Open `http://localhost:4321`.
+Open `http://localhost:4330/ui/`.
+
+There is no separate frontend process and no Electron shell. The old Astro frontend
+(`src/hercules-web`) is deprecated — see `src/hercules-web/DEPRECATED.md`.
 
 ## 6. Run the Telegram Bot (optional)
 ```bash
@@ -62,6 +69,6 @@ dotnet run --project Hercules -- --telegram
 ```
 
 ## What's Next
-- [Architecture](ARCHITECTURE.md) — how the agent is structured
-- [Configuration](CONFIGURATION.md) — all parameters
-- [API](API.md) — REST endpoint reference
+- [Architecture](ARCHITECTURE-EN.md) — how the agent is structured
+- [Configuration](CONFIGURATION-EN.md) — all parameters
+- [API](API-EN.md) — REST endpoint reference

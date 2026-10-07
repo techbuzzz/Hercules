@@ -141,9 +141,9 @@ public sealed class SharedMemorySync : IDisposable
         _config = config ?? new SharedMemorySyncConfig();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        var sharedDir = Path.Combine(dataRoot, "Memory", "shared");
+        var sharedDir = Path.Combine(dataRoot, Hercules.BuiltIn.MemorySubdir, Hercules.BuiltIn.SharedMemorySubdir);
         Directory.CreateDirectory(sharedDir);
-        SharedMemoryPath = Path.Combine(sharedDir, "shared_facts.json");
+        SharedMemoryPath = Path.Combine(sharedDir, Hercules.BuiltIn.SharedFactsFileName);
     }
 
     /// <summary>Путь к файлу локальных shared-фактов.</summary>
@@ -353,9 +353,14 @@ public sealed class SharedMemorySync : IDisposable
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip peer on error
+                // [task_087] log the error instead of silently swallowing it.
+                // Per-peer failures should not abort the overall sync loop, but
+                // the operator must see why a particular peer was skipped.
+                _logger.LogWarning(ex,
+                    "[SharedMemory] Skip peer {PeerId} on sync error ({ErrorType})",
+                    peer.AgentId, ex.GetType().Name);
             }
         }
 

@@ -18,8 +18,8 @@ public sealed class MeshAuditConfig
     /// <summary>Enable JSON Lines file sink. Default: false (structured log is the primary).</summary>
     public bool FileSinkEnabled { get; set; } = false;
 
-    /// <summary>Directory for JSON Lines audit files. Default: "data/mesh-audit".</summary>
-    public string FileSinkDirectory { get; set; } = "mesh-audit";
+    /// <summary>Directory for JSON Lines audit files. Default: "mesh-audit".</summary>
+    public string FileSinkDirectory { get; set; } = Hercules.BuiltIn.MeshAuditSubdir;
 
     /// <summary>
     ///     Compute and store SHA-256 hash of payloads and responses.

@@ -1,0 +1,392 @@
+---
+// Trust Admission Policy panel (Phase 7 task_091).
+// Read-only карточка текущей policy + форма dry-run для проверки,
+// пройдёт ли конкретный IntentEnvelope через policy engine.
+// mode flip делается через config reload, не из web.
+---
+
+<div class="flex flex-col gap-5" id="trust-admission-panel">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">Trust Admission Policy</h2>
+      <p class="text-xs text-gray-500">
+        Текущая policy и dry-run evaluator для inter-agent запросов. Mode flip — через config reload.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="policy-updated" class="text-xs text-gray-600"></span>
+      <button id="policy-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- Error / ok banners -->
+  <div id="policy-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+  <div id="policy-ok" class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"></div>
+
+  <!-- === POLICY STATUS (read-only) === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">Текущая policy</h3>
+      <div class="flex items-center gap-2">
+        <span id="policy-mode-badge" class="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] text-gray-400">…</span>
+        <span id="policy-enabled-badge" class="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[11px] text-gray-400">…</span>
+      </div>
+    </div>
+    <div id="policy-status-empty" class="py-6 text-center text-xs text-gray-500">
+      Нет данных. Нажмите «Обновить».
+    </div>
+    <div id="policy-status" class="hidden flex-col gap-3">
+      <div class="grid gap-3 lg:grid-cols-2">
+        <div>
+          <div class="mb-1 text-[11px] uppercase tracking-wide text-gray-500">Trust levels</div>
+          <div id="policy-trust-levels" class="flex flex-wrap gap-1"></div>
+        </div>
+        <div>
+          <div class="mb-1 text-[11px] uppercase tracking-wide text-gray-500">Intents</div>
+          <div id="policy-intents" class="flex flex-wrap gap-1"></div>
+        </div>
+        <div>
+          <div class="mb-1 text-[11px] uppercase tracking-wide text-gray-500">Classifications</div>
+          <div id="policy-classifications" class="flex flex-wrap gap-1"></div>
+        </div>
+        <div>
+          <div class="mb-1 text-[11px] uppercase tracking-wide text-gray-500">Risk levels</div>
+          <div id="policy-risk-levels" class="flex flex-wrap gap-1"></div>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 border-t border-white/5 pt-3 text-xs">
+        <span class="text-gray-500">Schema mismatch:</span>
+        <span id="policy-schema-mismatch" class="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-gray-400">…</span>
+        <span class="text-gray-500">Budget exceeded:</span>
+        <span id="policy-budget-exceeded" class="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-gray-400">…</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- === DRY-RUN FORM === -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-1 text-sm font-medium text-gray-300">Dry-run evaluation</h3>
+    <p class="mb-3 text-xs text-gray-500">
+      Подставьте параметры запроса и проверьте, пройдёт ли он через policy engine. Запрос не отправляется peer-агенту.
+    </p>
+    <form id="policy-dryrun-form" class="grid gap-3 sm:grid-cols-2">
+      <div class="sm:col-span-2">
+        <label for="dr-intent" class="mb-1 block text-[11px] text-gray-500">Intent <span class="text-rose-400">*</span></label>
+        <input id="dr-intent" type="text" required placeholder="например: csharp-refactor"
+          class="mono w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+      </div>
+      <div>
+        <label for="dr-trust" class="mb-1 block text-[11px] text-gray-500">Caller trust level</label>
+        <select id="dr-trust"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 focus:border-violet-500/50 focus:outline-none">
+          <option value="">∅ (не задан)</option>
+          <option value="Unverified">Unverified</option>
+          <option value="Sandbox">Sandbox</option>
+          <option value="Basic">Basic</option>
+          <option value="Trusted">Trusted</option>
+          <option value="Privileged">Privileged</option>
+        </select>
+      </div>
+      <div>
+        <label for="dr-classification" class="mb-1 block text-[11px] text-gray-500">Data classification</label>
+        <select id="dr-classification"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 focus:border-violet-500/50 focus:outline-none">
+          <option value="">∅ (не задан)</option>
+          <option value="Public">Public</option>
+          <option value="Internal">Internal</option>
+          <option value="Confidential">Confidential</option>
+          <option value="Restricted">Restricted</option>
+        </select>
+      </div>
+      <div>
+        <label for="dr-risk" class="mb-1 block text-[11px] text-gray-500">Risk level</label>
+        <select id="dr-risk"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 focus:border-violet-500/50 focus:outline-none">
+          <option value="">∅ (не задан)</option>
+          <option value="Low">Low</option>
+          <option value="Medium">Medium</option>
+          <option value="High">High</option>
+        </select>
+      </div>
+      <div>
+        <label for="dr-schema" class="mb-1 block text-[11px] text-gray-500">Caller schema version</label>
+        <input id="dr-schema" type="text" placeholder="например: 1.0"
+          class="mono w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+      </div>
+      <div>
+        <label for="dr-target" class="mb-1 block text-[11px] text-gray-500">Target agent ID</label>
+        <input id="dr-target" type="text" placeholder="например: peer-agent-1"
+          class="mono w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+      </div>
+      <div class="sm:col-span-2">
+        <label for="dr-sender" class="mb-1 block text-[11px] text-gray-500">Sender (caller agent ID)</label>
+        <input id="dr-sender" type="text" required placeholder="например: hercules-local"
+          class="mono w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+      </div>
+      <div class="sm:col-span-2">
+        <label for="dr-payload" class="mb-1 block text-[11px] text-gray-500">Payload (JSON)</label>
+        <textarea id="dr-payload" rows="2"
+          class="mono w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none">{}</textarea>
+      </div>
+      <div class="sm:col-span-2 flex items-center justify-between gap-2">
+        <span class="text-[11px] text-gray-500">
+          Подсказка: при <code class="mono text-gray-400">AllowedClassifications=[Public,Internal]</code> и
+          classification=Restricted результат будет Denied + reason.
+        </span>
+        <button type="submit" id="dr-submit"
+          class="rounded-lg border border-violet-500/30 bg-violet-500/10 px-4 py-1.5 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/20">
+          Dry-run
+        </button>
+      </div>
+    </form>
+
+    <!-- Dry-run result -->
+    <div id="dr-result" class="mt-3 hidden"></div>
+  </section>
+</div>
+
+<script>
+  import {
+    api,
+    type TrustAdmissionPolicyStatusDto,
+    type TrustAdmissionDryRunRequestDto,
+    type TrustAdmissionDryRunResultDto,
+  } from "../lib/api";
+
+  const errBanner = document.getElementById("policy-error")!;
+  const okBanner = document.getElementById("policy-ok")!;
+  const updatedEl = document.getElementById("policy-updated")!;
+
+  const refreshBtn = document.getElementById("policy-refresh")!;
+  const modeBadge = document.getElementById("policy-mode-badge")!;
+  const enabledBadge = document.getElementById("policy-enabled-badge")!;
+
+  const statusEmpty = document.getElementById("policy-status-empty")!;
+  const statusBlock = document.getElementById("policy-status")!;
+  const trustLevelsEl = document.getElementById("policy-trust-levels")!;
+  const intentsEl = document.getElementById("policy-intents")!;
+  const classificationsEl = document.getElementById("policy-classifications")!;
+  const riskLevelsEl = document.getElementById("policy-risk-levels")!;
+  const schemaMismatchEl = document.getElementById("policy-schema-mismatch")!;
+  const budgetExceededEl = document.getElementById("policy-budget-exceeded")!;
+
+  const drForm = document.getElementById("policy-dryrun-form") as HTMLFormElement;
+  const drIntent = document.getElementById("dr-intent") as HTMLInputElement;
+  const drTrust = document.getElementById("dr-trust") as HTMLSelectElement;
+  const drClassification = document.getElementById("dr-classification") as HTMLSelectElement;
+  const drRisk = document.getElementById("dr-risk") as HTMLSelectElement;
+  const drSchema = document.getElementById("dr-schema") as HTMLInputElement;
+  const drTarget = document.getElementById("dr-target") as HTMLInputElement;
+  const drSender = document.getElementById("dr-sender") as HTMLInputElement;
+  const drPayload = document.getElementById("dr-payload") as HTMLTextAreaElement;
+  const drSubmit = document.getElementById("dr-submit") as HTMLButtonElement;
+  const drResult = document.getElementById("dr-result")!;
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = message;
+    errBanner.classList.remove("hidden");
+    okBanner.classList.add("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+  function showOk(message: string): void {
+    okBanner.textContent = message;
+    okBanner.classList.remove("hidden");
+    errBanner.classList.add("hidden");
+    setTimeout(() => okBanner.classList.add("hidden"), 2500);
+  }
+
+  // ---- Render: PolicyStatusDto -> HTML ----
+  function modeBadgeClass(mode: string): string {
+    const m = mode.toLowerCase();
+    if (m === "enforce") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
+    if (m === "dryrun") return "border-amber-500/30 bg-amber-500/10 text-amber-300";
+    if (m === "disabled") return "border-white/10 bg-white/5 text-gray-500";
+    return "border-white/10 bg-white/5 text-gray-400";
+  }
+
+  function chip(value: string): string {
+    return `<span class="mono rounded bg-white/5 px-2 py-0.5 text-[11px] text-gray-300">${escapeHtml(value)}</span>`;
+  }
+
+  function emptyChip(message: string): string {
+    return `<span class="text-[11px] text-gray-500">${escapeHtml(message)}</span>`;
+  }
+
+  function renderStatus(p: TrustAdmissionPolicyStatusDto): void {
+    statusEmpty.classList.add("hidden");
+    statusBlock.classList.remove("hidden");
+    statusBlock.classList.add("flex");
+
+    modeBadge.textContent = `mode: ${p.mode}`;
+    modeBadge.className = `rounded-full border px-2.5 py-0.5 text-[11px] ${modeBadgeClass(p.mode)}`;
+
+    enabledBadge.textContent = p.enabled ? "enabled" : "disabled";
+    enabledBadge.className = `rounded-full border px-2.5 py-0.5 text-[11px] ${
+      p.enabled
+        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+        : "border-white/10 bg-white/5 text-gray-500"
+    }`;
+
+    trustLevelsEl.innerHTML = p.allowedTrustLevels.length
+      ? p.allowedTrustLevels.map(chip).join("")
+      : emptyChip("пусто — все уровни разрешены");
+    intentsEl.innerHTML = p.allowedIntents.length
+      ? p.allowedIntents.map(chip).join("")
+      : emptyChip("пусто — все intents разрешены");
+    classificationsEl.innerHTML = p.allowedClassifications.length
+      ? p.allowedClassifications.map(chip).join("")
+      : emptyChip("пусто — все classifications разрешены");
+    riskLevelsEl.innerHTML = p.allowedRiskLevels.length
+      ? p.allowedRiskLevels.map(chip).join("")
+      : emptyChip("пусто — все risk levels разрешены");
+
+    schemaMismatchEl.className = `rounded-full border px-2 py-0.5 text-[11px] ${
+      p.allowSchemaMismatch
+        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+        : "border-rose-500/30 bg-rose-500/10 text-rose-300"
+    }`;
+    schemaMismatchEl.textContent = p.allowSchemaMismatch ? "allow" : "deny";
+    budgetExceededEl.className = `rounded-full border px-2 py-0.5 text-[11px] ${
+      p.allowBudgetExceeded
+        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+        : "border-rose-500/30 bg-rose-500/10 text-rose-300"
+    }`;
+    budgetExceededEl.textContent = p.allowBudgetExceeded ? "allow" : "deny";
+  }
+
+  // ---- Render: DryRunResult -> HTML ----
+  function renderResult(r: TrustAdmissionDryRunResultDto): string {
+    if (r.allowed) {
+      return `
+        <div class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold">✓ Allowed</span>
+            <span class="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+              mode=${escapeHtml(r.effectiveMode)}
+            </span>
+            ${r.dryRun ? `<span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">dryRun=true</span>` : ""}
+          </div>
+          <div class="mt-1 text-[11px] text-emerald-300/80">
+            Запрос прошёл бы через policy engine. Реальный enforcement зависит от effective mode.
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-semibold">✗ Denied</span>
+          ${r.denialCode ? `<span class="mono rounded bg-rose-500/20 px-2 py-0.5 text-[10px] text-rose-300">${escapeHtml(r.denialCode)}</span>` : ""}
+          <span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">
+            mode=${escapeHtml(r.effectiveMode)}
+          </span>
+          ${r.dryRun ? `<span class="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">dryRun=true</span>` : ""}
+        </div>
+        ${r.denialReason ? `<div class="mt-1 text-[11px] text-rose-300/90">${escapeHtml(r.denialReason)}</div>` : ""}
+      </div>`;
+  }
+
+  // ---- Actions ----
+  async function loadStatus(): Promise<void> {
+    clearError();
+    try {
+      const p = await api.getPolicyStatus();
+      renderStatus(p);
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить policy status: ${msg}`);
+      statusEmpty.classList.remove("hidden");
+      statusBlock.classList.add("hidden");
+      statusBlock.classList.remove("flex");
+    }
+  }
+
+  refreshBtn.addEventListener("click", () => {
+    void loadStatus();
+  });
+
+  function newRequestId(): string {
+    // ULID-ish: timestamp + random suffix. Doesn't need to be a real ULID —
+    // the backend just echoes it back, and uniqueness matters only for
+    // audit/debug, not for correctness.
+    const ts = Date.now().toString(36);
+    const rnd = Math.random().toString(36).slice(2, 10);
+    return `${ts}${rnd}`;
+  }
+
+  function buildPayloadSize(p: string): number {
+    // Approximate token count: payload.length / 4 — matches backend's heuristic
+    // for `CheckBudgetExceeded` (Estimated input tokens).
+    return Math.ceil(p.length / 4);
+  }
+
+  drForm.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    clearError();
+    drResult.classList.add("hidden");
+    drResult.innerHTML = `<div class="text-xs text-gray-500">Dry-run…</div>`;
+    drResult.classList.remove("hidden");
+    drSubmit.setAttribute("disabled", "true");
+
+    const payloadText = drPayload.value.trim() || "{}";
+    const intent = drIntent.value.trim();
+    const sender = drSender.value.trim();
+    const classification = drClassification.value || null;
+    const risk = drRisk.value || null;
+    const trust = drTrust.value || null;
+    const schema = drSchema.value.trim() || null;
+    const target = drTarget.value.trim() || null;
+
+    const req: TrustAdmissionDryRunRequestDto = {
+      envelope: {
+        request_id: newRequestId(),
+        sender: sender || "hercules-local",
+        intent,
+        payload: payloadText,
+        version: "1.0",
+      },
+      targetAgentId: target,
+      callerTrustLevel: trust,
+      dataClassification: classification,
+      callerSchemaVersion: schema,
+      requestedRiskLevel: risk,
+    };
+
+    try {
+      const result = await api.dryRunPolicy(req);
+      drResult.classList.add("hidden");
+      drResult.innerHTML = renderResult(result);
+      drResult.classList.remove("hidden");
+      // Lightweight token-count hint for operator.
+      const tokens = buildPayloadSize(payloadText);
+      showOk(`Dry-run завершён · payload ≈ ${tokens} tokens · ${result.allowed ? "Allowed" : "Denied"}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      drResult.classList.add("hidden");
+      drResult.innerHTML = `<div class="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">✗ ${escapeHtml(msg)}</div>`;
+      drResult.classList.remove("hidden");
+    } finally {
+      drSubmit.removeAttribute("disabled");
+    }
+  });
+
+  // Initial load
+  void loadStatus();
+</script>

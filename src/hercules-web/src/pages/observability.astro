@@ -1,0 +1,16 @@
+---
+import Layout from "../layouts/Layout.astro";
+import MeshObservabilityPanel from "../components/MeshObservabilityPanel.astro";
+---
+
+<Layout title="Hercules · Observability" active="observability">
+  <div class="mb-4">
+    <h1 class="text-xl font-semibold text-white">Observability</h1>
+    <p class="text-sm text-gray-400">
+      Сырые mesh-counters, последние traces и logs из MeshObservability.
+      <span class="text-gray-500">(Phase 7 task_093)</span>
+    </p>
+  </div>
+
+  <MeshObservabilityPanel />
+</Layout>

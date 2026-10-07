@@ -15,7 +15,7 @@ public sealed class EpisodicStore : IEpisodicStore
 
     public EpisodicStore(StorageConfig storageConfig)
     {
-        _dir = Path.Combine(storageConfig.DataRoot, storageConfig.MemoryDir, "Episodes");
+        _dir = Path.Combine(storageConfig.DataRoot, storageConfig.MemoryDir, Hercules.BuiltIn.EpisodesSubdir);
         Directory.CreateDirectory(_dir);
     }
 

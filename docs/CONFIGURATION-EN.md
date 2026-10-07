@@ -73,12 +73,12 @@ HERCULES_Telegram__Enabled=true
 | Key | Description | Default |
 |------|----------|--------------|
 | `ApiKey` | Key for the `X-Api-Key` header; empty string disables authorization | `dev-local-key` |
-| `AllowedCorsOrigins` | Allowed CORS origins | `["http://localhost:4321","http://localhost:3000"]` |
+| `AllowedCorsOrigins` | Allowed CORS origins | `["http://localhost:4330"]` (Studio dev server) |
 
-## Frontend (`hercules-web/.env`)
-| Variable | Description |
-|------------|----------|
-| `PUBLIC_API_BASE` | Web API base URL (e.g. `http://localhost:5000`) |
-| `PUBLIC_API_KEY` | `X-Api-Key` value for requests |
+## Frontend
+
+None. The agent serves the Studio SPA itself at `/ui` (ADR-0009), so there is no `.env` and
+no separate frontend process. `4322`/`4330`/`8421` on localhost are allowed in dev by
+default (`Program.cs`); production should set `AllowedCorsOrigins` explicitly.
 
 > ⚠️ Do not commit real keys. Use environment variables and keep `data/` out of the repository.

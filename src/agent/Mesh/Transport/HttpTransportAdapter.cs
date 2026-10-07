@@ -16,6 +16,9 @@ namespace Hercules.Mesh.Transport;
 /// </summary>
 public sealed class HttpTransportAdapter : ITransport, IDisposable
 {
+    /// <summary>Имя named HttpClient-клиента для inter-agent HTTP transport (task_078).</summary>
+    public const string HttpClientName = "http-transport";
+
     private readonly HttpClient _http;
     private readonly ICapabilityLookup _registry;
     private readonly IPeerCredentialProvider? _credentials;
@@ -34,15 +37,39 @@ public sealed class HttpTransportAdapter : ITransport, IDisposable
 
     /// <summary>
     ///     Создать адаптер с собственным <see cref="HttpClient"/> (CLI-режим без DI).
+    ///     task_078: prefer <see cref="IHttpClientFactory"/> для connection pooling;
+    ///     fallback на <c>new HttpClient</c> только если factory == null.
     /// </summary>
     public HttpTransportAdapter(ICapabilityLookup registry, int defaultTimeoutMs = 30_000)
+        : this(registry, defaultTimeoutMs, httpFactory: null)
+    {
+    }
+
+    /// <summary>
+    ///     DI-friendly legacy ctor (task_078): использует named-клиент из factory
+    ///     при наличии; иначе создаёт собственный экземпляр.
+    /// </summary>
+    public HttpTransportAdapter(
+        ICapabilityLookup registry,
+        int defaultTimeoutMs,
+        IHttpClientFactory? httpFactory)
     {
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-        _http = new HttpClient { Timeout = TimeSpan.FromMilliseconds(defaultTimeoutMs) };
+        if (httpFactory is not null)
+        {
+            var client = httpFactory.CreateClient(IntentTransport.HttpClientName);
+            client.Timeout = TimeSpan.FromMilliseconds(defaultTimeoutMs);
+            _http = client;
+            _weOwnClient = false;
+        }
+        else
+        {
+            _http = new HttpClient { Timeout = TimeSpan.FromMilliseconds(defaultTimeoutMs) };
+            _weOwnClient = true;
+        }
         DefaultTimeoutMs = defaultTimeoutMs;
         _credentials = null;
         _meshObs = null;
-        _weOwnClient = true;
     }
 
     /// <summary>

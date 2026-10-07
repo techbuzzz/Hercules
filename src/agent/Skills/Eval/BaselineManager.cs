@@ -23,7 +23,7 @@ public sealed class BaselineManager
 
     public BaselineManager(StorageConfig storageConfig, ILogger<BaselineManager> logger)
     {
-        _baselinesDir = Path.Combine(storageConfig.DataRoot, "skills", ".baselines");
+        _baselinesDir = Path.Combine(storageConfig.DataRoot, storageConfig.SkillsDir, Hercules.BuiltIn.BaselinesSubdir);
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         Directory.CreateDirectory(_baselinesDir);
     }

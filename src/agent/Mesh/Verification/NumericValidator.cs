@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 
@@ -76,7 +77,7 @@ public sealed partial class NumericValidator : IVerifier
     private static bool PlausibleCurrency(string value, string unit, out string issue)
     {
         issue = "";
-        if (!decimal.TryParse(value.Replace(",", ""), out var amount))
+        if (!decimal.TryParse(Numeric(value), out var amount))
             return false;
 
         var u = unit.Trim();
@@ -92,13 +93,25 @@ public sealed partial class NumericValidator : IVerifier
         return false;
     }
 
+    /// <summary>
+    ///     R19: strips an optional leading currency symbol and trailing percent sign so
+    ///     "$1 200", "1200%" and "1.200,50" all parse. Group 1 of <see cref="NumericPattern"/>
+    ///     may now carry a "$" prefix, which <c>double.TryParse</c> rejects outright.
+    /// </summary>
+    private static string Numeric(string value) =>
+        value.Replace(",", "").Replace("%", "").Replace("$", "").Replace("€", "").Replace("£", "").Trim();
+
     private static bool PlausiblePercentage(string value, out string issue)
     {
         issue = "";
-        if (!double.TryParse(value.Replace("%", "").Trim(), out var pct))
+        if (!double.TryParse(Numeric(value), NumberStyles.Float, CultureInfo.InvariantCulture, out var pct))
             return false;
 
-        if (pct is < -100 or > 10000)
+        // R19: the previous bound of 10 000 let "99999 %" pass as plausible. Percentages
+        // below -100 are impossible, and above 1000 are not credible as a rate/share
+        // claim. Growth figures legitimately exceed 100 %, so the ceiling stays well
+        // above 100 rather than clamping to it.
+        if (pct is < -100 or > 1000)
         {
             issue = $"Implausible percentage: {value}";
             return true;
@@ -141,6 +154,35 @@ public sealed partial class NumericValidator : IVerifier
         return false;
     }
 
-    [GeneratedRegex(@"(\d[\d\s.,]*)\s*(%|percent|\$|usd|eur|gbp|kb|mb|gb|tb|b|кб|мб|гб|км|м|cm|mm|years?|days?|months?)\b\s*(.{0,30})", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
+    /// <summary>
+///     Matches a numeric assertion: an optional currency symbol, the number, a unit,
+///     and a short trailing context used for date sanity checks.
+/// </summary>
+/// <remarks>
+///     R19 — three defects in the previous pattern:
+///     <list type="bullet">
+///         <item>
+///             <b>\b after the unit was unreachable for non-word units.</b> A word
+///             boundary requires a word character on one side; "%", "$", "мб" etc. end
+///             on non-word characters, so <c>"Success rate is 99999 % in testing"</c>
+///             never matched and the implausible-percentage check silently never ran.
+///             Replaced with <c>(?![a-zа-яё])</c>, which correctly asserts "not followed
+///             by another letter" for both word and non-word units.
+///         </item>
+///         <item>
+///             <b>Common currency and time words were missing from the alternation</b> —
+///             "50 dollars" and "30 seconds" did not match at all, so <c>CanVerify</c>
+///             returned false for perfectly ordinary numeric claims.
+///         </item>
+///         <item>
+///             <b>No sign support and overlapping quantifiers.</b> <c>(\d[\d\s.,]*)\s*</c>
+///             lets two adjacent greedy loops consume the same whitespace (a catastrophic
+///             backtracking risk on adversarial input) and cannot match "-150 %".
+///             Group 1 now accepts an optional currency symbol and sign, consumes internal
+///             digit groups itself, and leaves inter-token whitespace to <c>\s*</c>.
+///         </item>
+///     </list>
+/// </remarks>
+[GeneratedRegex(@"([$€£]?\s?-?\d[\d.,]*(?:\s[\d.,]+)*)\s*(%|percent|\$|usd|eur|gbp|dollars?|rubles?|рублей|руб|kb|mb|gb|tb|bytes?|b|кб|мб|гб|км|м|cm|mm|years?|year|days?|day|months?|month|hours?|hour|minutes?|minute|seconds?|second|ms)(?![a-zа-яё])\s*(.{0,30})", RegexOptions.Compiled | RegexOptions.IgnoreCase)]
     private static partial Regex NumericPattern();
 }

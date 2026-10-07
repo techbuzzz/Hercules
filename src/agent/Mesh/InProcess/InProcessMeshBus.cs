@@ -1,7 +1,10 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
+using Hercules.Config;
 using Hercules.Mesh.Abstractions;
 using Hercules.Mesh.Transport;
+using Hercules.Observability;
+using Microsoft.Extensions.Logging;
 
 namespace Hercules.Mesh.InProcess;
 
@@ -11,6 +14,8 @@ namespace Hercules.Mesh.InProcess;
 ///     Потокобезопасен. Каждый вызов Subscribe создаёт отдельный reader на топик.
 ///     Request/reply использует reply-to channel + correlation ID.
 ///     Спецификация: task_066.
+///     task_086: replace fire-and-forget fan-out with a bounded <see cref="SemaphoreSlim"/>
+///     concurrency limiter; on overflow we briefly wait for a slot, then drop with metric.
 /// </summary>
 public sealed class InProcessMeshBus : IMeshBus
 {
@@ -18,9 +23,28 @@ public sealed class InProcessMeshBus : IMeshBus
     private readonly ConcurrentDictionary<string, List<Func<IntentEnvelope, CancellationToken, Task>>> _subscribers = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, TaskCompletionSource<IntentResponse>> _pendingReplies = new();
     private readonly ConcurrentDictionary<string, Channel<IntentEnvelope>> _replyChannels = new();
+    private readonly MeshBackpressureConfig _backpressure;
+    private readonly ILogger<InProcessMeshBus>? _logger;
+    private readonly SemaphoreSlim _handlerGate;
     bool _disposed;
 
+    public InProcessMeshBus()
+        : this(new MeshBackpressureConfig(), null)
+    {
+    }
+
+    public InProcessMeshBus(MeshBackpressureConfig backpressure, ILogger<InProcessMeshBus>? logger = null)
+    {
+        _backpressure = backpressure ?? new MeshBackpressureConfig();
+        _logger = logger;
+        var maxConcurrency = Math.Max(1, _backpressure.MaxConcurrentHandlers);
+        _handlerGate = new SemaphoreSlim(maxConcurrency, maxConcurrency);
+    }
+
     public string BackendKind => "in-process";
+
+    /// <summary>Effective maximum concurrent handler invocations across all topics.</summary>
+    public int MaxConcurrentHandlers => Math.Max(1, _backpressure.MaxConcurrentHandlers);
 
     /// <inheritdoc />
     public async Task PublishAsync(string topic, IntentEnvelope envelope, CancellationToken ct = default)
@@ -41,16 +65,12 @@ public sealed class InProcessMeshBus : IMeshBus
             {
                 snapshot = new List<Func<IntentEnvelope, CancellationToken, Task>>(subs);
             }
-            // Fire-and-forget fan-out; don't await handlers
+            // Bounded fan-out: each handler invocation must acquire a slot on _handlerGate.
+            // When the gate is exhausted we Wait briefly, then drop + increment metric.
             foreach (var handler in snapshot)
             {
-                _ = TryInvokeHandler(handler, envelope, ct);
+                _ = TryInvokeHandlerWithGate(handler, envelope, topic, ct);
             }
-        }
-        else
-        {
-            // Log: no subscribers for topic (for debugging)
-            _ = Task.CompletedTask; // placeholder for future logging
         }
     }
 
@@ -193,19 +213,61 @@ public sealed class InProcessMeshBus : IMeshBus
         }
     }
 
-    private async Task TryInvokeHandler(
+    private async Task TryInvokeHandlerWithGate(
         Func<IntentEnvelope, CancellationToken, Task> handler,
         IntentEnvelope envelope,
+        string topic,
         CancellationToken ct)
     {
+        // Try to acquire a handler slot with a small backpressure window.
+        var acquireTimeout = TimeSpan.FromMilliseconds(Math.Max(1, _backpressure.HandlerAcquireTimeoutMs));
+        var acquired = false;
         try
         {
-            await handler(envelope, ct);
+            acquired = await _handlerGate.WaitAsync(acquireTimeout, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Local acquire timeout — gate was saturated; drop and instrument.
+            RecordDrop(topic);
+            return;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (!acquired)
+        {
+            RecordDrop(topic);
+            return;
+        }
+
+        try
+        {
+            await handler(envelope, ct).ConfigureAwait(false);
         }
         catch (Exception) when (!ct.IsCancellationRequested)
         {
             // Log and continue — don't kill other subscribers
         }
+        finally
+        {
+            try
+            {
+                _handlerGate.Release();
+            }
+            catch (ObjectDisposedException)
+            {
+                // bus disposed mid-flight; safe to ignore
+            }
+        }
+    }
+
+    private static void RecordDrop(string topic)
+    {
+        OtelMetrics.MeshHandlerDropCounter.Add(1,
+            new KeyValuePair<string, object?>("topic", topic));
     }
 
     private void ThrowIfDisposed()
@@ -225,6 +287,7 @@ public sealed class InProcessMeshBus : IMeshBus
         _subscribers.Clear();
         _replyChannels.Clear();
         _pendingReplies.Clear();
+        _handlerGate.Dispose();
     }
 
     private sealed class Subscription : IDisposable

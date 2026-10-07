@@ -1,0 +1,467 @@
+---
+// Mesh Profile & Backend Health Panel (Phase 7 task_092).
+// Карточка «Active profile» + список всех профилей с effective backends;
+// status-grid: каждый backend (bus/queue/stateStore) с pill
+// (Healthy/Degraded/Unavailable/Unknown), consecutiveFailures,
+// lastCheckedAt, lastError. Auto-refresh каждые 10s.
+---
+
+<div class="flex flex-col gap-5" id="mesh-profile-panel">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">Mesh Profile &amp; Backend Health</h2>
+      <p class="text-xs text-gray-500">
+        Активный профиль, effective backends, live health, degradation policy.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="mp-updated" class="text-xs text-gray-600"></span>
+      <label class="flex items-center gap-1 text-[11px] text-gray-400">
+        <input id="mp-autorefresh" type="checkbox" class="rounded border-white/20 bg-[#0a0a0b]" />
+        авто (10s)
+      </label>
+      <button id="mp-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- Error banner -->
+  <div id="mp-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+  <div id="mp-ok" class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"></div>
+
+  <!-- Degradation policy banner (visible when policy=RefuseDelegations + any backend Unavailable) -->
+  <div id="mp-degrade-banner" class="hidden rounded-lg border border-rose-500/40 bg-rose-500/10 p-3 text-xs text-rose-200">
+    <span class="font-semibold">Degradation policy: RefuseDelegations</span> — new delegations blocked, see audit.
+  </div>
+  <div id="mp-degrade-warn" class="hidden rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+    <span class="font-semibold">Degradation policy: DegradeToLocal</span> — внешние бэкенды деградированы, используется in-process fallback.
+  </div>
+
+  <!-- Active profile card -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+      <h3 class="text-sm font-medium text-gray-300">Active profile</h3>
+      <div class="flex items-baseline gap-2">
+        <span id="mp-active-name" class="mono text-sm font-semibold text-white">—</span>
+        <span id="mp-active-kind" class="rounded border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-300">—</span>
+      </div>
+    </div>
+    <p id="mp-active-desc" class="mb-3 text-xs text-gray-400">—</p>
+
+    <!-- Active profile backends (effective) -->
+    <div id="mp-active-backends" class="grid gap-2 sm:grid-cols-3"></div>
+
+    <!-- Constraints + Degradation policy summary -->
+    <div class="mt-4 grid gap-2 sm:grid-cols-2">
+      <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+        <div class="text-[10px] uppercase tracking-wide text-gray-500">Constraints</div>
+        <div id="mp-active-constraints" class="mt-1 text-[11px] text-gray-300">—</div>
+      </div>
+      <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+        <div class="text-[10px] uppercase tracking-wide text-gray-500">Degradation policy</div>
+        <div id="mp-active-degrade" class="mt-1 text-[11px] text-gray-300">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live backend health grid -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+      <h3 class="text-sm font-medium text-gray-300">Live backend health</h3>
+      <span id="mp-overall" class="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-gray-300">—</span>
+    </div>
+    <div id="mp-health-loading" class="hidden py-6 text-center text-xs text-gray-500">Загрузка…</div>
+    <div id="mp-health-empty" class="hidden py-6 text-center text-xs text-gray-500">
+      Нет зарегистрированных бэкендов.
+    </div>
+    <div id="mp-health-grid" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></div>
+  </section>
+
+  <!-- Other profiles (compact list) -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-baseline justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Все профили
+        <span id="mp-profiles-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+      </h3>
+    </div>
+    <div id="mp-profiles-list" class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"></div>
+  </section>
+</div>
+
+<script>
+  import {
+    api,
+    type MeshProfileListDto,
+    type MeshProfileDto,
+    type MeshProfileBackendsDto,
+    type MeshBackendStatusListDto,
+    type BackendStatusDto,
+  } from "../lib/api";
+
+  const errBanner = document.getElementById("mp-error")!;
+  const okBanner = document.getElementById("mp-ok")!;
+  const updatedEl = document.getElementById("mp-updated")!;
+  const refreshBtn = document.getElementById("mp-refresh")!;
+  const autorefreshChk = document.getElementById("mp-autorefresh") as HTMLInputElement;
+
+  const activeNameEl = document.getElementById("mp-active-name")!;
+  const activeKindEl = document.getElementById("mp-active-kind")!;
+  const activeDescEl = document.getElementById("mp-active-desc")!;
+  const activeBackendsEl = document.getElementById("mp-active-backends")!;
+  const activeConstraintsEl = document.getElementById("mp-active-constraints")!;
+  const activeDegradeEl = document.getElementById("mp-active-degrade")!;
+
+  const degradeRefuseBanner = document.getElementById("mp-degrade-banner")!;
+  const degradeWarnBanner = document.getElementById("mp-degrade-warn")!;
+
+  const overallEl = document.getElementById("mp-overall")!;
+  const healthLoading = document.getElementById("mp-health-loading")!;
+  const healthEmpty = document.getElementById("mp-health-empty")!;
+  const healthGrid = document.getElementById("mp-health-grid")!;
+
+  const profilesListEl = document.getElementById("mp-profiles-list")!;
+  const profilesCountEl = document.getElementById("mp-profiles-count")!;
+
+  // State.
+  let lastProfileList: MeshProfileListDto | null = null;
+  let lastActiveProfile: MeshProfileDto | null = null;
+  let lastActiveBackends: MeshProfileBackendsDto | null = null;
+  let lastHealth: MeshBackendStatusListDto | null = null;
+  let lastProfiles: MeshProfileDto[] = [];
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = message;
+    errBanner.classList.remove("hidden");
+    okBanner.classList.add("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+
+  function backendStateBadge(state: string): { cls: string; label: string } {
+    const s = (state || "Unknown").toLowerCase();
+    const palette: Record<string, { cls: string; label: string }> = {
+      healthy: {
+        cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+        label: "Healthy",
+      },
+      degraded: {
+        cls: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+        label: "Degraded",
+      },
+      unavailable: {
+        cls: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+        label: "Unavailable",
+      },
+      unknown: {
+        cls: "border-white/10 bg-white/5 text-gray-500",
+        label: "Unknown",
+      },
+    };
+    return palette[s] ?? palette.unknown;
+  }
+
+  function overallBadge(state: string): { cls: string; label: string } {
+    const s = (state || "Unknown").toLowerCase();
+    if (s === "healthy") {
+      return { cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300", label: state };
+    }
+    if (s === "degraded") {
+      return { cls: "border-amber-500/30 bg-amber-500/10 text-amber-300", label: state };
+    }
+    if (s === "unavailable") {
+      return { cls: "border-rose-500/30 bg-rose-500/10 text-rose-300", label: state };
+    }
+    return { cls: "border-white/10 bg-white/5 text-gray-400", label: state || "Unknown" };
+  }
+
+  function formatTimestamp(iso: string): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleString();
+  }
+
+  function kindBadgeClass(kind: string): string {
+    const k = (kind || "").toLowerCase();
+    if (k === "in-process" || k === "inprocess" || k === "in_process") {
+      return "border-white/10 bg-white/5 text-gray-300";
+    }
+    if (k === "redis" || k === "valkey") {
+      return "border-rose-500/30 bg-rose-500/10 text-rose-300";
+    }
+    if (k === "nats" || k === "jetstream") {
+      return "border-sky-500/30 bg-sky-500/10 text-sky-300";
+    }
+    if (k === "postgres" || k === "postgresql") {
+      return "border-indigo-500/30 bg-indigo-500/10 text-indigo-300";
+    }
+    return "border-white/10 bg-white/5 text-gray-300";
+  }
+
+  function renderBackendCard(b: BackendStatusDto): string {
+    const state = backendStateBadge(b.state);
+    const kindCls = kindBadgeClass(b.kind);
+    return `
+      <div class="rounded-lg border border-white/10 bg-[#0a0a0b] p-3">
+        <div class="mb-2 flex items-baseline justify-between">
+          <div class="flex items-baseline gap-2">
+            <span class="mono text-sm font-semibold text-white">${escapeHtml(b.role)}</span>
+            <span class="rounded border ${kindCls} px-2 py-0.5 text-[10px]">${escapeHtml(b.kind || "—")}</span>
+          </div>
+          <span class="rounded-full border px-2 py-0.5 text-[10px] ${state.cls}">${state.label}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-[11px]">
+          <div>
+            <div class="text-[10px] text-gray-500">Consecutive failures</div>
+            <div class="${b.consecutiveFailures > 0 ? "text-rose-300" : "text-gray-300"}">${b.consecutiveFailures}</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-gray-500">Last checked</div>
+            <div class="text-gray-300" title="${escapeHtml(b.lastCheckedAt)}">${formatTimestamp(b.lastCheckedAt)}</div>
+          </div>
+        </div>
+        ${b.lastError
+          ? `<div class="mt-2 rounded border border-rose-500/20 bg-rose-500/5 p-2 text-[11px] text-rose-200">${escapeHtml(b.lastError)}</div>`
+          : ""}
+      </div>`;
+  }
+
+  function renderActiveBackends(): void {
+    if (!lastActiveBackends) {
+      activeBackendsEl.innerHTML = `<div class="col-span-3 text-xs text-gray-500">Нет данных о backends активного профиля.</div>`;
+      return;
+    }
+    const roles = ["bus", "queue", "stateStore"];
+    activeBackendsEl.innerHTML = roles
+      .map((r) => {
+        const b = lastActiveBackends?.backends[r];
+        if (!b) {
+          return `<div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+            <div class="flex items-baseline justify-between">
+              <span class="mono text-xs text-gray-400">${escapeHtml(r)}</span>
+              <span class="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-gray-500">fallback</span>
+            </div>
+            <div class="mt-1 text-[10px] text-gray-500">используется in-process default</div>
+          </div>`;
+        }
+        const kindCls = kindBadgeClass(b.kind);
+        const enabledMark = b.enabled
+          ? `<span class="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">enabled</span>`
+          : `<span class="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-gray-500">disabled</span>`;
+        return `<div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+          <div class="flex items-baseline justify-between">
+            <span class="mono text-xs text-white">${escapeHtml(b.role)}</span>
+            ${enabledMark}
+          </div>
+          <div class="mt-1 flex items-baseline gap-1.5">
+            <span class="rounded border ${kindCls} px-2 py-0.5 text-[10px]">${escapeHtml(b.kind)}</span>
+            <span class="text-[10px] text-gray-500">hc ${b.healthCheckIntervalSec}s · to ${b.timeoutSec}s · retry ${b.maxRetries}</span>
+          </div>
+        </div>`;
+      })
+      .join("");
+  }
+
+  function renderActiveProfile(): void {
+    if (!lastActiveProfile) {
+      activeNameEl.textContent = "—";
+      activeKindEl.textContent = "—";
+      activeDescEl.textContent = "—";
+      activeConstraintsEl.textContent = "—";
+      activeDegradeEl.textContent = "—";
+      return;
+    }
+    const p = lastActiveProfile;
+    activeNameEl.textContent = p.name;
+    activeKindEl.textContent = p.profile;
+    activeKindEl.className = `rounded border px-2 py-0.5 text-[10px] ${kindBadgeClass(p.profile)}`;
+    activeDescEl.textContent = p.description || "—";
+    const c = p.constraints;
+    const cBits: string[] = [];
+    cBits.push(`max agents: ${c.maxAgents === 0 ? "∞" : c.maxAgents}`);
+    if (c.region) cBits.push(`region: ${c.region}`);
+    if (c.requiredServices && c.requiredServices.length > 0) {
+      cBits.push(`required: ${c.requiredServices.join(", ")}`);
+    }
+    activeConstraintsEl.textContent = cBits.length > 0 ? cBits.join(" · ") : "—";
+    const d = p.degradationPolicy;
+    const dBits: string[] = [];
+    dBits.push(`mode: ${d.mode}`);
+    dBits.push(`maxDegradedSeconds: ${d.maxDegradedSeconds === 0 ? "∞" : d.maxDegradedSeconds}`);
+    if (d.alertWebhook) dBits.push(`webhook: ${d.alertWebhook}`);
+    activeDegradeEl.textContent = dBits.join(" · ");
+  }
+
+  function renderDegradeBanner(): void {
+    if (!lastActiveProfile || !lastHealth) {
+      degradeRefuseBanner.classList.add("hidden");
+      degradeWarnBanner.classList.add("hidden");
+      return;
+    }
+    const policyMode = lastActiveProfile.degradationPolicy.mode;
+    const hasUnavailable = lastHealth.backends.some((b) => (b.state || "").toLowerCase() === "unavailable");
+    const hasDegraded = lastHealth.backends.some((b) => (b.state || "").toLowerCase() === "degraded");
+
+    if (policyMode === "RefuseDelegations" && hasUnavailable) {
+      degradeRefuseBanner.classList.remove("hidden");
+      degradeWarnBanner.classList.add("hidden");
+    } else if (hasUnavailable || (hasDegraded && policyMode === "DegradeToLocal")) {
+      degradeRefuseBanner.classList.add("hidden");
+      degradeWarnBanner.classList.remove("hidden");
+    } else {
+      degradeRefuseBanner.classList.add("hidden");
+      degradeWarnBanner.classList.add("hidden");
+    }
+  }
+
+  function renderHealth(): void {
+    if (!lastHealth) {
+      healthLoading.classList.add("hidden");
+      healthEmpty.classList.add("hidden");
+      healthGrid.innerHTML = "";
+      return;
+    }
+    const ob = overallBadge(lastHealth.overall);
+    overallEl.className = `rounded-full border px-2 py-0.5 text-[10px] ${ob.cls}`;
+    overallEl.textContent = ob.label;
+
+    if (lastHealth.backends.length === 0) {
+      healthLoading.classList.add("hidden");
+      healthEmpty.classList.remove("hidden");
+      healthGrid.innerHTML = "";
+      return;
+    }
+    healthLoading.classList.add("hidden");
+    healthEmpty.classList.add("hidden");
+    healthGrid.innerHTML = lastHealth.backends.map(renderBackendCard).join("");
+  }
+
+  function renderOtherProfiles(): void {
+    if (!lastProfileList || lastProfileList.profiles.length === 0) {
+      profilesListEl.innerHTML = `<div class="col-span-3 text-xs text-gray-500">Нет зарегистрированных профилей.</div>`;
+      profilesCountEl.textContent = "";
+      return;
+    }
+    const active = lastProfileList.activeProfile;
+    const others = lastProfileList.profiles.filter((n) => n !== active);
+    profilesCountEl.textContent = `(${lastProfileList.profiles.length})`;
+    const cards: string[] = [];
+    if (lastActiveProfile) {
+      const p = lastActiveProfile;
+      cards.push(`
+        <div class="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
+          <div class="flex items-baseline justify-between">
+            <span class="mono text-sm font-semibold text-white">${escapeHtml(p.name)}</span>
+            <span class="rounded border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-300">active</span>
+          </div>
+          <div class="mt-1 text-[11px] text-gray-400">${p.description ? escapeHtml(p.description) : "—"}</div>
+          <div class="mt-1 text-[10px] text-gray-500">profile: ${escapeHtml(p.profile)} · degradation: ${escapeHtml(p.degradationPolicy.mode)}</div>
+        </div>`);
+    }
+    for (const name of others) {
+      const p = lastProfiles.find((x) => x.name === name);
+      const desc = p?.description ?? "";
+      const profileKind = p?.profile ?? "—";
+      const mode = p?.degradationPolicy.mode ?? "—";
+      cards.push(`
+        <div class="rounded-lg border border-white/10 bg-[#0a0a0b] p-3">
+          <div class="flex items-baseline justify-between">
+            <span class="mono text-sm font-medium text-white">${escapeHtml(name)}</span>
+            <span class="text-[10px] text-gray-500">inactive</span>
+          </div>
+          <div class="mt-1 text-[11px] text-gray-400">${desc ? escapeHtml(desc) : "—"}</div>
+          <div class="mt-1 text-[10px] text-gray-500">profile: ${escapeHtml(profileKind)} · degradation: ${escapeHtml(mode)}</div>
+        </div>`);
+    }
+    profilesListEl.innerHTML = cards.join("");
+  }
+
+  async function loadAll(): Promise<void> {
+    clearError();
+    try {
+      // 1. profile list + active profile details + backends, in parallel.
+      const list = await api.listMeshProfiles();
+      lastProfileList = list;
+      const [activeProfile, ...otherProfiles] = await Promise.all([
+        api.getMeshProfile(list.activeProfile).catch(() => null),
+        ...list.profiles
+          .filter((n) => n !== list.activeProfile)
+          .map((n) => api.getMeshProfile(n).catch(() => null)),
+      ]);
+      lastActiveProfile = activeProfile;
+      lastProfiles = [activeProfile, ...otherProfiles].filter(
+        (p): p is MeshProfileDto => p !== null,
+      );
+      // Effective backends for active profile.
+      try {
+        lastActiveBackends = await api.getMeshProfileBackends(list.activeProfile);
+      } catch (e) {
+        lastActiveBackends = null;
+        const msg = e instanceof Error ? e.message : String(e);
+        showError(`Не удалось загрузить effective backends: ${msg}`);
+      }
+      // 2. live health.
+      try {
+        lastHealth = await api.getAllBackendsStatus();
+      } catch (e) {
+        lastHealth = null;
+        const msg = e instanceof Error ? e.message : String(e);
+        showError(`Не удалось загрузить health: ${msg}`);
+      }
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+      render();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Mesh profile load failed: ${msg}`);
+      lastProfileList = null;
+      lastActiveProfile = null;
+      lastActiveBackends = null;
+      lastHealth = null;
+      lastProfiles = [];
+      render();
+    }
+  }
+
+  function render(): void {
+    renderActiveProfile();
+    renderActiveBackends();
+    renderHealth();
+    renderDegradeBanner();
+    renderOtherProfiles();
+  }
+
+  // ---- Wiring ----
+  refreshBtn.addEventListener("click", () => { void loadAll(); });
+
+  // 10s auto-refresh, opt-in via checkbox.
+  let autoTimer: ReturnType<typeof setInterval> | null = null;
+  function syncAutoRefresh(): void {
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+    }
+    if (autorefreshChk.checked) {
+      autoTimer = setInterval(() => { void loadAll(); }, 10_000);
+    }
+  }
+  autorefreshChk.addEventListener("change", syncAutoRefresh);
+
+  // Initial load.
+  void loadAll();
+</script>

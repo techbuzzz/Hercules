@@ -96,10 +96,13 @@ public sealed class OtelService : IOtelService
     public void StopActivity(Activity? activity, ActivityStatusCode status = ActivityStatusCode.Ok)
     {
         if (activity is null) return;
-        if (status != ActivityStatusCode.Ok)
-        {
-            activity.SetStatus(status);
-        }
+
+        // R3b: the status is now ALWAYS applied, including Ok. The previous version only
+        // called SetStatus for a non-Ok status and merely called Stop() otherwise, so
+        // `StopActivity(a)` left `a.Status == ActivityStatusCode.Unset` even though the
+        // signature declares a successful stop. Callers inspecting Status saw "unknown"
+        // for the common success path.
+        activity.SetStatus(status);
         activity.Stop();
     }
 }

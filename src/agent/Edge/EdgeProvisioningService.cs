@@ -54,14 +54,12 @@ public sealed class EdgeProvisioningService : IEdgeProvisioningService
         var dataRoot = _storageConfig.DataRoot;
         if (string.IsNullOrWhiteSpace(_config.EnrollmentStatePath))
         {
-            var securityDir = Path.Combine(AppContext.BaseDirectory, _securityConfig.IdentityStoragePath);
-            // Use actual data root if available, otherwise fall back to base dir
-            var resolvedRoot = dataRoot.StartsWith("/") || dataRoot.Contains(":")
-                ? dataRoot
-                : Path.Combine(AppContext.BaseDirectory, dataRoot);
-            var enrollmentDir = Path.Combine(resolvedRoot, "security");
+            var resolvedRoot = Hercules.BuiltIn.ResolvePathUnderDataRoot(
+                Hercules.BuiltIn.ResolveDataRoot(),
+                dataRoot);
+            var enrollmentDir = Path.Combine(resolvedRoot, Hercules.BuiltIn.SecuritySubdir);
             Directory.CreateDirectory(enrollmentDir);
-            _stateFilePath = Path.Combine(enrollmentDir, "enrollment.json");
+            _stateFilePath = Path.Combine(enrollmentDir, Hercules.BuiltIn.EnrollmentFileName);
         }
         else
         {
@@ -251,15 +249,15 @@ public sealed class EdgeProvisioningService : IEdgeProvisioningService
     {
         // Enforce strict directory permissions on security-sensitive paths
         var dataRoot = _storageConfig.DataRoot;
-        var resolvedRoot = dataRoot.StartsWith("/") || dataRoot.Contains(":")
-            ? dataRoot
-            : Path.Combine(AppContext.BaseDirectory, dataRoot);
+        var resolvedRoot = Hercules.BuiltIn.ResolvePathUnderDataRoot(
+            Hercules.BuiltIn.ResolveDataRoot(),
+            dataRoot);
 
         var securityDirs = new[]
         {
-            Path.Combine(resolvedRoot, "security"),
-            Path.Combine(resolvedRoot, "security", "identity"),
-            Path.Combine(resolvedRoot, "security", "certs"),
+            Path.Combine(resolvedRoot, Hercules.BuiltIn.SecuritySubdir),
+            Path.Combine(resolvedRoot, Hercules.BuiltIn.SecuritySubdir, Hercules.BuiltIn.IdentitySubdir),
+            Path.Combine(resolvedRoot, Hercules.BuiltIn.SecuritySubdir, Hercules.BuiltIn.CertsSubdir),
         };
 
         foreach (var dir in securityDirs)

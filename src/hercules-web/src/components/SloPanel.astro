@@ -1,0 +1,430 @@
+---
+// SLO Panel (Phase 7 task_094).
+// Сводка SLO-здоровья по verticals, per-objective progress bars, violations
+// + ack, compliance summary. 30s auto-refresh (opt-in).
+---
+
+<div class="flex flex-col gap-5" id="slo-panel">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">Operational SLO</h2>
+      <p class="text-xs text-gray-500">
+        Avail, P95, data-loss, recovery, cost — per-vertical targets и текущий burn rate.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="slo-updated" class="text-xs text-gray-600"></span>
+      <label class="flex items-center gap-1 text-[11px] text-gray-400">
+        <input id="slo-autorefresh" type="checkbox" class="rounded border-white/20 bg-[#0a0a0b]" />
+        авто (30s)
+      </label>
+      <button id="slo-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- Banners -->
+  <div id="slo-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+  <div id="slo-ok" class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"></div>
+
+  <!-- Summary card -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">Сводка</h3>
+    <div id="slo-summary-loading" class="hidden py-6 text-center text-xs text-gray-500">Загрузка…</div>
+    <div id="slo-summary-empty" class="hidden py-6 text-center text-xs text-gray-500">
+      SLO verticals не сконфигурированы. Добавьте .slo.json файлы в data/slos/.
+    </div>
+    <div id="slo-summary-grid" class="grid gap-3 sm:grid-cols-4"></div>
+  </section>
+
+  <!-- Per-vertical cards -->
+  <section id="slo-verticals-section" class="hidden flex-col gap-4">
+    <h3 class="text-sm font-medium text-gray-300">Verticals</h3>
+    <div id="slo-verticals-list" class="flex flex-col gap-4"></div>
+  </section>
+</div>
+
+<script>
+  import {
+    api,
+    type SloSummaryDto,
+    type SloStatusDto,
+    type SloDefinitionDto,
+    type SloObjectiveStatusDto,
+    type SloViolationRecordDto,
+    type SloReportDto,
+  } from "../lib/api";
+
+  const errBanner = document.getElementById("slo-error")!;
+  const okBanner = document.getElementById("slo-ok")!;
+  const updatedEl = document.getElementById("slo-updated")!;
+  const refreshBtn = document.getElementById("slo-refresh")!;
+  const autorefreshChk = document.getElementById("slo-autorefresh") as HTMLInputElement;
+
+  const summaryLoading = document.getElementById("slo-summary-loading")!;
+  const summaryEmpty = document.getElementById("slo-summary-empty")!;
+  const summaryGrid = document.getElementById("slo-summary-grid")!;
+
+  const verticalsSection = document.getElementById("slo-verticals-section")!;
+  const verticalsList = document.getElementById("slo-verticals-list")!;
+
+  let autorefreshTimer: number | null = null;
+
+  function escapeHtml(s: string | null | undefined): string {
+    if (s == null) return "";
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = message;
+    errBanner.classList.remove("hidden");
+    okBanner.classList.add("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+  function showOk(message: string, durationMs = 3000): void {
+    okBanner.textContent = message;
+    okBanner.classList.remove("hidden");
+    errBanner.classList.add("hidden");
+    window.setTimeout(() => okBanner.classList.add("hidden"), durationMs);
+  }
+
+  function severityBadge(severity: string): string {
+    const s = (severity || "Ok").toLowerCase();
+    const palette: Record<string, string> = {
+      ok: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      warning: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      critical: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+    };
+    const cls = palette[s] ?? palette.ok;
+    return `<span class="rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-wide ${cls}">${escapeHtml(s)}</span>`;
+  }
+
+  function formatTimestamp(iso: string | null | undefined): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleString();
+  }
+
+  /**
+   * Compute a "burn" colour for an objective based on its current/target
+   * ratio. Inverted for response-time and recovery (lower is better) and
+   * cost (lower is better) — those use current > target = breach.
+   */
+  function objectiveColour(o: SloObjectiveStatusDto): { bar: string; text: string } {
+    const sev = (o.severity || "Ok").toLowerCase();
+    if (sev === "critical") {
+      return { bar: "bg-rose-500", text: "text-rose-300" };
+    }
+    if (sev === "warning") {
+      return { bar: "bg-amber-500", text: "text-amber-300" };
+    }
+    return { bar: "bg-emerald-500", text: "text-emerald-300" };
+  }
+
+  function formatObjectiveValue(o: SloObjectiveStatusDto): string {
+    const v = o.currentValue;
+    const u = o.unit || "";
+    if (u === "%" || o.objective.toLowerCase().includes("availability")) {
+      return `${(v * 100).toFixed(3)}%`;
+    }
+    if (u === "ms" || o.objective.toLowerCase().includes("response")) {
+      return `${v.toFixed(0)} ms`;
+    }
+    if (u === "USD" || o.objective.toLowerCase().includes("cost")) {
+      return `$${v.toFixed(2)}`;
+    }
+    if (u === "events" || o.objective.toLowerCase().includes("data loss")) {
+      return `${Math.round(v)}`;
+    }
+    if (u === "min" || o.objective.toLowerCase().includes("recovery")) {
+      return `${v.toFixed(0)} min`;
+    }
+    return `${v} ${u}`.trim();
+  }
+
+  function formatTarget(o: SloObjectiveStatusDto): string {
+    const t = o.targetValue;
+    const u = o.unit || "";
+    if (u === "%" || o.objective.toLowerCase().includes("availability")) {
+      return `${(t * 100).toFixed(3)}%`;
+    }
+    if (u === "ms") return `${t} ms`;
+    if (u === "USD") return `$${t}`;
+    if (u === "events") return `${t}`;
+    if (u === "min") return `${t} min`;
+    return `${t} ${u}`.trim();
+  }
+
+  function renderObjective(o: SloObjectiveStatusDto): string {
+    const colour = objectiveColour(o);
+    const pct = Math.max(0, Math.min(100, o.targetAchievementPct || 0));
+    const sevBadge = severityBadge(o.severity);
+    return `
+      <div class="rounded border border-white/5 bg-[#0a0a0b] p-3">
+        <div class="flex items-center justify-between gap-2">
+          <div class="text-xs font-medium text-white">${escapeHtml(o.objective)}</div>
+          ${sevBadge}
+        </div>
+        <div class="mt-1.5 flex items-baseline justify-between text-[11px]">
+          <span class="${colour.text} mono">${formatObjectiveValue(o)}</span>
+          <span class="text-gray-500">target: ${formatTarget(o)}</span>
+        </div>
+        <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+          <div class="${colour.bar} h-full" style="width: ${pct.toFixed(1)}%"></div>
+        </div>
+        <div class="mt-1 flex items-center justify-between text-[10px] text-gray-500">
+          <span>${pct.toFixed(1)}% of target</span>
+          ${o.breachDescription ? `<span class="${colour.text} truncate ml-2">${escapeHtml(o.breachDescription)}</span>` : ""}
+        </div>
+      </div>`;
+  }
+
+  function renderViolations(vs: SloViolationRecordDto[], vertical: string): string {
+    if (vs.length === 0) {
+      return `<div class="text-[11px] text-gray-500">Нарушений нет.</div>`;
+    }
+    return `<div class="flex flex-col gap-1.5">
+      ${vs
+        .slice(0, 8)
+        .map(
+          (v) => `
+        <div class="flex items-center justify-between gap-2 rounded border border-white/5 bg-[#0a0a0b] p-2 text-[11px]">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              ${severityBadge(v.severity)}
+              <span class="mono text-gray-300">${escapeHtml(v.objective)}</span>
+              <span class="text-gray-500 mono">${escapeHtml(v.violationId)}</span>
+            </div>
+            <div class="mt-0.5 truncate text-gray-400" title="${escapeHtml(v.breachDescription)}">
+              ${escapeHtml(v.breachDescription || "—")}
+            </div>
+            <div class="mt-0.5 text-[10px] text-gray-500">
+              detected ${formatTimestamp(v.detectedAt)}${v.resolvedAt ? ` · resolved ${formatTimestamp(v.resolvedAt)}` : ""}
+              ${v.isAcknowledged ? ` · ack by <span class="text-emerald-300">${escapeHtml(v.acknowledgedBy || "—")}</span>` : ""}
+            </div>
+          </div>
+          ${
+            v.isAcknowledged
+              ? ""
+              : `<button data-action="ack-violation" data-vertical="${escapeHtml(vertical)}" data-violation="${escapeHtml(v.violationId)}" type="button"
+                  class="shrink-0 rounded border border-sky-500/30 px-2 py-0.5 text-[10px] text-sky-300 transition-colors hover:bg-sky-500/10">Ack</button>`
+          }
+        </div>`,
+        )
+        .join("")}
+      ${vs.length > 8 ? `<div class="text-[10px] text-gray-500">…и ещё ${vs.length - 8}.</div>` : ""}
+    </div>`;
+  }
+
+  function renderSummary(s: SloSummaryDto): void {
+    if (s.totalVerticals === 0) {
+      summaryEmpty.classList.remove("hidden");
+      summaryGrid.innerHTML = "";
+      return;
+    }
+    summaryEmpty.classList.add("hidden");
+    const cards: { label: string; value: number; pill: string }[] = [
+      { label: "Всего verticals", value: s.totalVerticals, pill: "border-violet-500/30 bg-violet-500/10 text-violet-300" },
+      { label: "OK", value: s.okCount, pill: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" },
+      { label: "Warning", value: s.warningCount, pill: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
+      { label: "Critical", value: s.criticalCount, pill: "border-rose-500/30 bg-rose-500/10 text-rose-300" },
+    ];
+    summaryGrid.innerHTML = cards
+      .map(
+        (c) => `
+        <div class="rounded border border-white/5 bg-[#0a0a0b] p-3">
+          <div class="text-[10px] uppercase tracking-wide text-gray-500">${c.label}</div>
+          <div class="mt-1 flex items-baseline gap-2">
+            <span class="text-xl font-semibold text-white">${c.value}</span>
+            <span class="rounded-full border px-1.5 py-0.5 text-[10px] ${c.pill}">${c.label.toLowerCase()}</span>
+          </div>
+        </div>`,
+      )
+      .join("");
+  }
+
+  function renderVerticalCard(
+    status: SloStatusDto,
+    definition: SloDefinitionDto | null,
+    report: SloReportDto | null,
+  ): string {
+    const defBlock = definition
+      ? `
+        <details class="rounded border border-white/5 bg-[#0a0a0b] p-2 text-[11px]">
+          <summary class="cursor-pointer text-gray-300">Definition (targets)</summary>
+          <div class="mt-2 grid gap-1.5 sm:grid-cols-2">
+            <div><span class="text-gray-500">availability:</span> <span class="mono text-white">${(definition.availabilityTarget * 100).toFixed(3)}%</span></div>
+            <div><span class="text-gray-500">P95 latency:</span> <span class="mono text-white">${definition.responseTimeTargetMs} ms</span></div>
+            <div><span class="text-gray-500">data loss / day:</span> <span class="mono text-white">${definition.dataLossTargetPerDay}</span></div>
+            <div><span class="text-gray-500">recovery time:</span> <span class="mono text-white">${definition.recoveryTimeTargetMinutes} min</span></div>
+            <div><span class="text-gray-500">cost / day:</span> <span class="mono text-white">$${definition.costTargetUsd}</span></div>
+            <div><span class="text-gray-500">version:</span> <span class="mono text-white">${escapeHtml(definition.version)}</span></div>
+            ${definition.description ? `<div class="sm:col-span-2 text-gray-400">${escapeHtml(definition.description)}</div>` : ""}
+          </div>
+        </details>`
+      : "";
+
+    const complianceBlock = report?.compliance
+      ? `
+        <div class="rounded border border-white/5 bg-[#0a0a0b] p-2 text-[11px]">
+          <div class="mb-1 text-[10px] uppercase tracking-wide text-gray-500">Compliance (${report.compliance.windowDays} d)</div>
+          <div class="grid gap-1.5 sm:grid-cols-3">
+            <div><span class="text-gray-500">availability:</span> <span class="mono text-white">${report.compliance.availabilityAchievementPct.toFixed(1)}%</span></div>
+            <div><span class="text-gray-500">P95 (inv):</span> <span class="mono text-white">${report.compliance.responseTimeAchievementPct.toFixed(1)}%</span></div>
+            <div><span class="text-gray-500">overall:</span> <span class="mono text-white">${report.compliance.overallCompliancePct.toFixed(1)}%</span></div>
+            <div><span class="text-gray-500">data loss total:</span> <span class="mono text-white">${report.compliance.dataLossEventsTotal}</span></div>
+            <div><span class="text-gray-500">max recovery:</span> <span class="mono text-white">${report.compliance.maxRecoveryTimeMinutes} min</span></div>
+            <div><span class="text-gray-500">total cost:</span> <span class="mono text-white">$${report.compliance.totalCostUsd.toFixed(2)}</span></div>
+          </div>
+        </div>`
+      : "";
+
+    return `
+      <article class="rounded-xl border border-white/10 bg-[#101012] p-4" data-vertical="${escapeHtml(status.vertical)}">
+        <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h4 class="mono text-sm font-semibold text-white">${escapeHtml(status.vertical)}</h4>
+            <div class="mt-0.5 flex items-center gap-2 text-[11px] text-gray-500">
+              <span>${severityBadge(status.overallSeverity)}</span>
+              <span>updated ${formatTimestamp(status.timestamp)}</span>
+              ${status.isAcknowledged ? `<span class="text-emerald-300">ack by ${escapeHtml(status.acknowledgedBy || "—")}</span>` : ""}
+            </div>
+          </div>
+          ${
+            status.recentViolations.some((v) => !v.isAcknowledged)
+              ? `<button data-action="ack-all" data-vertical="${escapeHtml(status.vertical)}" type="button"
+                  class="rounded border border-sky-500/30 px-2 py-0.5 text-[11px] text-sky-300 transition-colors hover:bg-sky-500/10">Ack all violations</button>`
+              : ""
+          }
+        </div>
+
+        <div class="grid gap-2 sm:grid-cols-2">
+          ${(status.objectives || []).map(renderObjective).join("")}
+        </div>
+
+        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+          <div>
+            <div class="mb-1 text-[10px] uppercase tracking-wide text-gray-500">Recent violations</div>
+            ${renderViolations(status.recentViolations, status.vertical)}
+          </div>
+          <div class="flex flex-col gap-2">
+            ${defBlock}
+            ${complianceBlock}
+          </div>
+        </div>
+      </article>`;
+  }
+
+  async function loadSlos(silent = false): Promise<void> {
+    if (!silent) clearError();
+    if (!silent) summaryLoading.classList.remove("hidden");
+    summaryEmpty.classList.add("hidden");
+    try {
+      const summary: SloSummaryDto = await api.getSloSummary();
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+      renderSummary(summary);
+
+      if (summary.totalVerticals === 0) {
+        verticalsSection.classList.add("hidden");
+        return;
+      }
+      verticalsSection.classList.remove("hidden");
+      verticalsSection.classList.add("flex");
+
+      // Fetch definition + report in parallel per vertical. Failures on
+      // individual verticals are non-fatal — the status card is the must.
+      const enriched = await Promise.all(
+        summary.verticals.map(async (status) => {
+          let definition: SloDefinitionDto | null = null;
+          let report: SloReportDto | null = null;
+          try { definition = await api.getSloDefinition(status.vertical); } catch { /* swallow */ }
+          try { report = await api.getSloReport(status.vertical); } catch { /* swallow */ }
+          return { status, definition, report };
+        }),
+      );
+      verticalsList.innerHTML = enriched
+        .map((e) => renderVerticalCard(e.status, e.definition, e.report))
+        .join("");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить SLO: ${msg}`);
+      summaryEmpty.classList.add("hidden");
+      summaryGrid.innerHTML = "";
+      verticalsSection.classList.add("hidden");
+    } finally {
+      if (!silent) summaryLoading.classList.add("hidden");
+    }
+  }
+
+  async function handleAckViolation(vertical: string, violationId: string): Promise<void> {
+    clearError();
+    try {
+      await api.ackSloViolation(vertical, violationId);
+      showOk(`Violation ${violationId} подтверждена.`, 2000);
+      await loadSlos(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Ack failed: ${msg}`);
+    }
+  }
+
+  async function handleAckAll(vertical: string): Promise<void> {
+    clearError();
+    try {
+      await api.ackAllSloViolations(vertical);
+      showOk(`Все нарушения ${vertical} подтверждены.`, 2000);
+      await loadSlos(true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Ack all failed: ${msg}`);
+    }
+  }
+
+  function startAutorefresh(): void {
+    if (autorefreshTimer != null) return;
+    autorefreshTimer = window.setInterval(() => {
+      void loadSlos(true);
+    }, 30_000);
+  }
+  function stopAutorefresh(): void {
+    if (autorefreshTimer != null) {
+      window.clearInterval(autorefreshTimer);
+      autorefreshTimer = null;
+    }
+  }
+
+  refreshBtn.addEventListener("click", () => { void loadSlos(); });
+  autorefreshChk.addEventListener("change", () => {
+    if (autorefreshChk.checked) startAutorefresh();
+    else stopAutorefresh();
+  });
+  verticalsList.addEventListener("click", (ev) => {
+    const target = ev.target as HTMLElement | null;
+    if (!target) return;
+    const btn = target.closest("button[data-action]") as HTMLButtonElement | null;
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const vertical = btn.dataset.vertical;
+    const violation = btn.dataset.violation;
+    if (action === "ack-violation" && vertical && violation) {
+      void handleAckViolation(vertical, violation);
+    } else if (action === "ack-all" && vertical) {
+      void handleAckAll(vertical);
+    }
+  });
+
+  void loadSlos();
+</script>

@@ -29,12 +29,14 @@ public sealed class PackageSigningService : IPackageSigningService
         _audit = audit ?? throw new ArgumentNullException(nameof(audit));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        var dataRoot = Path.Combine(AppContext.BaseDirectory, _config.PackageSigningPath);
+        var dataRoot = Hercules.BuiltIn.ResolvePathUnderDataRoot(
+            Hercules.BuiltIn.ResolveDataRoot(),
+            _config.PackageSigningPath);
         Directory.CreateDirectory(dataRoot);
-        _signersFilePath = Path.Combine(dataRoot, "trusted-signers.json");
+        _signersFilePath = Path.Combine(dataRoot, Hercules.BuiltIn.TrustedSignersFileName);
 
         // Generate or load signing key
-        var keyPath = Path.Combine(dataRoot, "signing-key.key");
+        var keyPath = Path.Combine(dataRoot, Hercules.BuiltIn.SigningKeyFileName);
         if (File.Exists(keyPath))
         {
             _signingKey = File.ReadAllBytes(keyPath);

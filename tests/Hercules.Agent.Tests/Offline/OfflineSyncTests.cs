@@ -113,7 +113,14 @@ public class SqliteOutboxStoreTests : IDisposable
     [Fact]
     public async Task EnqueueAsync_WhenAtCap_PrunesOldestSynced()
     {
-        var smallConfig = new OfflineSyncConfig { MaxQueueSize = 3, DropOldestSyncedOnCap = true };
+        // PruneSyncedKeep=0 forces prune to evict ALL synced rows when cap is hit.
+        var smallConfig = new OfflineSyncConfig
+        {
+            MaxQueueSize = 3,
+            DropOldestSyncedOnCap = true,
+            PruneSyncedKeep = 0,
+            PruneSyncedThreshold = 0
+        };
         var loggerMock = new Mock<ILogger<SqliteOutboxStore>>();
         var store = new SqliteOutboxStore(_sessionStore, smallConfig, loggerMock.Object);
 
@@ -127,7 +134,7 @@ public class SqliteOutboxStoreTests : IDisposable
         var firstItem = (await store.GetPendingAsync()).First();
         await store.MarkSyncedAsync(firstItem.ItemId);
 
-        // Enqueue a 4th item — should trigger pruning
+        // Enqueue a 4th item — should trigger pruning of the synced row
         await store.EnqueueAsync(OutboxItem.SensorLog("s4", "c4", new { n = 4 }));
 
         // First item should have been pruned (synced items removed first)
@@ -140,14 +147,19 @@ public class SqliteOutboxStoreTests : IDisposable
     #region Mark synced / failed / retry
 
     [Fact]
-    public async Task MarkSyncedAsync_RemovesItem()
+    public async Task MarkSyncedAsync_KeepsRow_AndSetsStatus()
     {
+        // task_073: MarkSyncedAsync must UPDATE status='Synced' (not DELETE),
+        // so PruneSyncedToCapAsync / GetSyncedCountAsync can see the row.
         var item = OutboxItem.SensorLog("s1", "c1", new { x = 1 });
         await _store.EnqueueAsync(item);
 
         await _store.MarkSyncedAsync(item.ItemId);
 
+        // Row is still present (status='Synced'), but is no longer pending.
+        Assert.True(await _store.ExistsAsync(item.ItemId));
         Assert.Equal(0, await _store.GetPendingCountAsync());
+        Assert.Equal(1, await _store.GetSyncedCountAsync());
     }
 
     [Fact]
@@ -181,16 +193,118 @@ public class SqliteOutboxStoreTests : IDisposable
     #region TTL cleanup
 
     [Fact]
-    public async Task DeleteOlderThanAsync_RemovesExpiredItems()
+    public async Task DeleteOlderThanAsync_DoesNotDeletePending()
     {
-        var item = OutboxItem.SensorLog("s1", "c1", new { x = 1 });
-        await _store.EnqueueAsync(item);
+        // task_073: TTL purge must not silently drop Pending items that the
+        // agent is still trying to sync. Only Synced/Failed rows are eligible.
+        var pending = OutboxItem.SensorLog("s1", "c1", new { x = 1 });
+        await _store.EnqueueAsync(pending);
 
-        // Use a cutoff in the past — items created just now should NOT be deleted
-        var cutoff = DateTime.UtcNow.AddMinutes(-1); // items are 0 minutes old, cutoff is 1 minute ago
+        // Cutoff in the future — would match the row by created_at, but the
+        // status filter must protect Pending items.
+        var cutoff = DateTime.UtcNow.AddYears(1);
         var deleted = await _store.DeleteOlderThanAsync(cutoff);
 
         Assert.Equal(0, deleted);
+        Assert.True(await _store.ExistsAsync(pending.ItemId));
+        Assert.Equal(1, await _store.GetPendingCountAsync());
+    }
+
+    [Fact]
+    public async Task DeleteOlderThanAsync_DeletesSyncedRowsOlderThanCutoff()
+    {
+        var item = OutboxItem.SensorLog("s1", "c1", new { x = 1 });
+        await _store.EnqueueAsync(item);
+        await _store.MarkSyncedAsync(item.ItemId);
+
+        // Cutoff in the future — the just-created Synced row is "older than"
+        // the cutoff, so it must be deleted.
+        var cutoff = DateTime.UtcNow.AddYears(1);
+        var deleted = await _store.DeleteOlderThanAsync(cutoff);
+
+        Assert.Equal(1, deleted);
+        Assert.False(await _store.ExistsAsync(item.ItemId));
+    }
+
+    [Fact]
+    public async Task DeleteOlderThanAsync_KeepsRowsNewerThanCutoff()
+    {
+        var item = OutboxItem.SensorLog("s1", "c1", new { x = 1 });
+        await _store.EnqueueAsync(item);
+        await _store.MarkSyncedAsync(item.ItemId);
+
+        // Cutoff in the past — the just-created row is "newer than" the
+        // cutoff, so it must remain.
+        var cutoff = DateTime.UtcNow.AddYears(-1);
+        var deleted = await _store.DeleteOlderThanAsync(cutoff);
+
+        Assert.Equal(0, deleted);
+        Assert.True(await _store.ExistsAsync(item.ItemId));
+    }
+
+    #endregion
+
+    #region Prune-on-enqueue (task_073)
+
+    [Fact]
+    public async Task EnqueueAsync_TriggersPruneWhenSyncedAboveThreshold()
+    {
+        // Below MaxQueueSize but above PruneSyncedThreshold: prune to keep cap.
+        var cfg = new OfflineSyncConfig
+        {
+            MaxQueueSize = 100,
+            PruneSyncedThreshold = 2,
+            PruneSyncedKeep = 1
+        };
+        var loggerMock = new Mock<ILogger<SqliteOutboxStore>>();
+        var store = new SqliteOutboxStore(_sessionStore, cfg, loggerMock.Object);
+
+        // Enqueue 3 pending items
+        var items = new List<OutboxItem>();
+        for (int i = 0; i < 3; i++)
+        {
+            var it = OutboxItem.SensorLog($"s{i}", $"c{i}", new { n = i });
+            items.Add(it);
+            await store.EnqueueAsync(it);
+        }
+
+        // Mark all 3 as Synced → synced tail grows past threshold
+        foreach (var it in items) await store.MarkSyncedAsync(it.ItemId);
+        Assert.Equal(3, await store.GetSyncedCountAsync());
+
+        // Enqueue one more — should trigger prune to PruneSyncedKeep=1
+        await store.EnqueueAsync(OutboxItem.SensorLog("s4", "c4", new { n = 4 }));
+
+        var synced = await store.GetSyncedCountAsync();
+        Assert.True(synced <= cfg.PruneSyncedKeep,
+            $"expected synced <= {cfg.PruneSyncedKeep}, got {synced}");
+    }
+
+    [Fact]
+    public async Task PruneSyncedToCapAsync_EvictsOldestFirst()
+    {
+        // Synced rows have a synced_at timestamp; the oldest must be pruned first.
+        var item1 = OutboxItem.SensorLog("s1", "c1", new { n = 1 });
+        var item2 = OutboxItem.SensorLog("s2", "c2", new { n = 2 });
+        var item3 = OutboxItem.SensorLog("s3", "c3", new { n = 3 });
+        await _store.EnqueueAsync(item1);
+        await _store.EnqueueAsync(item2);
+        await _store.EnqueueAsync(item3);
+
+        await _store.MarkSyncedAsync(item1.ItemId);
+        await Task.Delay(10); // ensure synced_at ordering
+        await _store.MarkSyncedAsync(item2.ItemId);
+        await Task.Delay(10);
+        await _store.MarkSyncedAsync(item3.ItemId);
+
+        // Prune to keep only 1 → expect 2 deleted, only the newest (item3) remains.
+        var pruned = await _store.PruneSyncedToCapAsync(1);
+
+        Assert.Equal(2, pruned);
+        Assert.False(await _store.ExistsAsync(item1.ItemId));
+        Assert.False(await _store.ExistsAsync(item2.ItemId));
+        Assert.True(await _store.ExistsAsync(item3.ItemId));
+        Assert.Equal(1, await _store.GetSyncedCountAsync());
     }
 
     #endregion

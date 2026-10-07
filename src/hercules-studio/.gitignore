@@ -1,0 +1,15 @@
+node_modules/
+dist/
+out/
+release/
+*.log
+.DS_Store
+*.tsbuildinfo
+.vite/
+renderer/dist/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.playwright/

@@ -1,0 +1,406 @@
+---
+// Discovery Panel (Phase 7 task_090).
+// UI для просмотра активных discovery-источников (static / registry / mdns)
+// и списка discovered peer-агентов. Кнопка «Refresh now» с post-refresh
+// toast о +N / −M delta. mDNS-источник, если присутствует, но disabled —
+// отображается отдельным inline-warning (а не общим disabled-pill).
+---
+
+<div class="flex flex-col gap-5" id="discovery-panel">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">Discovery</h2>
+      <p class="text-xs text-gray-500">
+        Источники discovery (static / registry / mDNS) и найденные peer-агенты.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="discovery-updated" class="text-xs text-gray-600"></span>
+      <label class="flex items-center gap-1 text-[11px] text-gray-400">
+        <input id="discovery-autorefresh" type="checkbox" class="rounded border-white/20 bg-[#0a0a0b]" />
+        авто (60s)
+      </label>
+      <button id="discovery-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Refresh now
+      </button>
+    </div>
+  </div>
+
+  <!-- Banners -->
+  <div id="discovery-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+  <div id="discovery-toast" class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"></div>
+  <div id="discovery-mdns-warning" class="hidden rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+    <span class="font-medium">mDNS disabled on this platform</span> — bonjour/multicast discovery
+    недоступен в текущем окружении; агенты будут находиться только через static config и capability registry.
+  </div>
+
+  <!-- Sources -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-2 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Источники
+        <span id="discovery-source-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+      </h3>
+    </div>
+    <div id="discovery-source-empty" class="py-3 text-xs text-gray-500">Источники не зарегистрированы.</div>
+    <div id="discovery-source-list" class="hidden flex flex-wrap gap-2"></div>
+  </section>
+
+  <!-- Filters -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div>
+        <label for="discovery-search" class="mb-1 block text-[11px] text-gray-500">Поиск (agent / display / capability)</label>
+        <input id="discovery-search" type="text" placeholder="…"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+      </div>
+      <div>
+        <label for="discovery-source-filter" class="mb-1 block text-[11px] text-gray-500">Источник</label>
+        <select id="discovery-source-filter"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 focus:border-violet-500/50 focus:outline-none">
+          <option value="">все</option>
+          <option value="static">static</option>
+          <option value="registry">registry</option>
+          <option value="mdns">mdns</option>
+        </select>
+      </div>
+      <div>
+        <label for="discovery-error-filter" class="mb-1 block text-[11px] text-gray-500">Ошибка</label>
+        <select id="discovery-error-filter"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 focus:border-violet-500/50 focus:outline-none">
+          <option value="">все</option>
+          <option value="ok">только ok</option>
+          <option value="error">только с ошибкой</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <!-- Agents table -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-2 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Найденные агенты
+        <span id="discovery-agent-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+      </h3>
+    </div>
+    <div id="discovery-agent-empty" class="py-6 text-center text-xs text-gray-500">
+      Discovery ещё не запускался. Нажмите «Refresh now».
+    </div>
+    <div id="discovery-agent-loading" class="hidden py-6 text-center text-xs text-gray-500">Загрузка…</div>
+    <div id="discovery-agent-table-wrap" class="hidden overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <th class="py-2 pr-3 font-medium">Agent</th>
+            <th class="py-2 pr-3 font-medium">Source</th>
+            <th class="py-2 pr-3 font-medium">Discovered</th>
+            <th class="py-2 pr-3 font-medium text-right">Capabilities</th>
+            <th class="py-2 pr-3 font-medium text-right">Manifest</th>
+            <th class="py-2 pr-3 font-medium">Error</th>
+          </tr>
+        </thead>
+        <tbody id="discovery-agent-tbody" class="divide-y divide-white/5"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+  import { api, type DiscoverySourceDto, type DiscoveredAgentDto } from "../lib/api";
+
+  const errBanner = document.getElementById("discovery-error")!;
+  const toastBanner = document.getElementById("discovery-toast")!;
+  const updatedEl = document.getElementById("discovery-updated")!;
+  const mdnsWarning = document.getElementById("discovery-mdns-warning")!;
+
+  const refreshBtn = document.getElementById("discovery-refresh") as HTMLButtonElement;
+  const autorefreshChk = document.getElementById("discovery-autorefresh") as HTMLInputElement;
+
+  const sourceEmpty = document.getElementById("discovery-source-empty")!;
+  const sourceList = document.getElementById("discovery-source-list")!;
+  const sourceCount = document.getElementById("discovery-source-count")!;
+
+  const searchInput = document.getElementById("discovery-search") as HTMLInputElement;
+  const sourceFilter = document.getElementById("discovery-source-filter") as HTMLSelectElement;
+  const errorFilter = document.getElementById("discovery-error-filter") as HTMLSelectElement;
+
+  const agentEmpty = document.getElementById("discovery-agent-empty")!;
+  const agentLoading = document.getElementById("discovery-agent-loading")!;
+  const agentTableWrap = document.getElementById("discovery-agent-table-wrap")!;
+  const agentTbody = document.getElementById("discovery-agent-tbody")!;
+  const agentCount = document.getElementById("discovery-agent-count")!;
+
+  // State.
+  let sources: DiscoverySourceDto[] = [];
+  let agents: DiscoveredAgentDto[] = [];
+  let firstLoad = true;
+  let autorefreshTimer: number | null = null;
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = message;
+    errBanner.classList.remove("hidden");
+    toastBanner.classList.add("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+  function showToast(message: string): void {
+    toastBanner.textContent = message;
+    toastBanner.classList.remove("hidden");
+    errBanner.classList.add("hidden");
+    window.setTimeout(() => toastBanner.classList.add("hidden"), 4000);
+  }
+
+  function sourcePill(s: DiscoverySourceDto): string {
+    const kind = (s.kind || s.source || "").toLowerCase();
+    const palette: Record<string, string> = {
+      static: "border-sky-500/30 bg-sky-500/10 text-sky-300",
+      registry: "border-violet-500/30 bg-violet-500/10 text-violet-300",
+      mdns: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+    };
+    const cls = palette[kind] ?? "border-white/10 bg-white/5 text-gray-300";
+    const status = s.enabled
+      ? `<span class="ml-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-300">enabled</span>`
+      : `<span class="ml-1 rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-gray-500">disabled</span>`;
+    return `
+      <div class="flex items-center gap-1.5 rounded-full border ${cls} px-2.5 py-1 text-[11px]">
+        <span class="mono">${escapeHtml(kind || "?")}</span>
+        <span class="text-gray-400">·</span>
+        <span>${escapeHtml(s.name || "")}</span>
+        ${status}
+      </div>`;
+  }
+
+  function renderSources(): void {
+    if (sources.length === 0) {
+      sourceEmpty.classList.remove("hidden");
+      sourceList.classList.add("hidden");
+      sourceList.classList.remove("flex");
+      sourceCount.textContent = "";
+      mdnsWarning.classList.add("hidden");
+      return;
+    }
+    sourceEmpty.classList.add("hidden");
+    sourceList.classList.remove("hidden");
+    sourceList.classList.add("flex");
+    sourceCount.textContent = `(${sources.length})`;
+    sourceList.innerHTML = sources.map(sourcePill).join("");
+
+    // mDNS-not-supported: kind present but disabled → explicit inline warning
+    // (not a generic disabled pill).
+    const mdns = sources.find((s) => (s.kind || s.source || "").toLowerCase() === "mdns");
+    if (mdns && !mdns.enabled) {
+      mdnsWarning.classList.remove("hidden");
+    } else {
+      mdnsWarning.classList.add("hidden");
+    }
+  }
+
+  function formatRelative(iso: string): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    const diff = Date.now() - d.getTime();
+    if (diff < 0) return d.toLocaleString();
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const days = Math.floor(hr / 24);
+    return `${days}d ago`;
+  }
+
+  function passesFilters(a: DiscoveredAgentDto): boolean {
+    const sourceVal = sourceFilter.value;
+    if (sourceVal && (a.source || "").toLowerCase() !== sourceVal) return false;
+
+    const errVal = errorFilter.value;
+    if (errVal === "ok" && a.error) return false;
+    if (errVal === "error" && !a.error) return false;
+
+    const search = searchInput.value.trim().toLowerCase();
+    if (search) {
+      const hay = [
+        a.agentId,
+        a.displayName,
+        a.endpoint,
+        ...(a.capabilities ?? []),
+      ].join(" ").toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  }
+
+  function renderAgents(): void {
+    const visible = agents.filter(passesFilters);
+
+    if (agents.length === 0) {
+      agentEmpty.classList.remove("hidden");
+      agentEmpty.textContent = "Discovery ещё не запускался. Нажмите «Refresh now».";
+      agentTableWrap.classList.add("hidden");
+      agentCount.textContent = "";
+      return;
+    }
+    if (visible.length === 0) {
+      agentEmpty.classList.remove("hidden");
+      agentEmpty.textContent = "Нет агентов, удовлетворяющих фильтрам.";
+      agentTableWrap.classList.add("hidden");
+      agentCount.textContent = `(0 из ${agents.length})`;
+      return;
+    }
+    agentEmpty.classList.add("hidden");
+    agentTableWrap.classList.remove("hidden");
+    agentCount.textContent = `(${visible.length} из ${agents.length})`;
+
+    agentTbody.innerHTML = visible.map((a) => {
+      const srcKind = (a.source || "").toLowerCase();
+      const srcPalette: Record<string, string> = {
+        static: "border-sky-500/30 bg-sky-500/10 text-sky-300",
+        registry: "border-violet-500/30 bg-violet-500/10 text-violet-300",
+        mdns: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      };
+      const srcCls = srcPalette[srcKind] ?? "border-white/10 bg-white/5 text-gray-400";
+      const caps = a.capabilities ?? [];
+      const manifest = a.manifestLoaded
+        ? `<span class="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-300">loaded</span>`
+        : `<span class="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-gray-500">—</span>`;
+      const errCell = a.error
+        ? `<span class="mono text-[11px] text-rose-300" title="${escapeHtml(a.error)}">${escapeHtml(a.error.length > 80 ? a.error.slice(0, 80) + "…" : a.error)}</span>`
+        : `<span class="text-gray-600">—</span>`;
+      return `
+        <tr>
+          <td class="py-2 pr-3 align-top">
+            <div class="font-medium text-white">${escapeHtml(a.displayName || a.agentId)}</div>
+            <div class="mono text-[10px] text-gray-500">${escapeHtml(a.agentId)}</div>
+            ${a.endpoint ? `<div class="mono mt-0.5 text-[10px] text-gray-600 truncate max-w-[18rem]">${escapeHtml(a.endpoint)}</div>` : ""}
+          </td>
+          <td class="py-2 pr-3 align-top">
+            <span class="rounded-full border ${srcCls} px-2 py-0.5 text-[11px]">${escapeHtml(srcKind || "?")}</span>
+          </td>
+          <td class="py-2 pr-3 align-top text-gray-400" title="${escapeHtml(a.discoveredAt)}">${formatRelative(a.discoveredAt)}</td>
+          <td class="py-2 pr-3 text-right align-top text-gray-300">${caps.length}</td>
+          <td class="py-2 pr-3 text-right align-top">${manifest}</td>
+          <td class="py-2 pr-3 align-top">${errCell}</td>
+        </tr>`;
+    }).join("");
+  }
+
+  async function loadSources(): Promise<void> {
+    try {
+      sources = await api.listDiscoverySources();
+      renderSources();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить источники discovery: ${msg}`);
+    }
+  }
+
+  async function loadAgents(): Promise<void> {
+    clearError();
+    agentLoading.classList.remove("hidden");
+    agentEmpty.classList.add("hidden");
+    agentTableWrap.classList.add("hidden");
+    try {
+      const list = await api.listDiscoveredAgents();
+      agents = list;
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+      renderAgents();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить discovered agents: ${msg}`);
+      agents = [];
+      renderAgents();
+    } finally {
+      agentLoading.classList.add("hidden");
+    }
+  }
+
+  async function refreshAll(): Promise<void> {
+    clearError();
+    refreshBtn.setAttribute("disabled", "true");
+    refreshBtn.textContent = "Refreshing…";
+    // Capture snapshot BEFORE refresh so we can diff.
+    const beforeIds = new Set(agents.map((a) => a.agentId));
+    try {
+      const res = await api.refreshDiscovery();
+      const newIds = new Set(res.agents.map((a) => a.agentId));
+      let added = 0;
+      let removed = 0;
+      newIds.forEach((id) => { if (!beforeIds.has(id)) added++; });
+      beforeIds.forEach((id) => { if (!newIds.has(id)) removed++; });
+      agents = res.agents;
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+
+      if (firstLoad) {
+        // Don't fabricate +N/−M on the first refresh — nothing to diff against.
+        firstLoad = false;
+        showToast(`Discovery complete: ${res.agents.length} agents`);
+      } else if (added === 0 && removed === 0) {
+        showToast(`Refresh: no changes (${res.agents.length} agents)`);
+      } else {
+        const parts: string[] = [];
+        if (added > 0) parts.push(`+${added}`);
+        if (removed > 0) parts.push(`−${removed}`);
+        showToast(`Refresh: ${parts.join(" / ")} agents (total ${res.agents.length})`);
+      }
+      renderAgents();
+      // Refresh sources too — they may have changed in the meantime.
+      void loadSources();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Refresh failed: ${msg}`);
+    } finally {
+      refreshBtn.removeAttribute("disabled");
+      refreshBtn.textContent = "Refresh now";
+    }
+  }
+
+  function applyFilters(): void {
+    renderAgents();
+  }
+
+  function startAutorefresh(): void {
+    if (autorefreshTimer != null) return;
+    autorefreshTimer = window.setInterval(() => {
+      void (async () => {
+        try { await loadAgents(); } catch { /* surfaced by loadAgents */ }
+      })();
+    }, 60_000);
+  }
+  function stopAutorefresh(): void {
+    if (autorefreshTimer != null) {
+      window.clearInterval(autorefreshTimer);
+      autorefreshTimer = null;
+    }
+  }
+
+  // Wiring.
+  refreshBtn.addEventListener("click", () => { void refreshAll(); });
+  searchInput.addEventListener("input", applyFilters);
+  sourceFilter.addEventListener("change", applyFilters);
+  errorFilter.addEventListener("change", applyFilters);
+  autorefreshChk.addEventListener("change", () => {
+    if (autorefreshChk.checked) startAutorefresh();
+    else stopAutorefresh();
+  });
+
+  // Initial load.
+  void loadSources();
+  void loadAgents();
+</script>

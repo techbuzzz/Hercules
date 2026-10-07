@@ -29,9 +29,11 @@ public sealed class FleetIdentityService : IFleetIdentityService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         // Initialize identity storage path
-        var dataRoot = Path.Combine(AppContext.BaseDirectory, _config.IdentityStoragePath);
+        var dataRoot = Hercules.BuiltIn.ResolvePathUnderDataRoot(
+            Hercules.BuiltIn.ResolveDataRoot(),
+            _config.IdentityStoragePath);
         Directory.CreateDirectory(dataRoot);
-        _identityFilePath = Path.Combine(dataRoot, "fleet-identity.json");
+        _identityFilePath = Path.Combine(dataRoot, Hercules.BuiltIn.FleetIdentityFileName);
     }
 
     public Task<FleetIdentity> GetCurrentIdentityAsync(CancellationToken ct = default)

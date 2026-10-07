@@ -12,12 +12,16 @@ namespace Hercules.Mesh;
 /// </summary>
 public sealed class IntentTransport : IDisposable
 {
+    /// <summary>Имя named HttpClient-клиента для inter-agent intent transport (task_078).</summary>
+    public const string HttpClientName = "intent-transport";
+
     private readonly HttpClient _http;
     private readonly CapabilityRegistry _registry;
     private readonly bool _weOwnClient;
 
     /// <summary>
     ///     Создать транспорт с собственным HttpClient (для CLI-режима без DI).
+    ///     task_078: legacy fallback — рекомендуется <see cref="IHttpClientFactory"/>.
     /// </summary>
     public IntentTransport(CapabilityRegistry registry, int defaultTimeoutMs = 30_000)
     {

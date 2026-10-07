@@ -145,42 +145,80 @@ public sealed class RedisMeshStateStore : IMeshStateStore
                 return true;
             }
 
-            // Optimistic locking: WATCH current version, then MULTI/EXEC
-            var tran = db.CreateTransaction();
-            var watchedKey = prefixedKey;
-
-            // Get current version under watch
-            var currentHash = await db.HashGetAllAsync(watchedKey).WaitAsync(ct).ConfigureAwait(false);
-            if (currentHash.Length == 0)
-                return false; // Key doesn't exist
-
-            var current = ReadStoredValue(currentHash);
-            if (current.Version != expectedVersion)
-                return false; // Version mismatch
-
-            // Re-read createdAt
-            var createdAt = current.CreatedAt;
-            var updatedValue = value with { Version = version, CreatedAt = createdAt, UpdatedAt = now, ExpiresAt = expiresAt };
-            var entries = BuildHashEntries(updatedValue);
-
-            var setTask = tran.HashSetAsync(watchedKey, entries);
-            if (expiresAt.HasValue)
-                _ = tran.KeyExpireAsync(watchedKey, expiresAt.Value - now);
-
-            var committed = await tran.ExecuteAsync().WaitAsync(ct).ConfigureAwait(false);
-            if (committed)
+            // Optimistic locking via Redis WATCH/MULTI/EXEC. The Condition below
+            // adds an internal WATCH on the `version` hash field; if the field
+            // changes between WATCH and EXEC the transaction aborts and
+            // ExecuteAsync returns null. We loop with bounded retries to give
+            // the caller a fair chance against concurrent writers without
+            // risking livelock.
+            for (var attempt = 0; attempt < MaxCasAttempts; attempt++)
             {
-                NotifyWatchers(key, updatedValue);
-                return true;
+                var currentHash = await db.HashGetAllAsync(prefixedKey).WaitAsync(ct).ConfigureAwait(false);
+                if (currentHash.Length == 0)
+                    return false; // Key doesn't exist — CAS cannot match
+
+                var current = ReadStoredValue(currentHash);
+                if (!string.Equals(current.Version, expectedVersion, StringComparison.Ordinal))
+                {
+                    // Fast path: version mismatch known up front, no need to
+                    // open a transaction. Concurrent writers may still race
+                    // against us; the WATCH on the transaction (next block)
+                    // will catch any change between our read and the EXEC.
+                    return false;
+                }
+
+                var tran = db.CreateTransaction();
+                tran.AddCondition(Condition.HashEqual(prefixedKey, "version", expectedVersion));
+
+                var updatedValue = value with
+                {
+                    Version = version,
+                    CreatedAt = current.CreatedAt,
+                    UpdatedAt = now,
+                    ExpiresAt = expiresAt
+                };
+                var entries = BuildHashEntries(updatedValue);
+
+                _ = tran.HashSetAsync(prefixedKey, entries);
+                if (expiresAt.HasValue)
+                    _ = tran.KeyExpireAsync(prefixedKey, expiresAt.Value - now);
+
+                var committed = await tran.ExecuteAsync().WaitAsync(ct).ConfigureAwait(false);
+                if (committed)
+                {
+                    NotifyWatchers(key, updatedValue);
+                    return true;
+                }
+
+                // CAS lost: someone else mutated the version between our
+                // read and EXEC. Back off briefly and retry. The jittered
+                // delay prevents a tight retry loop under contention.
+                try
+                {
+                    await Task.Delay(CasRetryDelay(attempt), ct).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
             }
 
-            return false; // CAS failed due to concurrent modification
+            return false; // All retries exhausted
         }
         catch (RedisConnectionException ex)
         {
             _log.LogWarning(ex, "[RedisStateStore] Redis unavailable for CompareAndSetAsync({Key})", key);
             throw;
         }
+    }
+
+    private const int MaxCasAttempts = 5;
+
+    private static TimeSpan CasRetryDelay(int attempt)
+    {
+        // 1ms, 3ms, 7ms, 15ms, 31ms — capped and lightly randomised.
+        var ms = Math.Min(31, (1 << attempt) - 1 + Random.Shared.Next(2));
+        return TimeSpan.FromMilliseconds(ms);
     }
 
     /// <inheritdoc />
@@ -225,7 +263,7 @@ public sealed class RedisMeshStateStore : IMeshStateStore
     }
 
     /// <inheritdoc />
-    public async Task<long> IncrementAsync(string key, long delta = 1, CancellationToken ct = default)
+    public async Task<long> IncrementAsync(string key, long delta = 1, TimeSpan? ttl = null, CancellationToken ct = default)
     {
         ThrowIfDisposed();
 
@@ -234,6 +272,13 @@ public sealed class RedisMeshStateStore : IMeshStateStore
             var db = _redis.GetDatabase();
             var prefixedKey = _config.KeyPrefix + key;
             var result = await db.StringIncrementAsync(prefixedKey, delta).WaitAsync(ct).ConfigureAwait(false);
+
+            // Refresh TTL on each increment (sliding-window semantics): the counter
+            // expires `ttl` after the last call instead of after the first.
+            if (ttl.HasValue)
+            {
+                await db.KeyExpireAsync(prefixedKey, ttl.Value).WaitAsync(ct).ConfigureAwait(false);
+            }
 
             // Notify watchers on change
             var stored = await GetAsync(key, ct).ConfigureAwait(false);
@@ -272,7 +317,7 @@ public sealed class RedisMeshStateStore : IMeshStateStore
             }
 
             var timer = new Timer(
-                state => ((RedisMeshStateStore)state!).PollPrefixWatchers(prefix, channel),
+                state => ((RedisMeshStateStore)state!).PollPrefixWatchersTimer((prefix, channel)),
                 this,
                 TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs),
                 TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs));
@@ -299,7 +344,7 @@ public sealed class RedisMeshStateStore : IMeshStateStore
                 new UnboundedChannelOptions { SingleReader = true, SingleWriter = true }));
 
         var exactTimer = new Timer(
-            state => ((RedisMeshStateStore)state!).PollExactWatchers(key, exactChannel),
+            state => ((RedisMeshStateStore)state!).PollExactWatchersTimer((key, exactChannel)),
             this,
             TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs),
             TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs));
@@ -437,11 +482,23 @@ public sealed class RedisMeshStateStore : IMeshStateStore
 
     private string? _lastExactSnapshot;
 
-    private void PollExactWatchers(string key, Channel<StoredValue> channel)
+    // task_077: Timer callbacks must be void; they re-enter via fire-and-forget async helpers.
+    // Exceptions are caught inside the async methods.
+    private void PollExactWatchersTimer((string Key, Channel<StoredValue> Channel) args)
+    {
+        _ = PollExactWatchersAsync(args.Key, args.Channel);
+    }
+
+    private void PollPrefixWatchersTimer((string Prefix, Channel<StoredValue> Channel) args)
+    {
+        _ = PollPrefixWatchersAsync(args.Prefix, args.Channel);
+    }
+
+    private async Task PollExactWatchersAsync(string key, Channel<StoredValue> channel)
     {
         try
         {
-            var stored = GetAsync(key, CancellationToken.None).GetAwaiter().GetResult();
+            var stored = await GetAsync(key, CancellationToken.None).ConfigureAwait(false);
             var snapshot = stored?.Version ?? "";
             if (snapshot != _lastExactSnapshot)
             {
@@ -458,14 +515,14 @@ public sealed class RedisMeshStateStore : IMeshStateStore
         catch { /* Polling — ignore errors */ }
     }
 
-    private void PollPrefixWatchers(string prefix, Channel<StoredValue> channel)
+    private async Task PollPrefixWatchersAsync(string prefix, Channel<StoredValue> channel)
     {
         try
         {
-            var keys = ScanKeysAsync(prefix, 10, CancellationToken.None).GetAwaiter().GetResult();
+            var keys = await ScanKeysAsync(prefix, 10, CancellationToken.None).ConfigureAwait(false);
             foreach (var k in keys)
             {
-                var stored = GetAsync(k, CancellationToken.None).GetAwaiter().GetResult();
+                var stored = await GetAsync(k, CancellationToken.None).ConfigureAwait(false);
                 if (stored != null)
                     channel.Writer.TryWrite(stored);
             }

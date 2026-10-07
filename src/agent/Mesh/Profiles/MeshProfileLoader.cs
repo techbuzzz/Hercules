@@ -153,7 +153,7 @@ public sealed class MeshProfileLoader
     {
         var dir = _config.ProfilesDir;
         if (!Path.IsPathRooted(dir))
-            dir = Path.Combine(AppContext.BaseDirectory, dir);
+            dir = Hercules.BuiltIn.ResolvePathUnderDataRoot(Hercules.BuiltIn.ResolveDataRoot(), dir);
 
         if (!Directory.Exists(dir))
         {

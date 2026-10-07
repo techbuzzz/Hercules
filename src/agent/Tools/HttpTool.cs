@@ -13,25 +13,35 @@ namespace Hercules.Tools;
 /// </summary>
 public sealed class HttpTool : ITool
 {
+    /// <summary>Имя named HttpClient-клиента, регистрируемого в DI с standard resilience handler (task_078).</summary>
+    public const string HttpClientName = "http-tool";
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
     private readonly HttpConfig _cfg;
-    private readonly HttpClient _http;
+    private readonly IHttpClientFactory? _httpFactory;
     private readonly ILogger<HttpTool> _logger;
     private readonly RateLimiter _rateLimiter;
 
     public HttpTool(HttpConfig cfg, ILogger<HttpTool> logger)
+        : this(cfg, logger, httpFactory: null)
+    {
+    }
+
+    /// <summary>
+    ///     DI-friendly конструктор: <paramref name="httpFactory"/> создаёт
+    ///     short-lived <see cref="HttpClient"/> через пулинг connection pool
+    ///     factory (task_078). Если null — fallback на собственный экземпляр
+    ///     (CLI-режим / unit-тесты без DI).
+    /// </summary>
+    public HttpTool(HttpConfig cfg, ILogger<HttpTool> logger, IHttpClientFactory? httpFactory)
     {
         _cfg = cfg;
         _logger = logger;
-        _http = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(cfg.TimeoutSeconds)
-        };
-        _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Hercules", "2.0"));
+        _httpFactory = httpFactory;
         _rateLimiter = new RateLimiter(cfg.RateLimitPerMinute);
     }
 
@@ -101,7 +111,8 @@ public sealed class HttpTool : ITool
                 httpReq.Content = new StringContent(req.Body, Encoding.UTF8, "application/json");
             }
 
-            using HttpResponseMessage resp = await _http.SendAsync(httpReq, ct);
+            using var client = CreateClient();
+            using HttpResponseMessage resp = await client.SendAsync(httpReq, ct);
             var bytes = await resp.Content.ReadAsByteArrayAsync(ct);
             var truncated = bytes.Length > _cfg.MaxResponseSizeKb * 1024;
             var text = Encoding.UTF8.GetString(truncated
@@ -174,6 +185,27 @@ public sealed class HttpTool : ITool
         }
 
         return false;
+    }
+
+    /// <summary>
+    ///     Создать short-lived <see cref="HttpClient"/> per call. Если в DI зарегистрирован
+    ///     <see cref="IHttpClientFactory"/> — используется named-клиент "http-tool"
+    ///     (с standard resilience handler), иначе fallback на собственный экземпляр.
+    /// </summary>
+    private HttpClient CreateClient()
+    {
+        if (_httpFactory is not null)
+        {
+            return _httpFactory.CreateClient(HttpClientName);
+        }
+
+        // Fallback: CLI / unit-tests без DI.
+        var client = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(_cfg.TimeoutSeconds)
+        };
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Hercules", "2.0"));
+        return client;
     }
 
     private sealed class HttpRequest

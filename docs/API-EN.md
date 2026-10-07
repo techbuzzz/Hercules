@@ -1,6 +1,6 @@
 # Web API Reference
 
-ASP.NET Core Minimal API. Base: `http://localhost:5000`. All responses are JSON (UTF-8, camelCase).
+ASP.NET Core Minimal API. Base: `http://localhost:8421`. All responses are JSON (UTF-8, camelCase).
 
 ## Authorization
 All endpoints except `/api/health` require the header:
@@ -30,7 +30,7 @@ If `WebApi:ApiKey` is empty, authorization is disabled (local development only).
 
 ### Chat
 ```bash
-curl -X POST http://localhost:5000/api/chat \
+curl -X POST http://localhost:8421/api/chat \
   -H "X-Api-Key: dev-local-key" \
   -H "Content-Type: application/json" \
   -d '{"message":"what is the weather in Moscow?"}'
@@ -51,20 +51,20 @@ Response:
 
 ### Creating a skill via AI
 ```bash
-curl -X POST "http://localhost:5000/api/skills?ai=true" \
+curl -X POST "http://localhost:8421/api/skills?ai=true" \
   -H "X-Api-Key: dev-local-key" -H "Content-Type: application/json" \
   -d '{"name":"Text translation","description":"Translates text between languages"}'
 ```
 
 ### Improving a skill
 ```bash
-curl -X POST http://localhost:5000/api/skills/translate/improve \
+curl -X POST http://localhost:8421/api/skills/translate/improve \
   -H "X-Api-Key: dev-local-key"
 ```
 
 ### Statistics
 ```bash
-curl http://localhost:5000/api/stats -H "X-Api-Key: dev-local-key"
+curl http://localhost:8421/api/stats -H "X-Api-Key: dev-local-key"
 ```
 
 ## Response Codes

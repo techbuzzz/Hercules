@@ -23,11 +23,11 @@ public static class SkillQualityController
 
                 var score = await service.ComputeScoreAsync(id, skill.Meta.Version, ct);
                 return Results.Ok(score);
-            }).WithName("GetSkillQuality");
+            }).WithName("GetSkillQuality").WithTags("SkillQuality");
 
         // GET /api/skills/{id}/quality/history — all versions history
         app.MapGet("/api/skills/{id}/quality/history",
-            (string id, ISkillQualityService service) => Results.Ok((object?)service.GetHistoryAsync(id))).WithName("GetSkillQualityHistory");
+            (string id, ISkillQualityService service) => Results.Ok((object?)service.GetHistoryAsync(id))).WithName("GetSkillQualityHistory").WithTags("SkillQuality");
 
         // POST /api/skills/{id}/quality/record — record a quality event
         app.MapPost("/api/skills/{id}/quality/record",
@@ -61,7 +61,7 @@ public static class SkillQualityController
                 }
 
                 return Results.Ok(new { recorded = true, skillId = id, skillVersion = skill.Meta.Version });
-            }).WithName("RecordSkillQualityEvent");
+            }).WithName("RecordSkillQualityEvent").WithTags("SkillQuality");
 
         // GET /api/skills/{id}/quality/score — composite score only
         app.MapGet("/api/skills/{id}/quality/score",
@@ -83,7 +83,7 @@ public static class SkillQualityController
                     isReliable = score.IsReliable,
                     reason = score.Reason,
                 });
-            }).WithName("GetSkillQualityScore");
+            }).WithName("GetSkillQualityScore").WithTags("SkillQuality");
     }
 }
 

@@ -28,9 +28,11 @@ Hercules состоит из переиспользуемого **ядра аг�
 
 ## Слои
 
-### 1. Интерфейсы (`CLI/`, `Telegram/`, `Hercules.WebApi/`, `hercules-web/`)
+### 1. Интерфейсы (`CLI/`, `Telegram/`, `Hercules.WebApi/` + Studio)
 Принимают ввод пользователя, вызывают `AgentCore.HandleAsync()` и отображают результат.
 Web API использует `Agent/WebApiAdapter.cs` (DTO + маппинг) как тонкий слой над ядром.
+Он же раздаёт SPA Studio на `/ui` (ADR-0009) — веб-интерфейс и API это один процесс;
+`hercules-web/` (Astro) устарел.
 
 ### 2. Ядро агента (`Agent/`)
 - **`AgentCore`** — оркестрация: загрузка контекста → маршрутизация → вызов LLM → логирование →

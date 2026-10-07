@@ -1,10 +1,12 @@
 using System.Text;
 using Hercules.Config;
+using Hercules.Context.Distillation;
 using Hercules.Context.Summarizer;
 using Hercules.Memory.Layers;
 using Hercules.Skills;
 using Hercules.Storage;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
 
 namespace Hercules.Context;
 
@@ -12,13 +14,22 @@ namespace Hercules.Context;
 ///     Контекстный билдер: собирает память, tool schemas, episodes в рамках token-бюджета.
 ///     Приоритизирует high-confidence facts, фильтрует sensitive данные,
 ///     сжимает tool traces в episodic memory.
-///
-///     Task 027 — Context Assembly.
+///     <para>
+///         Task 027 — Context Assembly.
+///         Task 102 — иерархическая дистилляция: при <c>Distillation.Mode != Off</c>
+///         ассемблирует (raw recent + summary older + key facts ancient) вместо legacy path.
+///     </para>
 /// </summary>
 public sealed class ContextBuilder : IContextBuilder
 {
+    // task_084: pooled StringBuilder for context assembly hot path.
+    private static readonly ObjectPool<StringBuilder> SbPool =
+        new DefaultObjectPoolProvider().CreateStringBuilderPool();
+
     private readonly LayeredMemoryManager? _memory;
     private readonly ITraceSummarizer? _traceSummarizer;
+    private readonly ContextDistillationService? _distillation;
+    private readonly SqliteSessionStore? _sessions;
     private readonly ContextConfig _cfg;
     private readonly ILogger<ContextBuilder> _logger;
 
@@ -29,10 +40,14 @@ public sealed class ContextBuilder : IContextBuilder
         LayeredMemoryManager? memory,
         ContextConfig cfg,
         ILogger<ContextBuilder> logger,
-        ITraceSummarizer? traceSummarizer = null)
+        ITraceSummarizer? traceSummarizer = null,
+        ContextDistillationService? distillation = null,
+        SqliteSessionStore? sessions = null)
     {
         _memory = memory;
         _traceSummarizer = traceSummarizer;
+        _distillation = distillation;
+        _sessions = sessions;
         _cfg = cfg;
         _logger = logger;
 
@@ -52,17 +67,21 @@ public sealed class ContextBuilder : IContextBuilder
             return new ContextAssembly("", _currentBudget, 0, false);
         }
 
+        // Non-null local: `_memory` is a field, and its null-state is reset by the awaits
+        // below, so later uses must go through this capture rather than `_memory!`.
+        var memory = _memory;
+
         var items = new List<ContextItem>();
         var availableTokens = _cfg.MaxContextTokens - _cfg.SystemPromptOverheadTokens;
         if (availableTokens < 0) availableTokens = _cfg.MaxContextTokens;
 
         // 1. Durable facts — High importance first
-        var facts = await _memory.BuildContextBlockAsync(ct);
+        var facts = await memory.BuildContextBlockAsync(ct);
         items.AddRange(ParseFactsFromContext(facts, ImportanceLevel.High));
 
         // 2. Episodes
-        var episodes = _memory?.EpisodicStore is not null
-            ? await _memory.EpisodicStore.GetRecentEpisodesAsync(_cfg.MaxEpisodesInContext, ct)
+        var episodes = memory.EpisodicStore is not null
+            ? await memory.EpisodicStore.GetRecentEpisodesAsync(_cfg.MaxEpisodesInContext, ct)
             : Array.Empty<Episode>();
         foreach (var ep in episodes)
         {
@@ -77,8 +96,11 @@ public sealed class ContextBuilder : IContextBuilder
                 ep.Entry.Tags));
         }
 
-        // 3. Working memory (from LayeredMemoryManager facade)
-        var workingCtx = await _memory.BuildContextBlockAsync(ct);
+        // 3. Working memory (from LayeredMemoryManager facade).
+        // `_memory` is a nullable field guarded at the top of this method; the compiler
+        // resets a field's null-state across `await`, so the non-null local captured in
+        // `memory` is used instead of re-asserting with `!` at every call site.
+        var workingCtx = await memory.BuildContextBlockAsync(ct);
         items.AddRange(ParseWorkingFromContext(workingCtx, ImportanceLevel.Medium));
 
         // 5. Sort by importance (High → Medium → Low), then by token size (smaller first)
@@ -88,51 +110,110 @@ public sealed class ContextBuilder : IContextBuilder
             .ThenBy(i => i.TokenEstimate)
             .ToList();
 
+        // task_102: optionally include distilled summary block (raw recent +
+        // summary older + key facts ancient). Additive on top of the legacy
+        // facts/episodes/working path so backward compat is preserved.
+        ContextItem? distillationItem = null;
+        if (_cfg.Distillation.Mode != DistillationMode.Off
+            && _distillation is not null
+            && !string.IsNullOrEmpty(sessionId))
+        {
+            try
+            {
+                var summaryMarkdown = await _distillation.GetSummaryAsync(
+                    sessionId,
+                    _cfg.Distillation,
+                    Math.Max(100, _cfg.Distillation.SummaryTokenBudget + _cfg.Distillation.KeyFactsTokenBudget),
+                    ct);
+                if (!string.IsNullOrWhiteSpace(summaryMarkdown))
+                {
+                    distillationItem = new ContextItem(
+                        ContextItemType.WorkingMemory, // reuse WorkingMemory tier
+                        summaryMarkdown.Trim(),
+                        EstimateTokens(summaryMarkdown),
+                        ImportanceLevel.High,
+                        "distilled",
+                        new List<string> { "distillation" });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[ContextBuilder] Distillation summary fetch failed for session {SessionId}", sessionId);
+            }
+        }
+
         // 6. Assemble within token budget
-        var sb = new StringBuilder();
+        // task_084: pooled StringBuilder to avoid per-request allocation in the hot path.
+        var sb = SbPool.Get();
         var usedTokens = 0;
         var truncated = false;
         var factCount = 0;
 
-        foreach (var item in sorted)
+        try
         {
-            if (factCount >= _cfg.MaxFactsInContext && item.Type == ContextItemType.DurableFact)
+            // 6a. Distilled block first (if enabled) — operator-visible structured summary.
+            if (distillationItem is not null)
             {
-                truncated = true;
-                continue;
+                var distHeader = "=== ДИСТИЛЛИРОВАННЫЙ КОНТЕКСТ ===\n";
+                int distTokens = distillationItem.TokenEstimate + EstimateTokens(distHeader);
+                if (usedTokens + distTokens <= availableTokens)
+                {
+                    sb.Append(distHeader);
+                    sb.AppendLine(distillationItem.Content.Trim());
+                    sb.AppendLine();
+                    usedTokens += distTokens;
+                    factCount++;
+                }
+                else
+                {
+                    truncated = true;
+                }
             }
 
-            if (usedTokens + item.TokenEstimate > availableTokens)
+            foreach (var item in sorted)
             {
-                truncated = true;
-                continue;
+                if (factCount >= _cfg.MaxFactsInContext && item.Type == ContextItemType.DurableFact)
+                {
+                    truncated = true;
+                    continue;
+                }
+
+                if (usedTokens + item.TokenEstimate > availableTokens)
+                {
+                    truncated = true;
+                    continue;
+                }
+
+                var sectionHeader = SectionHeader(item.Type);
+                sb.Append(sectionHeader);
+                sb.AppendLine(item.Content.Trim());
+                sb.AppendLine();
+                usedTokens += item.TokenEstimate + EstimateTokens(sectionHeader);
+                factCount++;
+
+                if (factCount >= _cfg.MaxFactsInContext + _cfg.MaxEpisodesInContext + 5)
+                {
+                    truncated = true;
+                    break;
+                }
             }
 
-            var sectionHeader = SectionHeader(item.Type);
-            sb.Append(sectionHeader);
-            sb.AppendLine(item.Content.Trim());
-            sb.AppendLine();
-            usedTokens += item.TokenEstimate + EstimateTokens(sectionHeader);
-            factCount++;
+            var contextBlock = sb.ToString();
+            _currentBudget = new ContextBudget(
+                availableTokens,
+                usedTokens,
+                availableTokens - usedTokens);
 
-            if (factCount >= _cfg.MaxFactsInContext + _cfg.MaxEpisodesInContext + 5)
-            {
-                truncated = true;
-                break;
-            }
+            return new ContextAssembly(
+                contextBlock,
+                _currentBudget,
+                factCount,
+                truncated);
         }
-
-        var contextBlock = sb.ToString();
-        _currentBudget = new ContextBudget(
-            availableTokens,
-            usedTokens,
-            availableTokens - usedTokens);
-
-        return new ContextAssembly(
-            contextBlock,
-            _currentBudget,
-            factCount,
-            truncated);
+        finally
+        {
+            SbPool.Return(sb);
+        }
     }
 
     public async Task<bool> CompressTraceAsync(

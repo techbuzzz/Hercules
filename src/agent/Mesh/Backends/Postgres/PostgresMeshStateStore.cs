@@ -230,7 +230,7 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
     }
 
     /// <inheritdoc />
-    public async Task<long> IncrementAsync(string key, long delta = 1, CancellationToken ct = default)
+    public async Task<long> IncrementAsync(string key, long delta = 1, TimeSpan? ttl = null, CancellationToken ct = default)
     {
         ThrowIfDisposed();
         ArgumentException.ThrowIfNullOrEmpty(key);
@@ -238,22 +238,26 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
         await EnsureSchemaAsync(ct).ConfigureAwait(false);
 
         // Use a UPSERT to atomically increment a counter stored as JSONB {"value": N}
+        // expires_at is refreshed on every increment when ttl is provided (sliding-window).
         const string sql = @"
-            INSERT INTO state (key, data, version, created_at, updated_at)
-            VALUES (@key, jsonb_build_object('value', @delta), @version, NOW(), NOW())
+            INSERT INTO state (key, data, version, created_at, updated_at, expires_at)
+            VALUES (@key, jsonb_build_object('value', @delta), @version, NOW(), NOW(), @expiresAt)
             ON CONFLICT (key) DO UPDATE SET
                 data = jsonb_set(state.data, '{value}', (COALESCE((state.data->>'value')::bigint, 0) + @delta)::text::jsonb),
                 version = @version,
-                updated_at = NOW()
+                updated_at = NOW(),
+                expires_at = COALESCE(@expiresAt, state.expires_at)
             RETURNING (data->>'value')::bigint";
 
         var version = Guid.NewGuid().ToString("N");
+        var expiresAt = ttl.HasValue ? (DateTime?)DateTime.UtcNow.Add(ttl.Value) : null;
 
         await using var conn = await OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = new NpgsqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("key", key);
         cmd.Parameters.AddWithValue("delta", delta);
         cmd.Parameters.AddWithValue("version", version);
+        cmd.Parameters.AddWithValue("expiresAt", (object?)expiresAt ?? DBNull.Value);
         var result = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
         var value = result is long l ? l : Convert.ToInt64(result);
 
@@ -503,8 +507,18 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
                         await conn.WaitAsync(ct).ConfigureAwait(false);
                     }
                 }
-                catch (OperationCanceledException) { }
-                catch (Exception) { }
+                catch (OperationCanceledException ex)
+                {
+                    // R32: was a silent empty catch. Cancellation during shutdown is
+                    // expected, but swallowing it hid genuine cancellation bugs.
+                    _log.LogDebug(ex, "[PostgresStateStore] LISTEN/NOTIFY loop cancelled for {Key}", key);
+                }
+                catch (Exception ex)
+                {
+                    // R32: was a silent empty catch — a persistent backend failure looked
+                    // identical to a clean shutdown, with no telemetry at all.
+                    _log.LogWarning(ex, "[PostgresStateStore] LISTEN/NOTIFY loop terminated unexpectedly for {Key}", key);
+                }
             }, ct);
         }
         catch (Exception ex)
@@ -519,22 +533,28 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
         var timerKey = "exact:" + key;
         if (_watchTimers.ContainsKey(timerKey)) return;
 
+        // task_077: timer callback is sync void; it re-enters via fire-and-forget async helper.
         var timer = new Timer(
             state =>
             {
                 var (k, ch) = ((string, Channel<StoredValue?>))state!;
-                try
-                {
-                    var stored = GetAsync(k, CancellationToken.None).GetAwaiter().GetResult();
-                    ch.Writer.TryWrite(stored);
-                }
-                catch { /* swallow */ }
+                _ = PollExactAsync(k, ch);
             },
             (key, channel),
             TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs),
             TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs));
 
         _watchTimers.TryAdd(timerKey, timer);
+    }
+
+    private async Task PollExactAsync(string key, Channel<StoredValue?> channel)
+    {
+        try
+        {
+            var stored = await GetAsync(key, CancellationToken.None).ConfigureAwait(false);
+            channel.Writer.TryWrite(stored);
+        }
+        catch { /* swallow */ }
     }
 
     private async Task<IDisposable> WatchPrefixAsync(
@@ -567,21 +587,12 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
 
         // Periodically scan matching keys and emit them
         var timerKey = "prefix:" + prefix;
+        // task_077: timer callback is sync void; it re-enters via fire-and-forget async helper.
         var timer = new Timer(
             state =>
             {
                 var (p, ch) = ((string, Channel<StoredValue?>))state!;
-                try
-                {
-                    var keys = ScanKeysAsync(p, 100, CancellationToken.None).GetAwaiter().GetResult();
-                    foreach (var k in keys)
-                    {
-                        var stored = GetAsync(k, CancellationToken.None).GetAwaiter().GetResult();
-                        if (stored is not null)
-                            ch.Writer.TryWrite(stored);
-                    }
-                }
-                catch { /* swallow */ }
+                _ = PollPrefixAsync(p, ch);
             },
             (prefix, channel),
             TimeSpan.FromMilliseconds(_config.WatchPollingIntervalMs),
@@ -589,6 +600,21 @@ public sealed class PostgresMeshStateStore : IMeshStateStore
         _watchTimers.TryAdd(timerKey, timer);
 
         return new PrefixWatcher(watchers, channel, timerKey, _watchTimers);
+    }
+
+    private async Task PollPrefixAsync(string prefix, Channel<StoredValue?> channel)
+    {
+        try
+        {
+            var keys = await ScanKeysAsync(prefix, 100, CancellationToken.None).ConfigureAwait(false);
+            foreach (var k in keys)
+            {
+                var stored = await GetAsync(k, CancellationToken.None).ConfigureAwait(false);
+                if (stored is not null)
+                    channel.Writer.TryWrite(stored);
+            }
+        }
+        catch { /* swallow */ }
     }
 
     private static StoredValue? ReadStoredValue(NpgsqlDataReader reader)

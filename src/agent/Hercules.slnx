@@ -1,5 +1,8 @@
 <Solution>
   <Project Path="Hercules.csproj" />
+  <Project Path="SkillSdk/Hercules.SkillSdk.csproj" />
   <Project Path="Hercules.WebApi/Hercules.WebApi.csproj" />
+  <Project Path="../workflow-server/Hercules.WorkflowServer.csproj" />
+  <Project Path="../hercules-supervisor/Hercules.Supervisor.csproj" />
   <Project Path="../../tests/Hercules.Agent.Tests/Hercules.Agent.Tests.csproj" />
 </Solution>

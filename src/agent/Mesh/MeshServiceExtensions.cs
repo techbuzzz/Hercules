@@ -1,6 +1,7 @@
 using Hercules.Agent;
 using Hercules.Budget;
 using Hercules.Config;
+using Hercules.Fleet;
 using Hercules.Mesh.A2A;
 using Hercules.Mesh.Abstractions;
 using Hercules.Mesh.Aggregation;
@@ -31,6 +32,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 using Hercules.LLM;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Hercules.Mesh;
 
@@ -103,6 +105,7 @@ public static class MeshServiceCollectionExtensions
 
         // CapabilityRegistry — singleton с SQLite-хранилищем
         services.AddSingleton(sp => new CapabilityRegistry(registryDbPath));
+        services.AddSingleton<ICapabilityLookup>(sp => sp.GetRequiredService<CapabilityRegistry>());
 
         // ICapabilityRegistryService — DI-friendly обёртка
         services.AddSingleton<ICapabilityRegistryService>(sp =>
@@ -239,6 +242,9 @@ public static class MeshServiceCollectionExtensions
                 sp.GetService<IMeshObservabilityService>()));
 
         // Phase 3: TaskLifecycleProtocol — inter-agent task lifecycle (task_036)
+        // Phase 8: persistence via SqliteDelegatedTaskStore (task_106)
+        services.AddSingleton<IDelegatedTaskStore>(sp =>
+            new SqliteDelegatedTaskStore(sp.GetRequiredService<Hercules.Config.StorageConfig>()));
         services.AddSingleton<ITaskLifecycleProtocol>(sp =>
         {
             var transport = sp.GetRequiredService<ITransport>();
@@ -246,7 +252,8 @@ public static class MeshServiceCollectionExtensions
             var agentId = meshCfg.AgentId;
             var auditService = sp.GetService<MeshAuditService>();
             var observability = sp.GetService<IMeshObservabilityService>();
-            return new TaskLifecycleProtocol(transport, agentId, logger, auditService, observability);
+            var store = sp.GetRequiredService<IDelegatedTaskStore>();
+            return new TaskLifecycleProtocol(transport, agentId, logger, auditService, observability, store);
         });
 
         // Phase 4: CircuitBreaker + RetryPolicy — отказоустойчивость peer-вызовов (task_047)
@@ -282,7 +289,8 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<RetryPolicy>(),
                 sp.GetRequiredService<ResilienceConfig>(),
                 logger,
-                sp.GetService<IMeshObservabilityService>());
+                sp.GetService<IMeshObservabilityService>(),
+                sp.GetService<Hercules.Slo.ISloLatencyTracker>());
         });
 
         // Phase 4: Mesh Router (task_043) — capability-based peer routing with health + scoring
@@ -312,7 +320,8 @@ public static class MeshServiceCollectionExtensions
                 sp.GetRequiredService<FanOutOptions>(),
                 sp.GetRequiredService<CircuitBreaker>(),
                 sp.GetRequiredService<ILogger<FanOutOrchestrator>>(),
-                sp.GetService<IMeshObservabilityService>()));
+                sp.GetService<IMeshObservabilityService>(),
+                sp.GetService<IFleetTemplateManager>()));
 
         // Phase 4: MeshRouter — fan-out/fan-in оркестрация с LLM-judge
         services.AddSingleton<MeshRouter>();
@@ -439,21 +448,39 @@ public static class MeshServiceCollectionExtensions
 
         // Phase 5: Centralized mesh observability (task_054) — trace context propagation, mesh span enrichment, OTLP metrics
         services.AddSingleton(appConfig.CentralizedObservability);
+        // Phase 7: Mesh diagnostics aggregator (task_093) — in-memory counters + recent traces/logs ring buffers.
+        // The diagnostics service is consumed by the controller endpoints, the activity listener and the log sink below.
+        services.AddSingleton<MeshDiagnosticsService>();
+        services.AddSingleton<InMemoryActivityListener>();
+        // Register the in-memory log sink as both a direct service and an ILoggerProvider so the
+        // ASP.NET logging pipeline picks it up alongside the JSON console provider.
+        services.AddSingleton<InMemoryLogSink>(sp =>
+            new InMemoryLogSink(
+                sp.GetRequiredService<MeshDiagnosticsService>(),
+                Microsoft.Extensions.Logging.LogLevel.Information));
+        services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<InMemoryLogSink>());
         services.AddSingleton<IMeshObservabilityService>(sp =>
             new MeshObservabilityService(
                 sp.GetRequiredService<MeshCentralizedObservabilityConfig>(),
                 sp.GetRequiredService<IOtelService>(),
-                sp.GetRequiredService<ILogger<MeshObservabilityService>>()));
+                sp.GetRequiredService<ILogger<MeshObservabilityService>>(),
+                sp.GetRequiredService<MeshDiagnosticsService>()));
 
         // Phase 4: Mesh backend abstractions (task_066) — IMeshBus, ITaskQueue, IMeshStateStore
         // Default: in-process implementation (Channel-based pub/sub, ConcurrentQueue, ConcurrentDictionary)
-        // Tasks 067–070 will replace these with Redis/NATS/PostgreSQL backends via profile
-        RegisterMeshBackends(services, appConfig, services.BuildServiceProvider());
+        // Tasks 067–070 will replace these with Redis/NATS/PostgreSQL backends via profile.
+        // Profile-loader is created with a NullLogger at registration time
+        // (the singleton registered further down reuses the same config and
+        // is resolved with the host's ILoggerFactory at first use).
+        RegisterMeshBackends(services, appConfig);
 
         // Phase 4: Backend profiles and degradation (task_070) — profile loader and health monitor
         var meshProfilesCfg = appConfig.MeshProfiles;
         services.AddSingleton(meshProfilesCfg);
-        services.AddSingleton<MeshProfileLoader>();
+        services.AddSingleton<MeshProfileLoader>(sp =>
+            new MeshProfileLoader(
+                sp.GetRequiredService<MeshProfilesConfig>(),
+                sp.GetRequiredService<ILogger<MeshProfileLoader>>()));
         services.AddSingleton<IMeshBackendHealthMonitor, MeshBackendHealthMonitor>();
 
         return services;
@@ -466,12 +493,19 @@ public static class MeshServiceCollectionExtensions
     ///     Postgres (task_069): uses Npgsql when Postgres:Enabled or profile = Postgres.
     ///     Falls back to in-process when none is available.
     /// </summary>
-    private static void RegisterMeshBackends(IServiceCollection services, AppConfig appConfig, IServiceProvider sp)
+    private static void RegisterMeshBackends(IServiceCollection services, AppConfig appConfig)
     {
         var redisCfg = appConfig.Redis;
         var natsCfg = appConfig.Nats;
         var postgresCfg = appConfig.Postgres;
-        var profileLoader = new MeshProfileLoader(appConfig.MeshProfiles, sp.GetRequiredService<ILogger<MeshProfileLoader>>());
+        // We only need to *read* the active profile here (a pure data lookup
+        // against MeshProfilesConfig); the loader is also registered as a
+        // singleton further down with a host-resolved ILogger. The NullLogger
+        // here keeps this helper free of any IServiceProvider dependency, so
+        // the caller no longer needs to call services.BuildServiceProvider()
+        // — the root cause of the captive-dependency anti-pattern fixed in
+        // task_082.
+        var profileLoader = new MeshProfileLoader(appConfig.MeshProfiles, NullLogger<MeshProfileLoader>.Instance);
         var activeProfile = profileLoader.GetActiveProfile();
         var isRedisProfile = activeProfile?.Profile == MeshBackendProfile.Redis;
         var isNatsProfile = activeProfile?.Profile == MeshBackendProfile.Nats;
@@ -529,7 +563,7 @@ public static class MeshServiceCollectionExtensions
         {
             // Register Npgsql data source as singleton (task_069).
             // The data source is lazy: connection is opened only on first use.
-            services.AddSingleton<NpgsqlDataSource>(_ =>
+            services.AddSingleton<NpgsqlDataSource>(sp =>
             {
                 var builder = new NpgsqlDataSourceBuilder(postgresCfg.ConnectionString);
                 builder.UseLoggerFactory(sp.GetRequiredService<ILoggerFactory>());
@@ -544,8 +578,15 @@ public static class MeshServiceCollectionExtensions
         else
         {
             // Default: in-process implementations
-            services.AddSingleton<IMeshBus, InProcessMeshBus>();
-            services.AddSingleton<ITaskQueue, InProcessTaskQueue>();
+            // task_086: pass MeshBackpressureConfig to bound concurrent handlers
+            // and surface MeshBackpressure to the task queue.
+            var backpressure = appConfig.Mesh.Backpressure;
+            services.AddSingleton<IMeshBus>(sp => new InProcessMeshBus(
+                backpressure,
+                sp.GetService<ILogger<InProcessMeshBus>>()));
+            services.AddSingleton<ITaskQueue>(sp => new InProcessTaskQueue(
+                backpressure,
+                sp.GetService<ILogger<InProcessTaskQueue>>()));
             services.AddSingleton<IMeshStateStore, InProcessMeshStateStore>();
         }
     }

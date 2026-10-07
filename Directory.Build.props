@@ -1,0 +1,36 @@
+<Project>
+
+  <!--
+    Shared build settings for every project in the Hercules solution.
+
+    R40 / R38: the repository had no Directory.Build.props, so nothing centralised
+    language level, analysis level, or warning policy. `CONTRIBUTING-EN.md` prescribes
+    building with -warnaserror, but no project enabled it, which is how ~62 warnings
+    accumulated unnoticed.
+
+    global.json pins the SDK; this file pins everything else.
+  -->
+  <PropertyGroup>
+    <!--
+      Release version, kept in one place so the assemblies, the Studio SPA
+      (src/hercules-studio/package.json) and CHANGELOG agree. Directory.Build.props is
+      imported before each csproj body, so a project that declares its own <Version>
+      still wins — Hercules.SkillSdk stays on its independent 0.4.0-preview NuGet
+      lineage. Bump this and the changelog together when cutting a release.
+    -->
+    <Version>2.0.0</Version>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <!--
+      `latest` is the default rule set for the target framework. Do NOT raise this to
+      `latest-recommended`: Recommended mode promotes a large set of style/perf opinions
+      (CA1848 LoggerMessage delegates, CA1859, CA1873, CA1716 …) that are not defects in
+      this codebase, and switching it on alongside TreatWarningsAsErrors turned the build
+      red across workflow-server. Widening the rule set is a separate, deliberate change.
+    -->
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+</Project>

@@ -21,7 +21,11 @@ public sealed class FileMeshAuditSink : IAuditSink
 
     public FileMeshAuditSink(string directory, ILogger<FileMeshAuditSink> logger)
     {
-        _directory = !string.IsNullOrWhiteSpace(directory) ? directory : "mesh-audit";
+        _directory = !string.IsNullOrWhiteSpace(directory)
+            ? directory
+            : Hercules.BuiltIn.ResolvePathUnderDataRoot(
+                Hercules.BuiltIn.ResolveDataRoot(),
+                Hercules.BuiltIn.MeshAuditSubdir);
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _jsonOpts = new JsonSerializerOptions
         {

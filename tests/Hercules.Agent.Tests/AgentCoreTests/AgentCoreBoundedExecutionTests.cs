@@ -187,7 +187,17 @@ public class AgentCoreBoundedExecutionTests : IDisposable
             TimeSpan.FromMilliseconds(20));
 
         Assert.True(linked.Timeout > TimeSpan.Zero);
-        Thread.Sleep(50);
+
+        // Poll for the condition instead of Thread.Sleep(50). A 20 ms wall-clock timer
+        // on a loaded CI runner can fire late, and a fixed sleep asserts scheduler speed
+        // rather than cancellation behaviour. The deadline absorbs the jitter; a genuinely
+        // broken timeout still fails, just without depending on how busy the box is.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        while (!linked.Token.IsCancellationRequested && DateTime.UtcNow < deadline)
+        {
+            Thread.Sleep(10);
+        }
+
         Assert.True(linked.Token.IsCancellationRequested);
         Assert.True(linked.IsWallClockTimeout);
     }

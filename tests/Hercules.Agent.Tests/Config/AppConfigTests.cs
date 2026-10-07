@@ -33,10 +33,39 @@ public class AppConfigTests
     {
         var cfg = new StorageConfig();
 
-        Assert.Equal("data", cfg.DataRoot);
+        // R18/R3a: DataRoot is NOT the relative literal "data" any more. Since the
+        // data-root relocation it is resolved at construction via
+        // BuiltIn.ResolveDataRoot(), which always returns an absolute path OUTSIDE
+        // the repository. Asserting the old literal made this test machine-dependent.
+        Assert.Equal(BuiltIn.ResolveDataRoot(), cfg.DataRoot);
+        Assert.True(Path.IsPathFullyQualified(cfg.DataRoot),
+            $"DataRoot must be absolute, got '{cfg.DataRoot}'");
+
         Assert.Equal("Memory", cfg.MemoryDir);
         Assert.Equal("Skills", cfg.SkillsDir);
         Assert.Equal("sessions.db", cfg.SqliteFile);
+    }
+
+    [Fact]
+    public void StorageConfig_DataRoot_HonorsEnvironmentOverride()
+    {
+        // R3a: HERCULES_DATA_ROOT must win over repo/user-profile resolution. This is
+        // what lets CI pin the suite's data outside the checkout.
+        var previous = Environment.GetEnvironmentVariable(BuiltIn.DataRootEnvironmentVariable);
+        var tempRoot = Path.Combine(Path.GetTempPath(), "hercules-dataroottest-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Environment.SetEnvironmentVariable(BuiltIn.DataRootEnvironmentVariable, tempRoot);
+
+            var resolved = BuiltIn.ResolveDataRoot();
+
+            Assert.Equal(Path.GetFullPath(tempRoot), resolved);
+            Assert.Equal(resolved, new StorageConfig().DataRoot);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(BuiltIn.DataRootEnvironmentVariable, previous);
+        }
     }
 
     [Fact]

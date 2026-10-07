@@ -9,12 +9,42 @@ namespace Hercules.LLM;
 ///     Health check для LLM-провайдеров.
 ///     Проверяет каждый сконфигурированный провайдер через HTTP GET к его /v1/models или специфичному endpoint.
 /// </summary>
-public sealed class ProviderHealthChecker(LlmConfig cfg, ILogger<ProviderHealthChecker>? logger = null)
+public sealed class ProviderHealthChecker
 {
-    private readonly ILogger<ProviderHealthChecker>? _logger = logger;
+    /// <summary>Имя named HttpClient-клиента для LLM provider health checks (task_078).</summary>
+    public const string HttpClientName = "llm-health";
+
+    private readonly LlmConfig _cfg;
+    private readonly ILogger<ProviderHealthChecker>? _logger;
+    private readonly IHttpClientFactory? _httpFactory;
+
+    public ProviderHealthChecker(LlmConfig cfg, ILogger<ProviderHealthChecker>? logger = null)
+        : this(cfg, logger, httpFactory: null)
+    {
+    }
+
+    /// <summary>DI-friendly конструктор (task_078): named-клиент "llm-health" с timeout 5s.</summary>
+    public ProviderHealthChecker(
+        LlmConfig cfg,
+        ILogger<ProviderHealthChecker>? logger,
+        IHttpClientFactory? httpFactory)
+    {
+        _cfg = cfg;
+        _logger = logger;
+        _httpFactory = httpFactory;
+    }
 
     /// <summary>Таймаут на один health check.</summary>
     public static readonly TimeSpan HealthCheckTimeout = TimeSpan.FromSeconds(5);
+
+    private HttpClient ResolveClient()
+    {
+        if (_httpFactory is not null)
+        {
+            return _httpFactory.CreateClient(HttpClientName);
+        }
+        return new HttpClient { Timeout = HealthCheckTimeout };
+    }
 
     /// <summary>Проверить один провайдер по имени.</summary>
     public async Task<ProviderHealthResult> CheckAsync(string provider, CancellationToken ct = default)
@@ -24,11 +54,11 @@ public sealed class ProviderHealthChecker(LlmConfig cfg, ILogger<ProviderHealthC
         {
             return provider.ToLowerInvariant() switch
             {
-                "yandexgpt" or "yandex" => await CheckOpenAIEndpointAsync("yandexgpt", cfg.YandexGpt.Endpoint, ct),
-                "ollama-cloud" => await CheckOllamaAsync("ollama-cloud", cfg.OllamaCloud.Endpoint, ct),
-                "ollama-local" or "ollama" => await CheckOllamaAsync("ollama-local", cfg.OllamaLocal.Endpoint, ct),
-                "lmstudio" => await CheckLMStudioAsync(cfg.OpenAICompatible.Endpoint, ct),
-                "openai-compatible" => await CheckOpenAIEndpointAsync("openai-compatible", cfg.OpenAICompatible.Endpoint, ct),
+                "yandexgpt" or "yandex" => await CheckOpenAIEndpointAsync("yandexgpt", _cfg.YandexGpt.Endpoint, ct),
+                "ollama-cloud" => await CheckOllamaAsync("ollama-cloud", _cfg.OllamaCloud.Endpoint, ct),
+                "ollama-local" or "ollama" => await CheckOllamaAsync("ollama-local", _cfg.OllamaLocal.Endpoint, ct),
+                "lmstudio" => await CheckLMStudioAsync(_cfg.OpenAICompatible.Endpoint, ct),
+                "openai-compatible" => await CheckOpenAIEndpointAsync("openai-compatible", _cfg.OpenAICompatible.Endpoint, ct),
                 _ => new ProviderHealthResult
                 {
                     Provider = provider,
@@ -56,8 +86,8 @@ public sealed class ProviderHealthChecker(LlmConfig cfg, ILogger<ProviderHealthC
     /// <summary>Проверить все сконфигурированные провайдеры (primary + fallbacks).</summary>
     public async Task<IReadOnlyList<ProviderHealthResult>> CheckAllAsync(CancellationToken ct = default)
     {
-        var providers = new[] { cfg.Provider }
-            .Concat(cfg.Fallback)
+        var providers = new[] { _cfg.Provider }
+            .Concat(_cfg.Fallback)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -70,7 +100,7 @@ public sealed class ProviderHealthChecker(LlmConfig cfg, ILogger<ProviderHealthC
         string name, string endpoint, CancellationToken ct)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        using var http = new HttpClient { Timeout = HealthCheckTimeout };
+        using var http = ResolveClient();
 
         // YandexGPT и generic OpenAI: GET /v1/models
         var url = NormalizeEndpoint(endpoint, "/v1/models");
@@ -120,7 +150,7 @@ public sealed class ProviderHealthChecker(LlmConfig cfg, ILogger<ProviderHealthC
         string name, string endpoint, CancellationToken ct)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        using var http = new HttpClient { Timeout = HealthCheckTimeout };
+        using var http = ResolveClient();
 
         // Ollama: GET /api/tags
         var baseUrl = endpoint.TrimEnd('/').Replace("/v1", "");
@@ -170,7 +200,7 @@ public sealed class ProviderHealthChecker(LlmConfig cfg, ILogger<ProviderHealthC
     private async Task<ProviderHealthResult> CheckLMStudioAsync(string endpoint, CancellationToken ct)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        using var http = new HttpClient { Timeout = HealthCheckTimeout };
+        using var http = ResolveClient();
 
         // LM Studio: GET /api/info
         var baseUrl = endpoint.TrimEnd('/').Replace("/v1", "");

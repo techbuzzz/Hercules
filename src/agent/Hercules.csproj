@@ -9,9 +9,9 @@
     <RootNamespace>Hercules</RootNamespace>
     <AssemblyName>Hercules</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <!-- Вложенные проекты (Web API и фронтенд) исключаем из сборки ядра,
+    <!-- Вложенные проекты (Web API, workflow-server и фронтенд) исключаем из сборки ядра,
          иначе SDK подхватит их .cs-файлы через стандартный globbing. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);Hercules.WebApi/**;hercules-web/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Hercules.WebApi/**;hercules-web/**;Hercules.WorkflowServer/**;SkillSdk/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,15 +19,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Skill SDK: whitelist API for file-based C# skills (task_101) -->
+    <ProjectReference Include="SkillSdk\Hercules.SkillSdk.csproj" />
+
     <!-- AI-абстракции: единый интерфейс IChatClient для всех LLM-провайдеров -->
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.9.0" />
     <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.9.0" />
     <!-- OpenAI-совместимый SDK (используется для YandexGPT и Ollama) -->
 
+    <!-- In-process C# compilation for SkillSdkExecutor (task_101) -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
+
     <!-- Хостинг, DI, конфигурация -->
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
+    <!-- task_078: standard resilience handlers (retry + circuit breaker + timeout) for named HttpClient clients -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.9.0" />
 
     <!-- SQLite для логов сессий и метрик -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
@@ -36,6 +44,9 @@
 
     <!-- Парсинг метаданных навыков (YAML front-matter) -->
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
+
+    <!-- Object pooling for hot-path StringBuilder (task_084) -->
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="10.0.11" />
 
     <!-- Улучшенный CLI-интерфейс -->
     <PackageReference Include="Spectre.Console" Version="0.57.2" />

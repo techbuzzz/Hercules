@@ -146,7 +146,7 @@ public sealed class McpServerHost : BackgroundService
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Normal shutdown
+            // Normal shutdown — host already initiated it, do not re-signal.
         }
         catch (Exception ex)
         {
@@ -154,8 +154,14 @@ public sealed class McpServerHost : BackgroundService
         }
         finally
         {
-            // Signal app shutdown when stdio server exits (expected for stdio transport)
-            _appLifetime.StopApplication();
+            // task_080: only signal app shutdown when the stdio transport exited on
+            // its own (e.g. MCP client closed the connection). If the cancellation
+            // token was already requested we are inside a host-driven shutdown and
+            // re-calling StopApplication is a no-op that clutters the logs.
+            if (!ct.IsCancellationRequested)
+            {
+                _appLifetime.StopApplication();
+            }
         }
     }
 

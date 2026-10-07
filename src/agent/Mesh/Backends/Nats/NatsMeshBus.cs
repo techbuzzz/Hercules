@@ -107,7 +107,12 @@ public sealed class NatsMeshBus : IMeshBus
             {
                 _log.LogWarning(ex, "[NatsMeshBus] Failed to connect/subscribe to NATS, retrying in 5s");
                 try { await Task.Delay(TimeSpan.FromSeconds(5), _cts.Token).ConfigureAwait(false); }
-                catch { }
+                catch (OperationCanceledException cancelEx)
+                {
+                    // R32: was a silent empty catch — deliberate shutdown of the bus.
+                    _log.LogDebug(cancelEx, "[NatsMeshBus] Reconnect backoff cancelled during shutdown");
+                    break;
+                }
             }
         }
     }

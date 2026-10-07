@@ -113,7 +113,7 @@ public class ToolPolicyEngineTests : IDisposable
     #region Dry-run mode
 
     [Fact]
-    public void Evaluate_DryRun_ReturnsAllowedWithoutBlocking()
+    public async Task Evaluate_DryRun_ReturnsAllowedWithoutBlocking()
     {
         var cfg = new ToolPolicyConfig { DryRun = true, DeniedTools = new List<string> { "http" } };
         var loggerMock = new Mock<ILogger<ToolPolicyEngine>>();
@@ -121,7 +121,7 @@ public class ToolPolicyEngineTests : IDisposable
 
         var ctx = new PolicyContext { ToolName = "http" };
 
-        var result = engine.Evaluate(ctx);
+        var result = await engine.EvaluateAsync(ctx);
 
         Assert.True(result.IsAllowed);
         Assert.True(result.DryRun);
@@ -132,7 +132,7 @@ public class ToolPolicyEngineTests : IDisposable
     #region Deny list
 
     [Fact]
-    public void Evaluate_DeniedTool_ReturnsDenied()
+    public async Task Evaluate_DeniedTool_ReturnsDenied()
     {
         var cfg = new ToolPolicyConfig
         {
@@ -141,32 +141,32 @@ public class ToolPolicyEngineTests : IDisposable
         var loggerMock = new Mock<ILogger<ToolPolicyEngine>>();
         var engine = new ToolPolicyEngine(cfg, _permissions, loggerMock.Object);
 
-        var result = engine.Evaluate(new PolicyContext { ToolName = "dangerous-shell" });
+        var result = await engine.EvaluateAsync(new PolicyContext { ToolName = "dangerous-shell" });
 
         Assert.True(result.IsDenied);
         Assert.Contains("deny list", result.DeniedReason);
     }
 
     [Fact]
-    public void Evaluate_DeniedToolGlobStar_DeniesAll()
+    public async Task Evaluate_DeniedToolGlobStar_DeniesAll()
     {
         var cfg = new ToolPolicyConfig { DeniedTools = new List<string> { "*" } };
         var loggerMock = new Mock<ILogger<ToolPolicyEngine>>();
         var engine = new ToolPolicyEngine(cfg, _permissions, loggerMock.Object);
 
-        var result = engine.Evaluate(new PolicyContext { ToolName = "anything" });
+        var result = await engine.EvaluateAsync(new PolicyContext { ToolName = "anything" });
 
         Assert.True(result.IsDenied);
     }
 
     [Fact]
-    public void Evaluate_DeniedToolGlobSuffix_DeniesMatchingSuffix()
+    public async Task Evaluate_DeniedToolGlobSuffix_DeniesMatchingSuffix()
     {
         var cfg = new ToolPolicyConfig { DeniedTools = new List<string> { "shell*" } };
         var loggerMock = new Mock<ILogger<ToolPolicyEngine>>();
         var engine = new ToolPolicyEngine(cfg, _permissions, loggerMock.Object);
 
-        var result = engine.Evaluate(new PolicyContext { ToolName = "shell-exec" });
+        var result = await engine.EvaluateAsync(new PolicyContext { ToolName = "shell-exec" });
 
         Assert.True(result.IsDenied);
     }
@@ -176,21 +176,21 @@ public class ToolPolicyEngineTests : IDisposable
     #region Unknown tool
 
     [Fact]
-    public void Evaluate_UnknownTool_AllowUnknownFalse_ReturnsUnknownTool()
+    public async Task Evaluate_UnknownTool_AllowUnknownFalse_ReturnsUnknownTool()
     {
-        var result = _engine.Evaluate(new PolicyContext { ToolName = "totally-unknown" });
+        var result = await _engine.EvaluateAsync(new PolicyContext { ToolName = "totally-unknown" });
 
         Assert.Equal(PolicyDecision.UnknownTool, result.Decision);
     }
 
     [Fact]
-    public void Evaluate_UnknownTool_AllowUnknownTrue_ReturnsAllowed()
+    public async Task Evaluate_UnknownTool_AllowUnknownTrue_ReturnsAllowed()
     {
         var cfg = new ToolPolicyConfig { AllowUnknownTools = true };
         var loggerMock = new Mock<ILogger<ToolPolicyEngine>>();
         var engine = new ToolPolicyEngine(cfg, _permissions, loggerMock.Object);
 
-        var result = engine.Evaluate(new PolicyContext { ToolName = "unknown" });
+        var result = await engine.EvaluateAsync(new PolicyContext { ToolName = "unknown" });
 
         Assert.True(result.IsAllowed);
     }
@@ -200,7 +200,7 @@ public class ToolPolicyEngineTests : IDisposable
     #region Side-effect level and permissions
 
     [Fact]
-    public void Evaluate_ToolBelowApprovalThreshold_Allowed()
+    public async Task Evaluate_ToolBelowApprovalThreshold_Allowed()
     {
         _engine.Register(new ToolDescriptor
         {
@@ -209,13 +209,13 @@ public class ToolPolicyEngineTests : IDisposable
             RequiredPermissions = ToolPermission.Read
         });
 
-        var result = _engine.Evaluate(new PolicyContext { ToolName = "read-tool" });
+        var result = await _engine.EvaluateAsync(new PolicyContext { ToolName = "read-tool" });
 
         Assert.True(result.IsAllowed);
     }
 
     [Fact]
-    public void Evaluate_ToolAtApprovalThreshold_RequiresApproval()
+    public async Task Evaluate_ToolAtApprovalThreshold_RequiresApproval()
     {
         var cfg = new ToolPolicyConfig
         {
@@ -231,13 +231,13 @@ public class ToolPolicyEngineTests : IDisposable
             RequiredPermissions = ToolPermission.Network
         });
 
-        var result = engine.Evaluate(new PolicyContext { ToolName = "http-fetch" });
+        var result = await engine.EvaluateAsync(new PolicyContext { ToolName = "http-fetch" });
 
         Assert.True(result.RequiresApproval);
     }
 
     [Fact]
-    public void Evaluate_CriticalTool_AlwaysRequiresApproval()
+    public async Task Evaluate_CriticalTool_AlwaysRequiresApproval()
     {
         // Use a permission the test engine grants (Network) so we reach the Critical check
         _engine.Register(new ToolDescriptor
@@ -247,13 +247,13 @@ public class ToolPolicyEngineTests : IDisposable
             RequiredPermissions = ToolPermission.Network
         });
 
-        var result = _engine.Evaluate(new PolicyContext { ToolName = "financial-op" });
+        var result = await _engine.EvaluateAsync(new PolicyContext { ToolName = "financial-op" });
 
         Assert.True(result.RequiresApproval);
     }
 
     [Fact]
-    public void Evaluate_ToolMissingPermission_ReturnsDenied()
+    public async Task Evaluate_ToolMissingPermission_ReturnsDenied()
     {
         var restrictedPerms = new ToolPermissionSet(ToolPermission.Read); // no Write
         var loggerMock = new Mock<ILogger<ToolPolicyEngine>>();
@@ -266,14 +266,14 @@ public class ToolPolicyEngineTests : IDisposable
             RequiredPermissions = ToolPermission.Write
         });
 
-        var result = engine.Evaluate(new PolicyContext { ToolName = "file-write" });
+        var result = await engine.EvaluateAsync(new PolicyContext { ToolName = "file-write" });
 
         Assert.True(result.IsDenied);
         Assert.Contains("Missing permissions", result.DeniedReason);
     }
 
     [Fact]
-    public void Evaluate_ToolNoPermissions_ReturnsAllowed()
+    public async Task Evaluate_ToolNoPermissions_ReturnsAllowed()
     {
         _engine.Register(new ToolDescriptor
         {
@@ -282,7 +282,7 @@ public class ToolPolicyEngineTests : IDisposable
             RequiredPermissions = ToolPermission.None
         });
 
-        var result = _engine.Evaluate(new PolicyContext { ToolName = "info-tool" });
+        var result = await _engine.EvaluateAsync(new PolicyContext { ToolName = "info-tool" });
 
         Assert.True(result.IsAllowed);
     }
