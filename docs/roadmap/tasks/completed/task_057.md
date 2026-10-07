@@ -65,6 +65,6 @@ src/agent/CLI/Commands/AgentLifecycleCommand.cs, src/agent/Hercules.WebApi/Contr
 - `dotnet test` — 1512 passed, 9 pre-existing failures (OtelServiceTests)
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

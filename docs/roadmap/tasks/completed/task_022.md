@@ -95,6 +95,6 @@ src/agent/Skills/Routing/SkillRouter.cs, src/agent/Skills/Routing/Scoring/
 Зависимость от embedding-провайдера; нужен deterministic fallback (см. задачу 23).
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

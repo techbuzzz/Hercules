@@ -1,7 +1,14 @@
 # Stage 3 — Skill Authoring + Push
 
+<!-- web-first-migration-status -->
+> ⚠️ **These checkboxes are not a progress report.** They were never ticked during the
+> web-first migration, so an unticked box does not mean the work is outstanding.
+> As of 2026-10-06: cross-agent push, the MCP pre-check, creation from 5 templates, the .skillpkg builder and the **dangerous-code pre-check** are **done**. The pre-check runs on the sandbox-run flow, because the agent does not store per-skill C# source (see VERIFICATION.md).
+> Per-item breakdown: [VERIFICATION.md](../VERIFICATION.md#what-remains).
+
+
 **Epic:** Hercules Studio
-**Status:** pending
+**Status:** delivered — push, cross-agent install, import, templates, .skillpkg builder and the dangerous-code pre-check
 **Estimate:** 1-2 недели
 **Dependencies (backend):** нет
 **Dependencies (Studio):** Stage 2

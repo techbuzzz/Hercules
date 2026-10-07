@@ -65,6 +65,6 @@ LlmHealthCheck добавляет нагрузку (ping каждые N сек);
 - `feat(roadmap): complete task 079 - real health checks infrastructure (liveness + readiness)`
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

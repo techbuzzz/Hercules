@@ -1,10 +1,20 @@
 # Task 115 — Web-UI: openapi-typescript + Orval setup
 
 **Phase:** 8
-**Status:** pending
+**Status:** superseded (deprecated target — `src/hercules-web`, ADR-0009)
 **Owner:** —
 **Slug:** `webui-openapi-codegen-setup`
 **Studio Stage:** N/A (hercules-web, не Studio)
+
+> **Status note (2026-10-07, 2.0.0 release prep).** **Not outstanding work — do not
+> start.** This task targets `src/hercules-web` (Astro), which ADR-0009 deprecated and
+> which is **not ported**; its panels were superseded by Hercules Studio. Generating a
+> client for an application that is intentionally frozen would be wasted effort, and
+> the equivalent Studio-side pipeline already ships under
+> [task_113](task_113.md) / `task_114.md`.
+> Panel-by-panel replacement map: `src/hercules-web/DEPRECATED.md`.
+> Kept on disk (not deleted) so the superseded scope is recorded rather than
+> rediscovered later.
 
 ## Goal
 Настроить тот же pipeline генерации TypeScript API клиента в hercules-web (Astro) из OpenAPI документа агента. Использовать openapi-typescript (types) + Orval (Vue Query hooks для Astro islands + Zod + MSW mocks). Generated files коммитятся в git. Regen — ручной.

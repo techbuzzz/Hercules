@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useConnectionsStore } from "../../stores/connections";
 import { useErrorStore } from "../../stores/error";
+import { platform } from "../../platform";
 
 const { t } = useI18n();
 const connections = useConnectionsStore();
@@ -11,7 +12,7 @@ const errorStore = useErrorStore();
 const activeAgent = computed(() => connections.active);
 const hasErrors = computed(() => errorStore.hasErrors);
 const errorCount = computed(() => errorStore.errors.length);
-const version = "0.1.0";
+const version = computed(() => platform.app.version());
 
 const statusColor = computed(() => {
   if (!activeAgent.value) return "bg-zinc-500";
@@ -36,7 +37,7 @@ const statusColor = computed(() => {
         <span class="h-2 w-2 rounded-full" :class="statusColor" />
         <span class="text-app">{{ activeAgent.displayName }}</span>
       </span>
-      <span v-if="activeAgent.lastSeen" class="opacity-70">{{ t("status.checkedIn") }}</span>
+      <span v-if="activeAgent.lastSeen" class="text-secondary">{{ t("status.checkedIn") }}</span>
     </template>
     <template v-else>
       <span>{{ t("status.noAgent") }}</span>
@@ -55,6 +56,6 @@ const statusColor = computed(() => {
     <div class="flex-1" />
 
     <!-- Version -->
-    <span class="opacity-70">v{{ version }}</span>
+    <span class="text-secondary">v{{ version }}</span>
   </div>
 </template>

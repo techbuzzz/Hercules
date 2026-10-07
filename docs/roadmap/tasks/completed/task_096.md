@@ -7,7 +7,7 @@
 **Studio Stage:** 1 (pre-PR, до старта Studio)
 
 ## Goal
-Перенести дефолтный порт Hercules.WebApi с 5000 на 8421 (новый диапазон 8421-8521). См. [ADR-0003](../EPIC_Hercules_Studio/adr/0003-port-range-8421.md).
+Перенести дефолтный порт Hercules.WebApi с 5000 на 8421 (новый диапазон 8421-8521). См. [ADR-0003](../../../EPIC_Hercules_Studio/adr/0003-port-range-8421.md).
 
 ## Acceptance criteria
 
@@ -130,10 +130,10 @@ Port migration 5000 → 8421 для Hercules.WebApi, в полном соотв�
   существующие Studio-установки продолжат работать с legacy-агентами.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
-- ADR-0003: [../EPIC_Hercules_Studio/adr/0003-port-range-8421.md](../EPIC_Hercules_Studio/adr/0003-port-range-8421.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)
+- ADR-0003: [../EPIC_Hercules_Studio/adr/0003-port-range-8421.md](../../../EPIC_Hercules_Studio/adr/0003-port-range-8421.md)
 
 ## Dependencies
 - нет
@@ -142,5 +142,5 @@ Port migration 5000 → 8421 для Hercules.WebApi, в полном соотв�
 src/agent/Hercules.WebApi/Program.cs, src/agent/appsettings.json, src/agent/Hercules.WebApi/appsettings.json, src/hercules-web/.env.example, docs/QUICKSTART-*.md
 
 ## Links
-- ADR-0003: [../EPIC_Hercules_Studio/adr/0003-port-range-8421.md](../EPIC_Hercules_Studio/adr/0003-port-range-8421.md)
-- Backlog: [../backlog.md](../backlog.md)
+- ADR-0003: [../EPIC_Hercules_Studio/adr/0003-port-range-8421.md](../../../EPIC_Hercules_Studio/adr/0003-port-range-8421.md)
+- Backlog: [../backlog.md](../../backlog.md)

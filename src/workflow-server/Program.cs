@@ -28,6 +28,27 @@ builder.Services.Configure<JsonOptions>(options =>
 });
 
 // --- Конфигурация сервиса (секция "WorkflowServer" в appsettings.json) ---
+// R17 (found 2026-10-07 while wiring the E2E container): this service never added
+// the HERCULES_-prefixed environment source. The agent does exactly that
+// (Hercules.WebApi/Program.cs:143 `AddEnvironmentVariables("HERCULES_")`), and the
+// edge deployment's provision.env relies on it — so the convention is established
+// project-wide, and this service silently opted out of it.
+//
+// The effect was worse than "cannot set the port from the environment":
+//   * HERCULES_WORKFLOWSERVER__DATAROOT was ignored, so DataRoot stayed the
+//     relative default "data" and every run wrote to the container's working
+//     directory instead of the mounted volume — credentials
+//     (DataRoot/security/workflow-credentials.json) were regenerated on each
+//     restart because they were never persisted;
+//   * HERCULES_WORKFLOWSERVER__AUTH__CLIENTID / __CLIENTSECRET were ignored, so a
+//     client could not be provisioned reproducibly;
+//   * HERCULES_WORKFLOWSERVER__CORS__ALLOWEDORIGINS was ignored, so the browser
+//     preflight kept being refused and Studio's Workflow view could not connect.
+//
+// Nothing failed loudly: unknown env vars are ignored by design, so the server
+// simply came up with defaults that made it unreachable.
+builder.Configuration.AddEnvironmentVariables("HERCULES_");
+
 var cfg = new WorkflowServerConfig();
 builder.Configuration.GetSection("WorkflowServer").Bind(cfg);
 builder.Services.AddSingleton(cfg);
@@ -38,8 +59,26 @@ builder.Services.AddSingleton(cfg);
 // constructs its own instance and injects the real pipeline `next`, so editing that
 // factory had no effect while looking like the wiring point. Wiring is now the single
 // `app.UseMiddleware<ClientAuthMiddleware>()` below.
+//
+// The bare `AddTransient<ClientAuthMiddleware>()` that R33 left behind was NOT harmless,
+// and it is what stopped this service from starting at all (found 2026-10-07 while
+// building the E2E container). ClientAuthMiddleware's DI constructor is
+//
+//     (RequestDelegate next, ClientCredentialStore, WorkflowServerConfig, ILogger<T>)
+//
+// and `RequestDelegate` is not a container service — UseMiddleware supplies it through
+// ActivatorUtilities, not through DI. So the registration made the container try to
+// build the type with no way to resolve `next`, and Development's ValidateOnBuild
+// turned that into a hard startup crash:
+//
+//     InvalidOperationException: Error while validating the service descriptor
+//     'ServiceType: ...ClientAuthMiddleware ... No constructor for type can be
+//     instantiated using services from the service container and default values.'
+//
+// The process exited 139 on every boot. No test caught it because nothing ever started
+// the server: task_104 was marked complete against unit tests, not a running process.
+// The registration is removed because UseMiddleware never needed it.
 builder.Services.AddSingleton<ClientCredentialStore>();
-builder.Services.AddTransient<ClientAuthMiddleware>();
 
 // --- Storage: SQLite ---
 builder.Services.AddSingleton<SqliteWorkflowDefinitionStore>(sp =>

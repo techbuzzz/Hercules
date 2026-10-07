@@ -93,5 +93,5 @@ Replaced the in-memory `ConcurrentDictionary<string, DelegatedTask>` in `TaskLif
 - New tests: `tests/Hercules.Agent.Tests/Phase3Tests/DelegatedTaskPersistenceTests.cs`
 
 ## Links
-- Studio Stage 8: [../EPIC_Hercules_Studio/tasks/stage_08_workflow.md](../EPIC_Hercules_Studio/tasks/stage_08_workflow.md)
+- Studio Stage 8: [../EPIC_Hercules_Studio/tasks/stage_08_workflow.md](../../EPIC_Hercules_Studio/tasks/stage_08_workflow.md)
 - Backlog: [../backlog.md](../backlog.md)

@@ -333,7 +333,7 @@ resolves `Microsoft.OpenApi 2.7.5` via `Microsoft.AspNetCore.OpenApi 10.0.11`.
 ## Links
 - Backlog: [../../backlog.md](../../backlog.md)
 - Epic Studio: [../../../EPIC_Hercules_Studio/README.md](../../../EPIC_Hercules_Studio/README.md)
-- task_110 (WithTags): [../task_110.md](../task_110.md)
+- task_110 (WithTags): [../task_110.md](task_110.md)
 - task_111 (Produces+DTO): [../task_111.md](../task_111.md)
 - task_112 (WithName): [../task_112.md](../task_112.md)
 - task_113 (Studio codegen): [../task_113.md](../task_113.md)

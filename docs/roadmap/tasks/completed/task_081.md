@@ -38,9 +38,9 @@ src/agent/Hercules.WebApi/Program.cs, src/agent/Hercules.WebApi/Auth/RateLimitMi
 Kestrel `MaxConcurrentConnections=1000` может reject traffic под пиком; configurable. Output cache может serve stale data; короткий TTL (5 min) + invalidate on skill update. Rollback: вернуть custom middleware (но bugs останутся).
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)
 
 ## Implementation notes (2026-08-16)
 

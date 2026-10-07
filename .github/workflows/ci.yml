@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref — this suite is fast enough that a stale
+# result is worth less than the minutes it costs to keep computing it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+
+jobs:
+  agent:
+    name: Agent (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore src/agent/Hercules.slnx
+
+      - name: Build
+        run: dotnet build src/agent/Hercules.slnx -c Release --no-restore
+
+      - name: Test
+        run: >-
+          dotnet test tests/Hercules.Agent.Tests
+          -c Release --no-build
+          --logger "trx;LogFileName=agent-tests.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-test-results
+          path: "**/TestResults/*.trx"
+          if-no-files-found: ignore
+
+  openapi:
+    name: OpenAPI document is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Studio's contract test (client.contract.test.ts) asserts every endpoint the
+      # client calls exists in the committed document. During the web-first migration
+      # that document was found stale — live routes were missing from it and only
+      # regeneration exposed that. This job makes the drift fail the build instead.
+      - name: Regenerate the document
+        run: dotnet build src/agent/Hercules.WebApi -p:OpenApiGenerateDocumentOnBuild=true
+
+      - name: Fail if the committed document drifted
+        run: |
+          if ! git diff --quiet -- src/agent/Hercules.WebApi/openapi.json; then
+            echo "::error::src/agent/Hercules.WebApi/openapi.json is stale. Regenerate and commit it with:"
+            echo "  dotnet build src/agent/Hercules.WebApi -p:OpenApiGenerateDocumentOnBuild=true"
+            echo "  cd src/hercules-studio && npm run generate:api"
+            git --no-pager diff -- src/agent/Hercules.WebApi/openapi.json | head -120
+            exit 1
+          fi
+
+  studio:
+    name: Studio (Node)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/hercules-studio
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/hercules-studio/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # The Playwright config starts its own preview server; agent calls are
+      # stubbed in-spec, so no Hercules agent is needed here.
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: src/hercules-studio/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7

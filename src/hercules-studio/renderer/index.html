@@ -3,9 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <meta name="theme-color" content="#0a0a0b" />
+    <!--
+      'unsafe-eval' is required by vue-i18n: its runtime message compiler turns
+      each message string into a function via `new Function()`. vue-i18n 9.x calls
+      that compiler unconditionally during init (no build flag disables it), so
+      without this the app mounts and every component calling `t()` renders empty
+      with a console EvalError. Studio is a local, same-origin tool served by the
+      agent, so the eval surface is the app's own bundled messages.
+
+      If this CSP is ever tightened, the messages must be converted to function
+      form first (`() => string`) so no runtime compilation is needed.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:*"
+      content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:*"
     />
     <title>Hercules Studio</title>
   </head>

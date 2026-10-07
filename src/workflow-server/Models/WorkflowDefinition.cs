@@ -35,6 +35,16 @@ public sealed class WorkflowDefinition
 /// <summary>Запрос на сохранение/обновление workflow definition (POST/PUT /api/workflows).</summary>
 public sealed class SaveWorkflowRequest
 {
+    /// <summary>
+    /// Id существующего definition для обновления. Не задан — создаётся новый.
+    /// <para>
+    /// Без этого поля "save (create or update)" в контроллере был только create: id всегда
+    /// генерировался заново, и редактирование workflow молча создавало дубликат вместо
+    /// обновления исходного.
+    /// </para>
+    /// </summary>
+    public string? Id { get; set; }
+
     public string Name { get; set; } = "";
     public int Version { get; set; } = 1;
     public string? Description { get; set; }

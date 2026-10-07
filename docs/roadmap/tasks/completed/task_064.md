@@ -57,6 +57,6 @@ SLO без автоматического enforcement; integration с 56/57.
 - Full suite: 1598/1607 (9 pre-existing failures: OtelService×5, BudgetGuard×1, NumericValidator×2, BusHttpServer×1)
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

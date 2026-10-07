@@ -355,4 +355,105 @@ public class ApiKeyMiddlewareTests
         await middleware.InvokeAsync(options);
         Assert.Equal(200, options.Response.StatusCode);
     }
+
+    // -----------------------------------------------------------------------
+    //  Stage 6.3: on the DI path the key set is read live from the store, so a
+    //  role edit through /api/auth/keys applies without restarting the agent.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task DiPath_KeySetSwappedInTheStore_AppliesWithoutReconstruction()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "hercules-mw-live-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var store = new ApiKeyStore(
+                new StorageConfig { DataRoot = tempDir },
+                NullLogger<ApiKeyStore>.Instance);
+
+            var cfg = new WebApiConfig
+            {
+                ApiKeys = new List<ApiKeyEntry>
+                {
+                    new() { Key = "key-original", Role = ApiKeyRole.Contribute }
+                }
+            };
+
+            var sessions = new StudioSessionStore(cfg, NullLogger<StudioSessionStore>.Instance);
+            var middleware = new ApiKeyMiddleware(
+                _ => Task.CompletedTask,
+                cfg,
+                NullLogger<ApiKeyMiddleware>.Instance,
+                store,
+                sessions);
+
+            // The key is accepted and carries the original role.
+            var before = NewApiRequest("/api/config", "key-original");
+            await middleware.InvokeAsync(before);
+            Assert.Equal(ApiKeyRole.Contribute, before.Items[ApiKeyMiddleware.RoleItemKey]);
+
+            // Operator promotes the key through the roles editor.
+            store.SaveAndActivate(new List<ApiKeyEntry>
+            {
+                new() { Key = "key-original", Role = ApiKeyRole.System }
+            });
+
+            // Same middleware instance, no restart: the new role must be observed.
+            var after = NewApiRequest("/api/config", "key-original");
+            await middleware.InvokeAsync(after);
+            Assert.Equal(ApiKeyRole.System, after.Items[ApiKeyMiddleware.RoleItemKey]);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { /* ignore */ }
+        }
+    }
+
+    [Fact]
+    public async Task DiPath_RemovedKey_IsRejectedOnTheNextRequest()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "hercules-mw-removed-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var store = new ApiKeyStore(
+                new StorageConfig { DataRoot = tempDir },
+                NullLogger<ApiKeyStore>.Instance);
+
+            var cfg = new WebApiConfig
+            {
+                ApiKeys = new List<ApiKeyEntry>
+                {
+                    new() { Key = "key-going", Role = ApiKeyRole.System },
+                    new() { Key = "key-stays", Role = ApiKeyRole.System }
+                }
+            };
+
+            var sessions = new StudioSessionStore(cfg, NullLogger<StudioSessionStore>.Instance);
+            var middleware = new ApiKeyMiddleware(
+                _ => Task.CompletedTask,
+                cfg,
+                NullLogger<ApiKeyMiddleware>.Instance,
+                store,
+                sessions);
+
+            store.SaveAndActivate(new List<ApiKeyEntry>
+            {
+                new() { Key = "key-stays", Role = ApiKeyRole.System }
+            });
+
+            var removed = NewApiRequest("/api/config", "key-going");
+            await middleware.InvokeAsync(removed);
+            Assert.Equal(StatusCodes.Status401Unauthorized, removed.Response.StatusCode);
+
+            var kept = NewApiRequest("/api/config", "key-stays");
+            await middleware.InvokeAsync(kept);
+            Assert.Equal(ApiKeyRole.System, kept.Items[ApiKeyMiddleware.RoleItemKey]);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { /* ignore */ }
+        }
+    }
 }

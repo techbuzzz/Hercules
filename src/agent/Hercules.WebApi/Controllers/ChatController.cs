@@ -39,7 +39,10 @@ public static class ChatController
             })
             .WithName("Chat")
             .WithSummary("Отправить сообщение агенту и получить ответ")
-            .RequireRateLimiting(RateLimitPolicies.Chat).WithTags("Chat");
+            .RequireRateLimiting(RateLimitPolicies.Chat).WithTags("Chat")
+            // Named response type, but the minimal-API analyzer did not infer it.
+            // Declaring it keeps Studio's generated client in step with the agent.
+            .Produces<ChatResponseDto>(200);
     }
 
     private static string ResolveSessionId(HttpRequest http, WebApiAdapter adapter)

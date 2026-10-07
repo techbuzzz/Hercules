@@ -6,6 +6,5 @@ declare module "*.vue" {
   export default component;
 }
 
-interface Window {
-  studioAPI: import("@shared/protocol").IpcApi;
-}
+/** Injected at build time by vite.config.ts from package.json. */
+declare const __APP_VERSION__: string;

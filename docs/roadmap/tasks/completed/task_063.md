@@ -99,6 +99,6 @@ Encryption key loss; recovery-of-keys обязателен.
 - Full suite: 1622/1632 (9 pre-existing failures: OtelService × 5, BudgetGuard × 1, NumericValidator × 2, BusHttpServer × 1 — all pre-existing)
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

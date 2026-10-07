@@ -35,9 +35,9 @@ src/agent/Mesh/Quotas/
 Многоуровневые лимиты сложно отлаживать; явный report при отказе.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)
 
 ## Implementation notes
 - Created `src/agent/Quotas/` with 4 files (Models.cs, IQuotaService.cs, QuotaService.cs, QuotaGuard.cs)

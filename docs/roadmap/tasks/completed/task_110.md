@@ -78,8 +78,8 @@ This is a route collision, not a tagging problem — left for a dedicated task.
   видов комментариев; проверена diff'ом (180/180, только добавления) и сборкой
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- task_109 (OpenAPI producer): [completed/task_109.md](completed/task_109.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- task_109 (OpenAPI producer): [completed/task_109.md](task_109.md)
 ## Tag mapping (35 контроллеров → 35 тегов)
 
 | Controller | Tag |

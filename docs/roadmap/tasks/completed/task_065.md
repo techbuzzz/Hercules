@@ -93,6 +93,6 @@ PII и секреты в трейсах; централизованная redact
 - `dotnet build tests/Hercules.Agent.Tests/Hercules.Agent.Tests.csproj` — 0 errors
 - `dotnet test --filter "MeshObservabilityTests"` — 9/9 passed
 - `dotnet test --filter "Phase4Tests"` — 284/286 passed (2 pre-existing `NumericValidatorTests` failures)
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

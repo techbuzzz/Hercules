@@ -1,10 +1,18 @@
 # Task 116 — Web-UI: migрація api.ts на Vue Query hooks
 
 **Phase:** 8
-**Status:** pending
+**Status:** superseded (deprecated target — `src/hercules-web`, ADR-0009)
 **Owner:** —
 **Slug:** `webui-migrate-vue-query`
 **Studio Stage:** N/A (hercules-web)
+
+> **Status note (2026-10-07, 2.0.0 release prep).** **Not outstanding work — do not
+> start.** This task migrates the Astro frontend's 1391-line hand-written
+> `src/lib/api.ts` onto generated Vue Query hooks. ADR-0009 deprecated
+> `src/hercules-web` and did not port it, so there is no live `api.ts` worth
+> migrating and no Astro islands to wire a `QueryClient` into.
+> The Studio-side equivalent is [task_114](task_114.md), which remains genuinely
+> open. Panel-by-panel replacement map: `src/hercules-web/DEPRECATED.md`.
 
 ## Goal
 Мигрировать hercules-web с hand-written `src/lib/api.ts` (1391 строк) на generated Orval Vue Query hooks. Заменить all hand-written DTOs и API methods на generated. Добавить Vue Query plugin в Astro islands.

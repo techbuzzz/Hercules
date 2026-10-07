@@ -7,11 +7,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@renderer": resolve(__dirname, "renderer/src"),
-      "@shared": resolve(__dirname, "shared"),
     },
   },
   test: {
     environment: "happy-dom",
     include: ["renderer/src/**/*.test.ts", "shared/**/*.test.ts"],
+    setupFiles: ["renderer/src/test/setup.ts"],
+    restoreMocks: true,
   },
 });

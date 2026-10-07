@@ -1,7 +1,9 @@
-/* Tailwind CSS will be added when @tailwindcss/vite is installed.
-   For now, plain CSS with theme variables. */
+@import "tailwindcss";
 
-/* ---- Theme variables ---- */
+/* Dark mode is driven by a class on <html> (settings store), not media query. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---- Theme variables (runtime source of truth) ---- */
 :root {
   --bg: #ffffff;
   --bg-secondary: #f4f4f5;
@@ -30,13 +32,74 @@
   --success: #10b981;
 }
 
-/* ---- Base styles ---- */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+/*
+ * `inline` makes Tailwind emit the var() reference directly instead of copying
+ * the resolved value, so utilities react to the .dark class at runtime.
+ */
+@theme inline {
+  --color-app: var(--bg);
+  --color-secondary: var(--bg-secondary);
+  --color-tertiary: var(--bg-tertiary);
+  --color-fg: var(--fg);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-line: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
 }
 
+/*
+ * ROLE CORRECTION — the UI was unreadable in both themes until this block existed.
+ *
+ * Tailwind derives `bg-*`, `text-*` and `border-*` utilities from the SAME
+ * `--color-*` token. So the three surface tokens above produced, in the built CSS:
+ *
+ *     .text-app       { color:       var(--bg) }          <- background as text
+ *     .text-secondary { color:       var(--bg-secondary) }<- background as text
+ *     .border-app     { border-color: var(--bg) }         <- border on background
+ *
+ * `text-app` is text drawn in the BACKGROUND colour on that same background —
+ * ~1.05:1 contrast. In dark mode it was #0a0a0b on #0a0a0b; in light mode
+ * #ffffff on #ffffff. `border-app` was invisible for the same reason.
+ *
+ * Scope of the breakage, counted across the view layer:
+ *     text-app        213 usages
+ *     text-secondary  256 usages (+1 with the /70 opacity modifier)
+ *     border-app      173 usages
+ * `text-fg` / `text-fg-secondary` existed in the theme above but were used ZERO
+ * times — the foreground tokens were declared and then never reached for.
+ *
+ * Fixed here rather than by renaming 642 class usages in 81 files: the mapping
+ * is unambiguous because these utilities are only ever used for their Tailwind
+ * role. `text-*` is always foreground, `border-*` is always a border. `bg-app`,
+ * `bg-secondary` and `bg-tertiary` keep the surface tokens and are correct.
+ *
+ * The `accent` / `danger` / `warning` / `success` tokens need no correction —
+ * they already hold foreground-meaning colours.
+ */
+@layer utilities {
+  .text-app {
+    color: var(--fg);
+  }
+  .text-secondary {
+    color: var(--fg-secondary);
+  }
+  /* Was `color-mix(--fg-secondary 70%, transparent)`, which resolves to #75757c on
+     #101012 — 4.15:1, just under the 4.5:1 AA floor for 12px text. Lighthouse
+     flagged it as the last remaining contrast failure, so the modifier now resolves
+     to the full --fg-secondary (7.42:1). Hierarchy is better served by size or
+     weight than by dropping a secondary label below AA. */
+  .text-secondary\/70 {
+    color: var(--fg-secondary);
+  }
+  .border-app {
+    border-color: var(--border);
+  }
+}
+
+/* ---- Base styles ---- */
 html,
 body,
 #app {
@@ -73,26 +136,6 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--fg-secondary);
-}
-
-/* ---- Utility classes ---- */
-.bg-app {
-  background-color: var(--bg);
-}
-.bg-secondary {
-  background-color: var(--bg-secondary);
-}
-.bg-tertiary {
-  background-color: var(--bg-tertiary);
-}
-.text-app {
-  color: var(--fg);
-}
-.text-secondary {
-  color: var(--fg-secondary);
-}
-.border-app {
-  border-color: var(--border);
 }
 
 /* ---- Animations ---- */

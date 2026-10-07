@@ -3,6 +3,8 @@ using Hercules.Context;
 using Hercules.Context.Distillation;
 using Hercules.Context.Summarizer;
 
+using Hercules.WebApi.Contracts;
+
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
@@ -23,16 +25,19 @@ public static class ContextController
             }
 
             var budget = ctxBuilder.GetCurrentBudget();
-            return Results.Ok(new
+            return Results.Ok(new ContextBudgetDto
             {
-                budget.MaxTokens,
-                budget.UsedTokens,
-                budget.RemainingTokens,
-                budgetUsedPct = budget.MaxTokens > 0
+                MaxTokens = budget.MaxTokens,
+                UsedTokens = budget.UsedTokens,
+                RemainingTokens = budget.RemainingTokens,
+                BudgetUsedPct = budget.MaxTokens > 0
                     ? Math.Round((double)budget.UsedTokens / budget.MaxTokens * 100, 1)
                     : 0
             });
-        }).WithName("ContextBudget").WithTags("Context");
+        })
+          .WithName("ContextBudget")
+          .WithTags("Context")
+          .Produces<ContextBudgetDto>(200);
 
         // GET /api/context/summary?sessionId=... — markdown-сводка дистиллированного контекста.
         // task_102: расширено — теперь возвращает реальный summary вместо заглушки.
@@ -56,14 +61,17 @@ public static class ContextController
 
             int tokens = maxTokens ?? (cfg.Distillation.SummaryTokenBudget + cfg.Distillation.KeyFactsTokenBudget);
             var markdown = await distillation.GetSummaryAsync(sessionId, cfg.Distillation, tokens, ct);
-            return Results.Ok(new
+            return Results.Ok(new ContextSummaryDto
             {
-                sessionId,
-                mode = cfg.Distillation.Mode.ToString(),
-                summary = markdown,
-                empty = string.IsNullOrWhiteSpace(markdown)
+                SessionId = sessionId,
+                Mode = cfg.Distillation.Mode.ToString(),
+                Summary = markdown,
+                Empty = string.IsNullOrWhiteSpace(markdown)
             });
-        }).WithName("ContextSummary").WithTags("Context");
+        })
+          .WithName("ContextSummary")
+          .WithTags("Context")
+          .Produces<ContextSummaryDto>(200);
 
         // POST /api/context/distill — запуск дистилляции для сессии (task_102).
         // Body: { "sessionId": "...", "mode": "off|auto|manual" } (mode optional, defaults to current config).
@@ -110,18 +118,18 @@ public static class ContextController
             try
             {
                 var result = await distillation.DistillAsync(req.SessionId, effectiveCfg, ct);
-                return Results.Ok(new
+                return Results.Ok(new ContextDistillResultDto
                 {
-                    result.SessionId,
-                    result.RecentCount,
-                    result.SummariesCreated,
-                    result.KeyFactsExtracted,
-                    result.TokensBefore,
-                    result.TokensAfter,
-                    tokenSavingsPct = result.TokensBefore > 0
+                    SessionId = result.SessionId,
+                    RecentCount = result.RecentCount,
+                    SummariesCreated = result.SummariesCreated,
+                    KeyFactsExtracted = result.KeyFactsExtracted,
+                    TokensBefore = result.TokensBefore,
+                    TokensAfter = result.TokensAfter,
+                    TokenSavingsPct = result.TokensBefore > 0
                         ? Math.Round((1.0 - (double)result.TokensAfter / result.TokensBefore) * 100, 1)
                         : 0,
-                    result.SummaryMarkdown
+                    SummaryMarkdown = result.SummaryMarkdown
                 });
             }
             catch (Exception ex)
@@ -130,7 +138,10 @@ public static class ContextController
                 log.LogError(ex, "[ContextController] Distill failed for session {SessionId}", req.SessionId);
                 return Results.Problem(detail: ex.Message, statusCode: 500, title: "Distill failed");
             }
-        }).WithName("ContextDistill").WithTags("Context");
+        })
+          .WithName("ContextDistill")
+          .WithTags("Context")
+          .Produces<ContextDistillResultDto>(200);
 
         // POST /api/context/trace/compress — сжать tool trace в episodic memory
         app.MapPost("/api/context/trace/compress", async (

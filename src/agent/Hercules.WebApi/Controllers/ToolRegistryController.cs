@@ -1,4 +1,5 @@
 using Hercules.Tools.Registry;
+using Hercules.WebApi.Contracts;
 
 namespace Hercules.WebApi.Controllers;
 
@@ -20,7 +21,10 @@ public static class ToolRegistryController
                 allowedCount = registry.GetAllowedTools().Count(),
                 tools = all.Select(ToDto).ToList()
             });
-        }).WithName("ListTools").WithTags("Tools");
+        }).WithName("ListTools").WithTags("Tools")
+          // Declares the response shape so the OpenAPI document (and therefore
+          // Studio's generated client) can see it. Serialized JSON is unchanged.
+          .Produces<ToolsListResponseDto>(200);
 
         // GET /api/tools/{name} — один tool
         app.MapGet("/api/tools/{name}", (string name, IToolRegistryService registry) =>

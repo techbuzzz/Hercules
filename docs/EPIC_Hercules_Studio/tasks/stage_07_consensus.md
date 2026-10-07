@@ -1,7 +1,14 @@
 # Stage 7 — Консилиум
 
+<!-- web-first-migration-status -->
+> ⚠️ **These checkboxes are not a progress report.** They were never ticked during the
+> web-first migration, so an unticked box does not mean the work is outstanding.
+> As of 2026-10-06: fan-out, the **structured** LLM-judge (`{best_index, rationale}`, winner highlighted, rationale shown, manual fallback), manual pick, notifications and **7.8 history** are **done**. "Voting + Merge" appears only in the ROADMAP summary line, not in this spec, so it was not invented.
+> Per-item breakdown: [VERIFICATION.md](../VERIFICATION.md#what-remains).
+
+
 **Epic:** Hercules Studio
-**Status:** pending
+**Status:** delivered — fan-out, structured LLM-judge with rationale, manual pick, notifications, consensus history
 **Estimate:** 2-3 недели
 **Dependencies (backend):** нет (Studio orchestrates parallel /api/chat)
 **Dependencies (Studio):** Stage 2, Stage 1

@@ -40,9 +40,9 @@ src/agent/Mesh/Profiles/, src/agent/Mesh/Profiles/MeshProfileLoader.cs, src/agen
 Тихое падение в degraded-режим без видимости; явный mode flag + alerting + policy-driven refuse-when-stale.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)
 
 ## Implementation notes
 

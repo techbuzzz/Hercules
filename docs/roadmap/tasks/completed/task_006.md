@@ -68,6 +68,6 @@ tests/Hercules.Agent.Tests/, src/agent/CLI/
 - Coverage: 47.1% line (3917/8319), 34.6% branch — baseline был 47.45% (3857/8127). Coverage не вырос существенно потому что: (a) добавлен BenchmarkRunner (~280 LOC) который не покрыт тестами; (b) новые тесты покрывают файловый I/O который не затрагивает основные пути coverage. 70% coverage требует архитектурного рефакторинга для мокинга HTTP/WASM/Telegram.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

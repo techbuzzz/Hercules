@@ -1,0 +1,49 @@
+# =============================================================================
+# Docker build context exclusions.
+#
+# Without this the context includes node_modules (Studio), bin/obj (six .NET
+# projects), the Astro build output and git history — hundreds of MB that are
+# never used by an image build and that invalidate the layer cache on every
+# unrelated edit. Package *manifests* are deliberately NOT excluded: npm ci and
+# dotnet restore both need them.
+# =============================================================================
+
+.git
+.gitignore
+.github
+.opencode
+**/.vs
+**/.vscode
+**/node_modules
+**/bin
+**/obj
+**/.vite
+**/test-results
+**/playwright-report
+**/.astro
+**/.pytest_cache
+
+# Build outputs — the image builds these itself.
+src/hercules-studio/dist
+src/hercules-web/dist
+
+# Runtime state. HERCULES_DATA_ROOT is pinned inside the container, so a host
+# data directory must never leak in and silently seed the test instance.
+data
+**/data
+*.db
+*.db-shm
+*.db-wal
+
+# Docs and assets not needed to run the agent.
+docs
+assets
+examples
+templates
+deploy/raspberry-pi
+
+# Not needed at runtime.
+**/*.md
+!**/README.md
+LICENSE
+LICENSE-COMMERCIAL.md

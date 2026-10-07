@@ -1,7 +1,23 @@
 # ADR-0001: Electron over Tauri
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0009 — Web-first Hercules Studio](0009-web-first-studio.md)
 **Date:** 2026-08-14
+
+> **Superseded 2026-10-06.** This ADR is kept for history. Its decision was never executed:
+> the Electron project never reached a successful `npm install`, and seven of its eight
+> views were placeholders. More importantly, its core premise — that Studio needed a native
+> shell for filesystem access, process spawning and C# execution — no longer holds, because
+> those responsibilities moved into the agent (`DotnetFileBasedExecutor`, the documented
+> `supervisor (Studio / systemd / watcher)` restart protocol, A2A discovery,
+> `SqliteWorkflowDefinitionStore`). See ADR-0009 for the full analysis.
+>
+> Two details below are now known to be wrong and should not be reused as arguments:
+>
+> - *"better-sqlite3 requires a native Node addon build"* — Tauri ships an official SQLite
+>   plugin. This is not a real discriminator.
+> - *"PWA / web-only: Cannot access FS, tray, notifications, process spawning"* — the
+>   agent now provides process supervision and C# execution server-side, and notifications
+>   have a Web API. Only an interactive PTY and a tray icon genuinely remain desktop-only.
 
 ## Context
 

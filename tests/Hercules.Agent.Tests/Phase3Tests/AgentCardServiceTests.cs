@@ -295,6 +295,49 @@ public class AgentCardServiceTests : IDisposable
         Assert.Equal("hercules-test", card.Name);
     }
 
+    /// <summary>
+    /// Regression: the shipped config uses a URL-shaped Endpoint ("/agent-card.json").
+    /// Trimming the leading '/' yields a RELATIVE filesystem path, which wrote the
+    /// card into the process working directory — littering the repo and leaving
+    /// GET /agent-card.json (which reads from the data root) returning 404.
+    /// Relative values must resolve against the manifest directory.
+    /// </summary>
+    [Fact]
+    public async Task PublishAsync_ResolvesRelativeEndpointAgainstManifestDir()
+    {
+        _a2aConfig.AgentCard.Endpoint = "/agent-card.json";
+        var svc = CreateService();
+
+        // The working directory is shared by the whole test run, so a stale file
+        // may already be there. Snapshot it rather than assuming absence.
+        string cwdCard = Path.Combine(Directory.GetCurrentDirectory(), "agent-card.json");
+        DateTime before = File.Exists(cwdCard) ? File.GetLastWriteTimeUtc(cwdCard) : DateTime.MinValue;
+
+        string path = await svc.PublishAsync();
+
+        Assert.Equal(Path.Combine(_manifestDir, "agent-card.json"), path);
+        Assert.True(File.Exists(path));
+        Assert.True(Path.IsPathRooted(path));
+
+        // And the working directory must not have been written to.
+        DateTime after = File.Exists(cwdCard) ? File.GetLastWriteTimeUtc(cwdCard) : DateTime.MinValue;
+        Assert.Equal(before, after);
+    }
+
+    /// <summary>An absolute Endpoint must be honoured verbatim, not rebased.</summary>
+    [Fact]
+    public async Task PublishAsync_HonoursAbsoluteEndpoint()
+    {
+        string absolute = Path.Combine(_tempDir, "cards", "agent-card.json");
+        _a2aConfig.AgentCard.Endpoint = absolute;
+        var svc = CreateService();
+
+        string path = await svc.PublishAsync();
+
+        Assert.Equal(absolute, path);
+        Assert.True(File.Exists(path));
+    }
+
     [Fact]
     public async Task PublishAsync_DisabledConfig_DoesNotWrite()
     {

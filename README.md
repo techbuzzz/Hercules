@@ -9,10 +9,10 @@
 
 <p align="center">
   <a href="https://github.com/techbuzzz/Hercules/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/techbuzzz/Hercules?style=social" /></a>
-  <a href="https://github.com/techbuzzz/Hercules/actions"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/techbuzzz/Hercules/build.yml?branch=main&logo=github&label=build" /></a>
+  <a href="https://github.com/techbuzzz/Hercules/actions"><img alt="Build" src="https://img.shields.io/github/actions/workflow/status/techbuzzz/Hercules/ci.yml?branch=main&logo=github&label=build" /></a>
   <img alt=".NET" src="https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white" />
   <img alt="C#" src="https://img.shields.io/badge/C%23-15-239120?logo=csharp&logoColor=white" />
-  <img alt="License" src="https://img.shields.io/badge/License-MIT-yellow.svg" />
+  <img alt="License" src="https://img.shields.io/badge/License-AGPLv3-blue.svg" />
   <img alt="Status" src="https://img.shields.io/badge/status-active-success.svg" />
   <a href="https://techbuzzz.github.io/Hercules"><img alt="Docs" src="https://img.shields.io/badge/docs-hercules--agent.dev-1E90FF?logo=read-the-docs&logoColor=white" /></a>
 </p>
@@ -48,7 +48,7 @@ versions its own skills, runs code in a sandbox, and can team up with other agen
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  Interfaces: CLI REPL · Telegram bot · Web API · Astro SPA            │
+│  Interfaces: CLI REPL · Telegram bot · Web API · Studio SPA (Vue 3)            │
 ├─────────────────────────────────────────────────────────────────────┤
 │  Agent Core   →  Skill Router  →  Reflection  →  Memory Manager       │
 │        ↓              ↓                ↓              ↓             │
@@ -73,10 +73,12 @@ versions its own skills, runs code in a sandbox, and can team up with other agen
 # Run CLI REPL
  dotnet run --project src/agent/Hercules
 
-# Or run Web API + Astro frontend
+# Or run the agent with its web UI (single process — no second dev server)
  dotnet run --project src/agent/Hercules.WebApi
- cd src/hercules-web && npm install && npm run dev
 ```
+
+The agent hosts the Studio SPA itself at <http://localhost:8421/ui/> (ADR-0009). There is no
+separate frontend process and no Electron shell.
 
 > Want to install as a global tool? Vote / contribute to [issue #1](https://github.com/techbuzzz/Hercules/issues).
 
@@ -132,7 +134,7 @@ through a single OpenAI-compatible interface (`Microsoft.Extensions.AI`).
 | **Offline Resilience**          | Outbox queue, network monitoring, sync-on-reconnect, deterministic fallback when LLM is unreachable                                  |
 | **Config Hot-Reload**           | Change LLM providers, system prompts, and thresholds via Web UI or API without restart                                             |
 | **Multi-provider LLM**          | YandexGPT (primary), Ollama Cloud / Local, LM Studio — through a single OpenAI-compatible interface with automatic fallback         |
-| **Interfaces**                  | CLI (REPL, primary) + Telegram bot (secondary) + Web API (35 controllers) + Astro SPA                                              |
+| **Interfaces**                  | CLI (REPL, primary) + Telegram bot (secondary) + Web API (35 controllers) + Studio SPA (Vue 3)                                              |
 
 ---
 
@@ -272,14 +274,20 @@ src/agent/Hercules.WebApi/           # ASP.NET Core Minimal API (REST), port :84
                                        # SelfImprovement, TaskProgress, Context, Cache,
                                        # ToolRegistry, MCP, Template
 
-src/hercules-web/                    # Astro + TailwindCSS frontend, port :4321
-├── src/lib/api.ts                    # Typed Web API client (35+ endpoints)
-├── src/layouts/Layout.astro         # Base layout (dark theme, navigation)
-├── src/components/                  # ChatBox, SkillCard, ProfileEditor, ConfigEditor,
-│                                    # StatsDashboard, MeshDashboard, MeshRouterPanel,
-│                                    # EscalationPanel
-└── src/pages/                       # index / skills / profile / stats / config / memmesh
+src/hercules-studio/                   # Studio SPA (Vue 3 + Vite), served by the agent at /ui
+├── renderer/src/views/               # Agents, Chat, Skills, Mesh, Tools, Config,
+│                                    # Workflow, Decisions, Consensus, Context, LLM
+├── renderer/src/components/          # consensus/, mesh/, skills/, workflow/, common/
+├── renderer/src/sdk/                 # typed client over the agent's generated OpenAPI types
+└── renderer/src/platform/            # capabilities + web platform adapter
+
+src/hercules-web/                     # DEPRECATED (ADR-0009) — Astro frontend, no longer built or ported
+                                      # See src/hercules-web/DEPRECATED.md for the replacement map
 ```
+
+The UI is a single process: the agent serves the built SPA from `/ui`, so there is no
+second dev server and no Electron shell. For UI work, run `npm run dev` inside
+`src/hercules-studio` (port 4330, base path `/ui/`) alongside the agent on 8421.
 
 Deployment:
 
@@ -329,17 +337,15 @@ dotnet build
 ### Publish (for deployment)
 
 ```bash
-# Backend
-dotnet publish src/agent/Hercules.WebApi -c Release -o ./dist/webapi
+# Build the Studio bundle into src/dist (consumed by the agent at /ui)
+cd src/hercules-studio && npm ci && npm run build && cd ../..
 
-# Frontend
-cd src/hercules-web
-npm install
-npm run build   # static output in src/hercules-web/dist
+# Publish the agent
+dotnet publish src/agent/Hercules.WebApi -c Release -o ./dist/webapi
 ```
 
-After publishing, run `dist/webapi/Hercules.WebApi` and serve frontend static files
-(e.g., `npx serve src/hercules-web/dist -p 4321`). All user data (skills, memory, DB, runtime
+After publishing, run `dist/webapi/Hercules.WebApi` — it serves both the API and the UI at
+`/ui`. No separate static file server is needed. All user data (skills, memory, DB, runtime
 config) lives in the `data/` directory, which can be kept outside the repository.
 
 ### Run CLI (primary mode)
@@ -378,7 +384,7 @@ dotnet run --project src/agent/Hercules            # same thing (CLI by default)
 
 ASP.NET Core Minimal API with 35 controllers. All responses are JSON (UTF-8, camelCase).
 Protection is the `X-Api-Key` header (value from `WebApi:ApiKey`, default `dev-local-key`).
-CORS is open for the local frontend (`http://localhost:4321`, `http://localhost:3000`).
+Dev CORS whitelist: `http://localhost:4330` (Studio dev server) and `8421` (the agent itself; the SPA it serves at /ui is same-origin).
 Every interaction is logged in SQLite (`data/sessions.db`).
 
 ### Core endpoints
@@ -445,59 +451,53 @@ Web API configuration (`src/agent/Hercules.WebApi/appsettings.json`):
 ```jsonc
 "WebApi": {
   "ApiKey": "dev-local-key",                  // empty string → no-key access
-  "AllowedCorsOrigins": [ "http://localhost:4321", "http://localhost:3000" ]
+  "AllowedCorsOrigins": [ "http://localhost:4330" ]
 }
 ```
 
 ---
 
-## 🎨 Web Interface (Astro)
+## 🎨 Web Interface — Studio
 
-Minimalist SPA on **Astro + TailwindCSS** (dark theme, monospaced code blocks).
-Located in the `src/hercules-web/` directory.
+**Vue 3 + Vite SPA, served by the agent itself at `/ui`** (ADR-0009). Single process: no
+Electron shell, no second dev server, no separate static host.
 
-| Page       | Purpose                                                                           |
-| ---------- | --------------------------------------------------------------------------------- |
-| `/`        | Chat with the agent (mode/confidence/provider badges, typing effect, skill hints) |
-| `/skills`  | Skill list, manual creation and AI improvement, editing, lifecycle & quality      |
-| `/profile` | Long-term memory profile editor + reset                                           |
-| `/config`  | **Agent configuration editor** — LLM providers, system prompt, thresholds, tools  |
-| `/stats`   | Metrics dashboard, skill/direct ratio, daily activity, reflection                 |
-| `/memmesh` | Mesh dashboard — peer agents, routing, observability                              |
+| View         | Purpose                                                                                       |
+| ------------ | --------------------------------------------------------------------------------------------- |
+| Agents       | Connections, health, discovery, add/remove                                                     |
+| Chat         | Agent chat with mode/confidence/provider/skill badges; sandbox runs stream over SSE          |
+| Skills       | Editor (Monaco), prompt history with a **diff view**, restore, create from template, push     |
+| Mesh         | Vue Flow topology canvas, node details, context menu, shared memory, circuit breakers        |
+| Tools        | Tool registry toggle plus MCP server add/edit/delete/reload                                   |
+| Config       | Raw merge-patch editor, LLM providers, API-key roles, quotas, context budget, session store    |
+| Workflow     | Workflow definitions (authoring; execution is task_105)                                        |
+| Decisions    | Approvals and escalations awaiting a human                                                     |
+| Consensus    | Fan out one prompt to several agents, aggregate manually or via an LLM judge                   |
+| Context / LLM| Context budget and distillation · LLM provider health                                          |
 
-Components: `ChatBox`, `SkillCard`, `ProfileEditor`, `ConfigEditor`, `StatsDashboard`,
-`MeshDashboard`, `MeshRouterPanel`, `EscalationPanel`. API client — `src/lib/api.ts`.
+Typed client lives in `renderer/src/sdk` and is derived from the agent's generated
+OpenAPI types. `npm run dev` inside `src/hercules-studio` runs it on **4330** with base
+path `/ui/` for UI work.
 
-### Run the frontend
-
-```bash
-cd src/hercules-web
-npm install
-npm run dev        # dev server on http://localhost:4321
-```
-
-The backend address and key are configured via environment variables (`src/hercules-web/.env`):
+### Run Studio for development
 
 ```bash
-PUBLIC_API_BASE=http://localhost:8421
-PUBLIC_API_KEY=dev-local-key
-```
-
-> **Hot-reload configuration**: no need to edit `appsettings.json` before launch.
-> Open `/config`, paste LLM provider keys, and save — settings apply immediately
-> without server restart, persisted in `data/runtime-config.json`.
-
-### Full local run (two terminals)
-
-```bash
-# Terminal 1 — backend
+# Terminal 1 — agent (serves the built bundle at /ui)
 dotnet run --project src/agent/Hercules.WebApi      # → :8421
 
-# Terminal 2 — frontend
-cd src/hercules-web && npm run dev                  # → :4321
+# Terminal 2 — Studio dev server (hot reload, proxies to 8421)
+cd src/hercules-studio && npm ci && npm run dev    # → :4330/ui/
 ```
 
-Open `http://localhost:4321`.
+Open `http://localhost:4330/ui/`. For a plain run with no hot reload, just start the
+agent and open `http://localhost:8421/ui/`.
+
+Connection details are entered in the UI and held in memory only: an API key is
+exchanged once for a short-lived session token and is never written to browser storage.
+
+> **Hot-reload configuration**: no need to edit `appsettings.json` before launch. Edit from
+> the Config view and save — settings apply without a server restart, persisted in
+> `data/runtime-config.json`. Secrets are returned masked and are never written back.
 
 ---
 
@@ -699,7 +699,7 @@ config, and first-boot provisioning script.
 | `Npgsql` | 10.0.3 | PostgreSQL backend |
 | `OpenTelemetry` | 1.17.0 | Observability (tracing + metrics) |
 
-Frontend: **Astro 6.4+**, **TailwindCSS 4.3+**, **Node.js 22.12+**
+Frontend: **Vue 3.5+**, **Vite 5.4+**, **TailwindCSS 4**, **vue-i18n 11**, **Monaco editor**, **Vue Flow**, **Node.js 22.12+**
 
 ---
 

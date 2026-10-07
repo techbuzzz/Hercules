@@ -1,7 +1,14 @@
 # Stage 0 — Skeleton
 
+<!-- web-first-migration-status -->
+> ⚠️ **These checkboxes are not a progress report.** They were never ticked during the
+> web-first migration, so an unticked box does not mean the work is outstanding.
+> As of 2026-10-06: codegen pipeline (openapi-typescript + contract test + generated types) is **done**; the Orval-generated client is not.
+> Per-item breakdown: [VERIFICATION.md](../VERIFICATION.md#what-remains).
+
+
 **Epic:** Hercules Studio
-**Status:** in_progress (web preview working)
+**Status:** partially delivered — codegen done, Orval client not
 **Estimate:** 1-2 недели
 **Dependencies (backend):** task_109-112 (OpenAPI producer + annotations — для API codegen pipeline)
 **Dependencies (Studio):** нет (стартовый)

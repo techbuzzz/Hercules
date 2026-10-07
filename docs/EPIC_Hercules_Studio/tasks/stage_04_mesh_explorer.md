@@ -1,7 +1,14 @@
 # Stage 4 — Mesh Explorer
 
+<!-- web-first-migration-status -->
+> ⚠️ **These checkboxes are not a progress report.** They were never ticked during the
+> web-first migration, so an unticked box does not mean the work is outstanding.
+> As of 2026-10-06: canvas, node details, context menu, shared memory and circuit breakers are **done**.
+> Per-item breakdown: [VERIFICATION.md](../VERIFICATION.md#what-remains).
+
+
 **Epic:** Hercules Studio
-**Status:** pending
+**Status:** delivered — canvas, node details, 6-action context menu, router inspector with phrase search + sorting (composite/health/latency/cost) + trust/health/circuit filters, shared memory, circuit breakers, 30s auto-refresh (skipped when hidden, cleared on unmount), and the dashboard panels for traffic / skill heatmap / eval summary
 **Estimate:** 2 недели
 **Dependencies (backend):** нет
 **Dependencies (Studio):** Stage 1

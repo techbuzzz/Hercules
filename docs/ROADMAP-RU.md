@@ -208,6 +208,6 @@ flowchart TD
 
 ## Как повлиять на roadmap
 
-- Откройте [discussion](../../discussions) для идей.
-- Откройте [issue](../../issues) для конкретных багов или предложений.
+- Откройте [discussion](https://github.com/techbuzzz/Hercules/discussions) для идей.
+- Откройте [issue](https://github.com/techbuzzz/Hercules/issues) для конкретных багов или предложений.
 - См. [CONTRIBUTING-RU.md](../CONTRIBUTING-RU.md) с гайдом по внесению вклада.

@@ -63,6 +63,6 @@ src/agent/Reflection/ProposalStore.cs, src/agent/Memory/Layers/LayeredMemoryMana
 `FileSystemWatcher` может пропустить events на некоторых FS (NFS); periodic refresh fallback (every 60s). StringBuilder pool: `Clear()` перед Return обязателен иначе leak. Rollback: вернуть `new StringBuilder()`.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)

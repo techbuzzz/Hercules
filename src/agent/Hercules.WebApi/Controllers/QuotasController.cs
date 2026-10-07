@@ -1,5 +1,7 @@
 using Hercules.Quotas;
 
+using Hercules.WebApi.Contracts;
+
 namespace Hercules.WebApi.Controllers;
 
 /// <summary>
@@ -24,34 +26,37 @@ public static class QuotasController
             var statuses = quotaService.GetStatus(qScope, id);
             var counters = quotaService.GetCounters(qScope, id);
 
-            return Results.Ok(new
+            return Results.Ok(new QuotaStatusResponseDto
             {
-                scope = qScope.ToString(),
-                scopeId = id,
-                counters = new
+                Scope = qScope.ToString(),
+                ScopeId = id,
+                Counters = new QuotaCountersDto
                 {
-                    tokensUsedToday = counters.TokensUsedToday,
-                    messagesUsedToday = counters.MessagesUsedToday,
-                    requestsUsedToday = counters.RequestsUsedToday,
-                    storageUsedMb = counters.StorageUsedMb,
-                    costUsedTodayCents = counters.CostUsedTodayCents,
-                    activeConcurrentRequests = counters.ActiveConcurrentRequests,
-                    activeSkillExecutions = counters.ActiveSkillExecutions,
-                    lastResetDate = counters.LastResetDate
+                    TokensUsedToday = counters.TokensUsedToday,
+                    MessagesUsedToday = counters.MessagesUsedToday,
+                    RequestsUsedToday = counters.RequestsUsedToday,
+                    StorageUsedMb = counters.StorageUsedMb,
+                    CostUsedTodayCents = counters.CostUsedTodayCents,
+                    ActiveConcurrentRequests = counters.ActiveConcurrentRequests,
+                    ActiveSkillExecutions = counters.ActiveSkillExecutions,
+                    LastResetDate = counters.LastResetDate
                 },
-                limits = statuses.Select(s => new
-                {
-                    type = s.Type.ToString(),
-                    limit = s.Limit,
-                    current = s.Current,
-                    remaining = s.Remaining,
-                    isExceeded = s.IsExceeded,
-                    isHardCap = s.IsHardCap,
-                    usagePercent = s.UsagePercent,
-                    resetAt = s.ResetAt
-                })
+                Limits = statuses.Select(s => new QuotaStatusDto
+                    {
+                        Type = s.Type.ToString(),
+                        Limit = s.Limit,
+                        Current = s.Current,
+                        Remaining = s.Remaining,
+                        IsExceeded = s.IsExceeded,
+                        IsHardCap = s.IsHardCap,
+                        UsagePercent = s.UsagePercent,
+                        ResetAt = s.ResetAt
+                    }).ToList()
             });
-        }).WithName("QuotaStatus").WithTags("Quotas");
+        })
+          .WithName("QuotaStatus")
+          .WithTags("Quotas")
+          .Produces<QuotaStatusResponseDto>(200);
 
         // GET /api/quotas/{scope}/{scopeId} — статус quotas для конкретного scope
         app.MapGet("/api/quotas/{scope}/{scopeId}", (IQuotaService quotaService, string scope, string scopeId) =>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { platform } from "@renderer/platform";
 
 const { t } = useI18n();
 
@@ -12,7 +13,10 @@ const showKeyInput = ref(false);
 const declined = ref(false);
 
 async function accept() {
-  await window.studioAPI.license.acceptConsent(type.value, type.value === "commercial" ? licenseKey.value : undefined);
+  await platform.license.acceptConsent(
+    type.value,
+    type.value === "commercial" ? licenseKey.value : undefined,
+  );
   emit("accepted");
 }
 

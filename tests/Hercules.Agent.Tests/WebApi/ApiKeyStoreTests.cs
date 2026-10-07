@@ -1,3 +1,4 @@
+using System.Text;
 using Hercules.Config;
 using Hercules.WebApi.Auth;
 using Hercules.WebApi.Config;
@@ -122,6 +123,118 @@ public class ApiKeyStoreTests : IDisposable
         // Роли сериализуются как строки (ADR-0004) в camelCase.
         Assert.Contains("\"contribute\"", content);
         Assert.Contains("\"system\"", content);
+    }
+
+    // -----------------------------------------------------------------------
+    //  Stage 6.3: live key set — fingerprinting, resolution and persistence.
+    //  ApiKeyMiddleware snapshots its table once per process, so the roles
+    //  editor can only be honest if the set behind it is swappable.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Fingerprint_IsStableForTheSameKey_AndDiffersBetweenKeys()
+    {
+        var a = ApiKeyStore.Fingerprint("hc_sys_abc");
+        var b = ApiKeyStore.Fingerprint("hc_sys_abc");
+        var c = ApiKeyStore.Fingerprint("hc_sys_abd");
+
+        Assert.Equal(a, b);
+        Assert.NotEqual(a, c);
+        Assert.Equal(12, a.Length);
+        Assert.DoesNotContain("abc", a, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Fingerprint_OfEmptyKey_IsEmpty()
+    {
+        Assert.Equal(string.Empty, ApiKeyStore.Fingerprint(""));
+    }
+
+    [Fact]
+    public void SetActive_ThenTryResolve_MatchesOnlyActiveKeys()
+    {
+        var store = NewStore();
+        store.SetActive(new List<ApiKeyEntry>
+        {
+            new() { Key = "k-one", Role = ApiKeyRole.Contribute },
+            new() { Key = "k-two", Role = ApiKeyRole.System }
+        });
+
+        Assert.True(store.HasKeys);
+        Assert.True(store.TryResolve(Encoding.UTF8.GetBytes("k-two"), out var matched));
+        Assert.Equal("k-two", matched.Key);
+        Assert.Equal(ApiKeyRole.System, matched.Role);
+        Assert.False(store.TryResolve(Encoding.UTF8.GetBytes("k-three"), out _));
+    }
+
+    [Fact]
+    public void SetActive_EmptyList_MarksTheStoreKeyless()
+    {
+        var store = NewStore();
+        store.SetActive(new List<ApiKeyEntry> { new() { Key = "k" } });
+        Assert.True(store.HasKeys);
+
+        store.SetActive(Array.Empty<ApiKeyEntry>());
+        Assert.False(store.HasKeys);
+    }
+
+    [Fact]
+    public void SetActive_PublishesTheNewSetImmediately()
+    {
+        var store = NewStore();
+        store.SetActive(new List<ApiKeyEntry> { new() { Key = "old" } });
+        Assert.True(store.TryResolve(Encoding.UTF8.GetBytes("old"), out _));
+
+        store.SetActive(new List<ApiKeyEntry> { new() { Key = "new" } });
+
+        Assert.False(store.TryResolve(Encoding.UTF8.GetBytes("old"), out _));
+        Assert.True(store.TryResolve(Encoding.UTF8.GetBytes("new"), out _));
+    }
+
+    [Fact]
+    public void TryResolve_IgnoresEntriesWithAnEmptyKey()
+    {
+        var store = NewStore();
+        store.SetActive(new List<ApiKeyEntry>
+        {
+            new() { Key = "", Role = ApiKeyRole.System },
+            new() { Key = "real", Role = ApiKeyRole.System }
+        });
+
+        // An empty configured key must not become a valid credential.
+        Assert.False(store.TryResolve(Encoding.UTF8.GetBytes(""), out _));
+        Assert.True(store.TryResolve(Encoding.UTF8.GetBytes("real"), out _));
+    }
+
+    [Fact]
+    public void SaveAndActivate_PersistsTheSetAndActivatesItWithoutRestart()
+    {
+        var store = NewStore();
+        var keys = ApiKeyStore.Generate();
+
+        store.SaveAndActivate(keys);
+
+        Assert.True(store.HasKeys);
+        Assert.True(store.TryResolve(Encoding.UTF8.GetBytes(keys[0].Key), out _));
+
+        // Round-trips through keys.json, so the change survives a process restart.
+        var reloaded = new ApiKeyStore(new StorageConfig { DataRoot = _tempDir }, NullLogger<ApiKeyStore>.Instance);
+        var fromFile = reloaded.LoadOrGenerate(Array.Empty<ApiKeyEntry>());
+
+        Assert.Equal(keys.Count, fromFile.Count);
+        Assert.Equal(
+            keys.Select(k => k.Key).OrderBy(k => k, StringComparer.Ordinal),
+            fromFile.Select(k => k.Key).OrderBy(k => k, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void GenerateKey_UsesTheFamilyPrefixForTheRole()
+    {
+        Assert.StartsWith("hc_sys_", ApiKeyStore.GenerateKey(ApiKeyRole.System), StringComparison.Ordinal);
+        Assert.StartsWith("hc_contrib_", ApiKeyStore.GenerateKey(ApiKeyRole.Contribute), StringComparison.Ordinal);
+        Assert.NotEqual(
+            ApiKeyStore.GenerateKey(ApiKeyRole.System),
+            ApiKeyStore.GenerateKey(ApiKeyRole.System));
     }
 
     private ApiKeyStore NewStore()

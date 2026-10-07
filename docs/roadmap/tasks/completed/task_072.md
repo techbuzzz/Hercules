@@ -90,6 +90,6 @@ src/agent/Quotas/QuotaService.cs, src/agent/Quotas/DistributedQuotaService.cs (n
 Distributed quotas добавляют сетевую задержку на каждый `CheckQuotas`; измерить p99 и сделать fallback на in-memory при недоступности store. Rollback: `DistributedEnabled=false`.
 
 ## Links
-- Backlog: [../backlog.md](../backlog.md)
-- Roadmap (EN): [../../ROADMAP-EN.md](../../ROADMAP-EN.md)
-- Roadmap (RU): [../../ROADMAP-RU.md](../../ROADMAP-RU.md)
+- Backlog: [../backlog.md](../../backlog.md)
+- Roadmap (EN): [../../ROADMAP-EN.md](../../../ROADMAP-EN.md)
+- Roadmap (RU): [../../ROADMAP-RU.md](../../../ROADMAP-RU.md)
