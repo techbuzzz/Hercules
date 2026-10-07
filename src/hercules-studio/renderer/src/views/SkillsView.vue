@@ -421,7 +421,7 @@ onMounted(load);
           @click="select(skill.id)"
         >
           <div class="truncate text-sm font-medium">{{ skill.name }}</div>
-          <div class="truncate text-xs opacity-70">
+          <div class="truncate text-xs text-secondary">
             {{ skill.phraseReceivers.join(", ") || t("skills.noTriggers") }}
           </div>
         </button>

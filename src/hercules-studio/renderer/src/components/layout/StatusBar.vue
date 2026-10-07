@@ -37,7 +37,7 @@ const statusColor = computed(() => {
         <span class="h-2 w-2 rounded-full" :class="statusColor" />
         <span class="text-app">{{ activeAgent.displayName }}</span>
       </span>
-      <span v-if="activeAgent.lastSeen" class="opacity-70">{{ t("status.checkedIn") }}</span>
+      <span v-if="activeAgent.lastSeen" class="text-secondary">{{ t("status.checkedIn") }}</span>
     </template>
     <template v-else>
       <span>{{ t("status.noAgent") }}</span>
@@ -56,6 +56,6 @@ const statusColor = computed(() => {
     <div class="flex-1" />
 
     <!-- Version -->
-    <span class="opacity-70">v{{ version }}</span>
+    <span class="text-secondary">v{{ version }}</span>
   </div>
 </template>

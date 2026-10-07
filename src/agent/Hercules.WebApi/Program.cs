@@ -1095,10 +1095,21 @@ else if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URL
 {
     builder.WebHost.UseUrls("http://0.0.0.0:8421");
 }
-else if (builder.Environment.IsDevelopment())
+else if (builder.Environment.IsDevelopment() &&
+         string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")) &&
+         !args.Any(a => a.StartsWith("--urls")))
 {
     // В Development игнорируем launchSettings URL и фиксируем порт 8421,
     // чтобы не зависеть от случайного порта в Properties/launchSettings.json.
+    //
+    // Только если URL не задан ЯВНО. Раньше этот UseUrls() был безусловным и
+    // молча перебивал ASPNETCORE_URLS — тогда как ветка Production (выше) его
+    // уважает. Из-за этого агент нельзя было запустить в контейнере с
+    // Development: `ASPNETCORE_URLS=http://+:8421` превращался в
+    // `http://localhost:8421`, published-порт становился недостижим, и healthcheck
+    // проходил (он ходит по localhost), хотя снаружи соединение обрывалось.
+    // Локальный `dotnet run` не меняется: launchSettings.json задаёт
+    // applicationUrl=http://localhost:8421, поэтому результат тот же.
     builder.WebHost.UseUrls("http://localhost:8421");
 }
 

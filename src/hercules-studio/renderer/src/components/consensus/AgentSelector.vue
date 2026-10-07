@@ -49,7 +49,7 @@ function statusClass(id: string): string {
         @click="consensus.toggleAgent(conn.id)"
       >
         {{ conn.name }}
-        <span v-if="conn.status !== 'online'" class="text-[10px] opacity-70">offline</span>
+        <span v-if="conn.status !== 'online'" class="text-[10px] text-secondary">offline</span>
       </button>
 
       <p v-if="candidates.length === 0" class="text-xs text-secondary">

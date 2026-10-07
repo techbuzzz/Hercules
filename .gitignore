@@ -424,6 +424,11 @@ FodyWeavers.xsd
 # Astro / web build output
 src/hercules-web/dist/
 
+# E2E test secrets — real API keys must never be committed.
+# Only README.md in that directory is tracked.
+deploy/e2e/secrets/*
+!deploy/e2e/secrets/README.md
+
 # Hercules Studio (web-first Vue SPA — ADR-0009, no Electron shell)
 src/hercules-studio/node_modules/
 src/hercules-studio/dist/

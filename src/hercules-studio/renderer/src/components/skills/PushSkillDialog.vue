@@ -252,7 +252,7 @@ const resultRows = computed(() =>
         @click="toggleTarget(c.id)"
       >
         {{ c.name }}
-        <span v-if="c.status !== 'online'" class="text-[10px] opacity-70">offline</span>
+        <span v-if="c.status !== 'online'" class="text-[10px] text-secondary">offline</span>
       </button>
     </div>
 
