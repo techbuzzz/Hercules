@@ -67,9 +67,11 @@ public static class RolloutController
         }).WithName("ApplyRolloutBundle");
 
         // POST /api/rollout/promote
-        group.MapPost("/promote", ( PromoteRequest req, IRolloutManager manager) =>
+        // task_077: async lambda — IRolloutManager.PromoteStageAsync is async; the previous
+        // sync lambda blocked a request thread on every promotion.
+        group.MapPost("/promote", async (PromoteRequest req, IRolloutManager manager, CancellationToken ct) =>
         {
-            var result = manager.PromoteStageAsync(req.BundleId).GetAwaiter().GetResult();
+            var result = await manager.PromoteStageAsync(req.BundleId, ct);
             if (!result.Success)
             {
                 return Results.BadRequest(new
@@ -89,9 +91,10 @@ public static class RolloutController
         }).WithName("PromoteRolloutStage");
 
         // POST /api/rollout/rollback
-        group.MapPost("/rollback", (RollbackRequest? req, IRolloutManager manager) =>
+        // task_077: async lambda.
+        group.MapPost("/rollback", async (RollbackRequest? req, IRolloutManager manager, CancellationToken ct) =>
         {
-            var result = manager.RollbackAsync(req?.Reason).GetAwaiter().GetResult();
+            var result = await manager.RollbackAsync(req?.Reason, ct);
             if (!result.Success)
             {
                 return Results.BadRequest(new

@@ -1039,14 +1039,12 @@ public sealed class ConsoleUI(
                 // /mesh send {targetAgentId} {message...}
                 var targetId = parts[2];
                 var messageText = string.Join(" ", parts.Skip(3));
-                var envelope = new IntentEnvelope(
+                var envelope = IntentEnvelope.Create(
                     IntentIds.NewRequestId(),
                     manifestService.Current.AgentId,
                     messageText,
-                    messageText)
-                {
-                    TraceId = Guid.NewGuid().ToString("N")[..8]
-                };
+                    messageText,
+                    traceId: Guid.NewGuid().ToString("N")[..8]);
                 try
                 {
                     var resp = await intentRouter.RouteAsync(envelope, ct);
@@ -1072,14 +1070,12 @@ public sealed class ConsoleUI(
             case "fanout" when parts.Length >= 3:
                 // /mesh fanout {message...} — fan-out нескольким peer'ам + выбор лучшего
                 var fanOutMessage = string.Join(" ", parts.Skip(2));
-                var fanOutEnvelope = new IntentEnvelope(
+                var fanOutEnvelope = IntentEnvelope.Create(
                     IntentIds.NewRequestId(),
                     manifestService.Current.AgentId,
                     fanOutMessage,
-                    fanOutMessage)
-                {
-                    TraceId = Guid.NewGuid().ToString("N")[..8]
-                };
+                    fanOutMessage,
+                    traceId: Guid.NewGuid().ToString("N")[..8]);
                 try
                 {
                     var result = await meshRouter.RouteWithFanOutAsync(fanOutEnvelope, ct);

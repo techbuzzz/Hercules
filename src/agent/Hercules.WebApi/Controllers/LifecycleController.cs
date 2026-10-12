@@ -49,7 +49,7 @@ public static class LifecycleController
                     skillPackages = a.SkillPackages
                 })
             });
-        }).WithName("LifecycleInventory");
+        }).WithName("LifecycleInventory").WithTags("Lifecycle");
 
         // GET /api/lifecycle/health — health check
         app.MapGet("/api/lifecycle/health", async (
@@ -67,7 +67,7 @@ public static class LifecycleController
                 issues = result.Issues,
                 details = result.Details
             });
-        }).WithName("LifecycleHealth");
+        }).WithName("LifecycleHealth").WithTags("Lifecycle");
 
         // POST /api/lifecycle/agent/{agentId}/start
         app.MapPost("/api/lifecycle/agent/{agentId}/start", async (
@@ -79,7 +79,7 @@ public static class LifecycleController
             return result.Success
                 ? Results.Ok(result)
                 : Results.BadRequest(result);
-        }).WithName("LifecycleAgentStart");
+        }).WithName("LifecycleAgentStart").WithTags("Lifecycle");
 
         // POST /api/lifecycle/agent/{agentId}/stop
         app.MapPost("/api/lifecycle/agent/{agentId}/stop", async (
@@ -91,7 +91,7 @@ public static class LifecycleController
             return result.Success
                 ? Results.Ok(result)
                 : Results.BadRequest(result);
-        }).WithName("LifecycleAgentStop");
+        }).WithName("LifecycleAgentStop").WithTags("Lifecycle");
 
         // POST /api/lifecycle/agent/{agentId}/drain
         app.MapPost("/api/lifecycle/agent/{agentId}/drain", async (
@@ -103,7 +103,7 @@ public static class LifecycleController
             return result.Success
                 ? Results.Ok(result)
                 : Results.BadRequest(result);
-        }).WithName("LifecycleAgentDrain");
+        }).WithName("LifecycleAgentDrain").WithTags("Lifecycle");
 
         // POST /api/lifecycle/agent/{agentId}/decommission
         app.MapPost("/api/lifecycle/agent/{agentId}/decommission", async (
@@ -115,7 +115,7 @@ public static class LifecycleController
             return result.Success
                 ? Results.Ok(result)
                 : Results.BadRequest(result);
-        }).WithName("LifecycleAgentDecommission");
+        }).WithName("LifecycleAgentDecommission").WithTags("Lifecycle");
 
         // POST /api/lifecycle/agent/{agentId}/rollback
         app.MapPost("/api/lifecycle/agent/{agentId}/rollback", async (
@@ -127,7 +127,7 @@ public static class LifecycleController
             return result.Success
                 ? Results.Ok(result)
                 : Results.BadRequest(result);
-        }).WithName("LifecycleAgentRollback");
+        }).WithName("LifecycleAgentRollback").WithTags("Lifecycle");
 
         // POST /api/lifecycle/packages/{packageId}/update
         app.MapPost("/api/lifecycle/packages/{packageId}/update", async (
@@ -140,7 +140,7 @@ public static class LifecycleController
             return result.Success
                 ? Results.Ok(result)
                 : Results.BadRequest(result);
-        }).WithName("LifecyclePackageUpdate");
+        }).WithName("LifecyclePackageUpdate").WithTags("Lifecycle");
 
         // POST /api/lifecycle/packages/{packageId}/canary
         app.MapPost("/api/lifecycle/packages/{packageId}/canary", async (
@@ -157,7 +157,7 @@ public static class LifecycleController
             return result.Success
                 ? Results.Ok(result)
                 : Results.BadRequest(new { success = false, error = result.Error });
-        }).WithName("LifecyclePackageCanary");
+        }).WithName("LifecyclePackageCanary").WithTags("Lifecycle");
 
         // POST /api/lifecycle/packages/{packageId}/promote
         app.MapPost("/api/lifecycle/packages/{packageId}/promote", async (
@@ -170,7 +170,7 @@ public static class LifecycleController
             return result.Success
                 ? Results.Ok(result)
                 : Results.BadRequest(result);
-        }).WithName("LifecyclePackagePromote");
+        }).WithName("LifecyclePackagePromote").WithTags("Lifecycle");
 
         // POST /api/lifecycle/packages/{packageId}/rollback
         app.MapPost("/api/lifecycle/packages/{packageId}/rollback", async (
@@ -183,7 +183,7 @@ public static class LifecycleController
             return result.Success
                 ? Results.Ok(result)
                 : Results.BadRequest(result);
-        }).WithName("LifecyclePackageRollback");
+        }).WithName("LifecyclePackageRollback").WithTags("Lifecycle");
     }
 }
 

@@ -63,6 +63,16 @@ public static class DangerousCodeScanner
         opts.Validate();
 
         var lines = code.Split('\n');
+
+        // R14: the custom patterns were compiled with `new Regex(..., RegexOptions.Compiled)`
+        // INSIDE the per-line × per-pattern loop, so every scanned line paid for JIT
+        // compilation of every custom rule. On a security hot path that is both a
+        // throughput problem and needless work: RegexOptions.Compiled only pays off for a
+        // long-lived instance, and the 50 ms match timeout already bounds backtracking.
+        // Compile once per Scan and reuse. The caller is still expected to Regex.Escape
+        // literals (protection against backtracking DoS is unchanged).
+        var customRules = BuildCustomRules(opts.CustomBlockedPatterns);
+
         for (var i = 0; i < lines.Length; i++)
         {
             if (IsLineExplicitlyAllowed(lines[i], opts.CustomAllowedNamespaces))
@@ -78,25 +88,38 @@ public static class DangerousCodeScanner
                 }
             }
 
-            if (opts.CustomBlockedPatterns is { Length: > 0 })
+            foreach (var rule in customRules)
             {
-                foreach (var raw in opts.CustomBlockedPatterns)
+                if (rule.Regex.Match(lines[i]).Success)
                 {
-                    // Caller must Regex.Escape literal strings (защита от backtracking DoS).
-                    var custom = new Regex(
-                        raw,
-                        RegexOptions.Compiled | RegexOptions.IgnoreCase,
-                        TimeSpan.FromMilliseconds(50));
-                    var m = custom.Match(lines[i]);
-                    if (m.Success)
-                    {
-                        return ScanResult.Deny($"custom rule `{raw}` matched at line {i + 1}", i + 1);
-                    }
+                    return ScanResult.Deny($"custom rule `{rule.Source}` matched at line {i + 1}", i + 1);
                 }
             }
         }
 
         return ScanResult.Allow;
+    }
+
+    /// <summary>R14: materialise each custom pattern once per scan instead of once per line.</summary>
+    private static List<(Regex Regex, string Source)> BuildCustomRules(string[]? customBlockedPatterns)
+    {
+        if (customBlockedPatterns is not { Length: > 0 })
+        {
+            return [];
+        }
+
+        var rules = new List<(Regex, string)>(customBlockedPatterns.Length);
+        foreach (var raw in customBlockedPatterns)
+        {
+            // The timeout is the real defence against a pathological caller-supplied pattern;
+            // keeping it per-instance is what actually bounds the scan.
+            rules.Add((new Regex(
+                raw,
+                RegexOptions.IgnoreCase,
+                TimeSpan.FromMilliseconds(50)), raw));
+        }
+
+        return rules;
     }
 
     private static bool IsLineExplicitlyAllowed(string line, string[]? allowed)

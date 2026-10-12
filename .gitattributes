@@ -1,0 +1,11 @@
+# The `openapi` CI job regenerates openapi.json and fails on any diff, including
+# line-ending-only changes. `core.autocrlf` is a per-machine Git setting, so without
+# pinning this the job's result depends on whichever contributor pushed — a checkout
+# with autocrlf=false produces CRLF, a Linux runner produces LF, and the job fails on
+# content that is byte-identical apart from newlines.
+#
+# Both files below are generated artefacts that are committed and diffed, so their line
+# endings are pinned rather than left to autocrlf.
+
+src/agent/Hercules.WebApi/openapi.json            text eol=lf
+src/hercules-studio/renderer/src/sdk/openapi.d.ts text eol=lf

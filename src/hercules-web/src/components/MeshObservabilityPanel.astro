@@ -1,0 +1,406 @@
+---
+// Mesh Observability Panel (Phase 7 task_093).
+// Три секции: counters-grid (routing / retry / circuit / delegation / backend-health),
+// recent traces (expandable details), recent logs (level-filtered table).
+// Auto-refresh каждые 5s — это live-диагностика для оператора.
+---
+
+<div class="flex flex-col gap-5" id="mesh-observability-panel">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">Mesh Observability</h2>
+      <p class="text-xs text-gray-500">
+        Сырые counters, последние traces и logs из mesh-observability.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="mo-updated" class="text-xs text-gray-600"></span>
+      <span id="mo-window" class="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-gray-400"></span>
+      <label class="flex items-center gap-1 text-[11px] text-gray-400">
+        <input id="mo-autorefresh" type="checkbox" class="rounded border-white/20 bg-[#0a0a0b]" />
+        авто (5s)
+      </label>
+      <button id="mo-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- Error banner -->
+  <div id="mo-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+
+  <!-- Counters grid -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-baseline justify-between">
+      <h3 class="text-sm font-medium text-gray-300">Mesh counters (since start)</h3>
+      <span id="mo-counts-enabled" class="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-gray-400">—</span>
+    </div>
+    <div id="mo-counters" class="grid gap-2 sm:grid-cols-3 lg:grid-cols-5"></div>
+
+    <!-- byCapability / byPeer breakdown -->
+    <div class="mt-4 grid gap-3 lg:grid-cols-2">
+      <div class="rounded border border-white/5 bg-[#0a0a0b] p-3">
+        <div class="mb-2 text-[10px] uppercase tracking-wide text-gray-500">routing_decision — by capability</div>
+        <div id="mo-bycap" class="flex flex-col gap-1 text-[11px] text-gray-300"></div>
+      </div>
+      <div class="rounded border border-white/5 bg-[#0a0a0b] p-3">
+        <div class="mb-2 text-[10px] uppercase tracking-wide text-gray-500">delegation — by peer</div>
+        <div id="mo-bypeer" class="flex flex-col gap-1 text-[11px] text-gray-300"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recent traces -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-baseline justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Recent traces
+        <span id="mo-traces-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+      </h3>
+    </div>
+    <div id="mo-traces-empty" class="hidden py-4 text-center text-xs text-gray-500">
+      Нет завершённых traces.
+    </div>
+    <div id="mo-traces" class="flex flex-col gap-1"></div>
+  </section>
+
+  <!-- Recent logs -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+      <h3 class="text-sm font-medium text-gray-300">
+        Recent logs
+        <span id="mo-logs-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+      </h3>
+      <div class="flex items-center gap-2">
+        <label class="text-[11px] text-gray-400" for="mo-level">min level</label>
+        <select id="mo-level"
+          class="rounded border border-white/10 bg-[#0a0a0b] px-2 py-1 text-[11px] text-gray-200">
+          <option value="">all</option>
+          <option value="info">Info</option>
+          <option value="warning">Warning</option>
+          <option value="error">Error</option>
+          <option value="critical">Critical</option>
+        </select>
+        <select id="mo-logl"
+          class="rounded border border-white/10 bg-[#0a0a0b] px-2 py-1 text-[11px] text-gray-200">
+          <option value="50">50</option>
+          <option value="100" selected>100</option>
+          <option value="200">200</option>
+        </select>
+      </div>
+    </div>
+    <div id="mo-logs-empty" class="hidden py-4 text-center text-xs text-gray-500">
+      Нет log-entries.
+    </div>
+    <div id="mo-logs" class="flex flex-col gap-1"></div>
+  </section>
+</div>
+
+<script>
+  import {
+    api,
+    type MeshObservabilityStatusDto,
+    type TraceSummaryDto,
+    type LogEntryDto,
+  } from "../lib/api";
+
+  const errBanner = document.getElementById("mo-error")!;
+  const updatedEl = document.getElementById("mo-updated")!;
+  const windowEl = document.getElementById("mo-window")!;
+  const refreshBtn = document.getElementById("mo-refresh")!;
+  const autorefreshChk = document.getElementById("mo-autorefresh") as HTMLInputElement;
+
+  const countsEnabled = document.getElementById("mo-counts-enabled")!;
+  const countersEl = document.getElementById("mo-counters")!;
+  const byCapEl = document.getElementById("mo-bycap")!;
+  const byPeerEl = document.getElementById("mo-bypeer")!;
+
+  const tracesCountEl = document.getElementById("mo-traces-count")!;
+  const tracesEmpty = document.getElementById("mo-traces-empty")!;
+  const tracesEl = document.getElementById("mo-traces")!;
+
+  const logsCountEl = document.getElementById("mo-logs-count")!;
+  const logsEmpty = document.getElementById("mo-logs-empty")!;
+  const logsEl = document.getElementById("mo-logs")!;
+  const levelSel = document.getElementById("mo-level") as HTMLSelectElement;
+  const logLimitSel = document.getElementById("mo-logl") as HTMLSelectElement;
+
+  let lastStatus: MeshObservabilityStatusDto | null = null;
+  let lastTraces: TraceSummaryDto[] = [];
+  let lastLogs: LogEntryDto[] = [];
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = message;
+    errBanner.classList.remove("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+
+  function formatTimestamp(iso: string): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleString();
+  }
+
+  function formatDuration(ms: number): string {
+    if (!Number.isFinite(ms) || ms < 0) return "—";
+    if (ms < 1000) return `${ms.toFixed(0)} ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(2)} s`;
+    return `${(ms / 60_000).toFixed(1)} m`;
+  }
+
+  function shortId(s: string, head = 6, tail = 4): string {
+    if (!s) return "—";
+    if (s.length <= head + tail + 1) return s;
+    return `${s.slice(0, head)}…${s.slice(-tail)}`;
+  }
+
+  function counterCard(label: string, value: number, accent: "violet" | "sky" | "amber" | "emerald" | "rose"): string {
+    const palette: Record<string, string> = {
+      violet: "border-violet-500/30 bg-violet-500/10 text-violet-300",
+      sky: "border-sky-500/30 bg-sky-500/10 text-sky-300",
+      amber: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      rose: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+    };
+    return `
+      <div class="rounded-lg border border-white/10 bg-[#0a0a0b] p-3">
+        <div class="text-[10px] uppercase tracking-wide text-gray-500">${escapeHtml(label)}</div>
+        <div class="mt-1 text-xl font-semibold ${palette[accent]}">${value.toLocaleString()}</div>
+      </div>`;
+  }
+
+  function renderCounters(): void {
+    if (!lastStatus) {
+      countsEnabled.textContent = "—";
+      countsEnabled.className = "rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-gray-400";
+      countersEl.innerHTML = `<div class="col-span-5 text-xs text-gray-500">Нет данных.</div>`;
+      byCapEl.innerHTML = `<div class="text-xs text-gray-500">—</div>`;
+      byPeerEl.innerHTML = `<div class="text-xs text-gray-500">—</div>`;
+      return;
+    }
+    const c = lastStatus.counters;
+    countsEnabled.textContent = lastStatus.enabled ? "enabled" : "disabled";
+    countsEnabled.className = lastStatus.enabled
+      ? "rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300"
+      : "rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-gray-400";
+
+    countersEl.innerHTML = [
+      counterCard("routing_decision", c.routingDecision, "violet"),
+      counterCard("retry_attempt", c.retryAttempt, "sky"),
+      counterCard("circuit_breaker_state_change", c.circuitBreakerStateChange, "amber"),
+      counterCard("delegation", c.delegation, "emerald"),
+      counterCard("mesh_backend_health", c.meshBackendHealth, "rose"),
+    ].join("");
+
+    byCapEl.innerHTML = renderKv(c.byCapability, "нет данных о capability");
+    byPeerEl.innerHTML = renderKv(c.byPeer, "нет данных о peer-агентах");
+  }
+
+  function renderKv(map: Record<string, number>, emptyMsg: string): string {
+    const entries = Object.entries(map ?? {});
+    if (entries.length === 0) {
+      return `<div class="text-xs text-gray-500">${escapeHtml(emptyMsg)}</div>`;
+    }
+    entries.sort((a, b) => b[1] - a[1]);
+    const max = Math.max(1, entries[0][1]);
+    return entries
+      .map(([k, v]) => {
+        const pct = Math.round((v / max) * 100);
+        return `
+          <div class="flex items-center gap-2">
+            <span class="mono w-32 shrink-0 truncate text-gray-200" title="${escapeHtml(k)}">${escapeHtml(k)}</span>
+            <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+              <div class="h-full rounded-full bg-violet-500/40" style="width: ${pct}%"></div>
+            </div>
+            <span class="w-10 text-right text-[11px] text-gray-300">${v}</span>
+          </div>`;
+      })
+      .join("");
+  }
+
+  function renderTraces(): void {
+    tracesCountEl.textContent = `(${lastTraces.length})`;
+    if (lastTraces.length === 0) {
+      tracesEmpty.classList.remove("hidden");
+      tracesEl.innerHTML = "";
+      return;
+    }
+    tracesEmpty.classList.add("hidden");
+    tracesEl.innerHTML = lastTraces
+      .map((t) => {
+        const statusCls =
+          t.status === "Error"
+            ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+            : t.status === "Ok"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+              : "border-white/10 bg-white/5 text-gray-300";
+        const safeRoot = escapeHtml(t.rootName || "(unknown)");
+        const safeId = escapeHtml(t.traceId);
+        return `
+          <details class="rounded-lg border border-white/10 bg-[#0a0a0b] p-2">
+            <summary class="flex cursor-pointer flex-wrap items-center gap-2 text-[12px]">
+              <span class="rounded border px-2 py-0.5 text-[10px] ${statusCls}">${escapeHtml(t.status)}</span>
+              <span class="mono truncate text-white" title="${safeId}">${shortId(t.traceId, 8, 6)}</span>
+              <span class="truncate text-gray-300" title="${safeRoot}">${safeRoot}</span>
+              <span class="ml-auto flex items-center gap-2 text-[11px] text-gray-500">
+                <span>${t.spanCount} span${t.spanCount === 1 ? "" : "s"}</span>
+                <span>·</span>
+                <span>${formatDuration(t.durationMs)}</span>
+                <span>·</span>
+                <span title="${safeId} startedAt">${formatTimestamp(t.startedAt)}</span>
+              </span>
+            </summary>
+            <div class="mt-2 grid grid-cols-1 gap-1 border-t border-white/5 pt-2 text-[11px] text-gray-400 sm:grid-cols-2">
+              <div><span class="text-gray-500">trace_id:</span> <span class="mono text-gray-200">${safeId}</span></div>
+              <div><span class="text-gray-500">root:</span> <span class="mono text-gray-200">${safeRoot}</span></div>
+              <div><span class="text-gray-500">duration:</span> ${formatDuration(t.durationMs)}</div>
+              <div><span class="text-gray-500">span_count:</span> ${t.spanCount}</div>
+            </div>
+          </details>`;
+      })
+      .join("");
+  }
+
+  function levelBadgeCls(level: string): string {
+    switch ((level || "").toLowerCase()) {
+      case "trace":
+      case "debug":
+        return "border-white/10 bg-white/5 text-gray-400";
+      case "info":
+      case "information":
+        return "border-sky-500/30 bg-sky-500/10 text-sky-300";
+      case "warning":
+      case "warn":
+        return "border-amber-500/30 bg-amber-500/10 text-amber-300";
+      case "error":
+        return "border-rose-500/30 bg-rose-500/10 text-rose-300";
+      case "critical":
+      case "fatal":
+        return "border-rose-500/40 bg-rose-500/20 text-rose-200";
+      default:
+        return "border-white/10 bg-white/5 text-gray-400";
+    }
+  }
+
+  function renderLogs(): void {
+    logsCountEl.textContent = `(${lastLogs.length})`;
+    if (lastLogs.length === 0) {
+      logsEmpty.classList.remove("hidden");
+      logsEl.innerHTML = "";
+      return;
+    }
+    logsEmpty.classList.add("hidden");
+    logsEl.innerHTML = lastLogs
+      .map((l) => {
+        const fields = Object.entries(l.structuredFields ?? {});
+        const fieldsHtml =
+          fields.length > 0
+            ? `<div class="mt-1 grid grid-cols-2 gap-x-3 text-[10px] text-gray-500 sm:grid-cols-3">${fields
+                .map(
+                  ([k, v]) =>
+                    `<span><span class="text-gray-600">${escapeHtml(k)}:</span> <span class="text-gray-300">${escapeHtml(String(v ?? ""))}</span></span>`,
+                )
+                .join("")}</div>`
+            : "";
+        const traceLink = l.traceId
+          ? `<span class="mono text-[10px] text-gray-500" title="${escapeHtml(l.traceId)}">trace: ${shortId(l.traceId, 8, 6)}</span>`
+          : "";
+        const reqLink = l.requestId
+          ? `<span class="mono text-[10px] text-gray-500" title="${escapeHtml(l.requestId)}">req: ${shortId(l.requestId, 6, 4)}</span>`
+          : "";
+        return `
+          <details class="rounded border border-white/10 bg-[#0a0a0b] p-2">
+            <summary class="flex cursor-pointer flex-wrap items-center gap-2 text-[11px]">
+              <span class="rounded border px-2 py-0.5 text-[10px] ${levelBadgeCls(l.level)}">${escapeHtml(l.level)}</span>
+              <span class="mono truncate text-gray-400" title="${escapeHtml(l.source)}">${escapeHtml(l.source)}</span>
+              <span class="truncate text-gray-200" title="${escapeHtml(l.message)}">${escapeHtml(l.message)}</span>
+              <span class="ml-auto flex items-center gap-2 text-[10px] text-gray-500">
+                ${traceLink}${reqLink}
+                <span title="${escapeHtml(l.timestamp)}">${formatTimestamp(l.timestamp)}</span>
+              </span>
+            </summary>
+            <div class="mt-1 border-t border-white/5 pt-1 text-[11px] text-gray-300">${escapeHtml(l.message)}</div>
+            ${fieldsHtml}
+          </details>`;
+      })
+      .join("");
+  }
+
+  function renderWindow(): void {
+    if (!lastStatus) {
+      windowEl.textContent = "";
+      return;
+    }
+    const from = new Date(lastStatus.counters.from);
+    const to = new Date(lastStatus.counters.to);
+    const fmt = (d: Date) => d.toLocaleTimeString();
+    windowEl.textContent = `с ${fmt(from)} по ${fmt(to)}`;
+  }
+
+  function render(): void {
+    renderCounters();
+    renderTraces();
+    renderLogs();
+    renderWindow();
+  }
+
+  async function loadAll(): Promise<void> {
+    clearError();
+    try {
+      const [status, traces, logs] = await Promise.all([
+        api.getMeshObservabilityStatus(),
+        api.getRecentTraces(50),
+        api.getRecentLogs(parseInt(logLimitSel.value, 10) || 100, levelSel.value || undefined),
+      ]);
+      lastStatus = status;
+      lastTraces = traces.traces ?? [];
+      lastLogs = logs.logs ?? [];
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+      render();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Mesh observability load failed: ${msg}`);
+      lastStatus = null;
+      lastTraces = [];
+      lastLogs = [];
+      render();
+    }
+  }
+
+  // ---- Wiring ----
+  refreshBtn.addEventListener("click", () => { void loadAll(); });
+  levelSel.addEventListener("change", () => { void loadAll(); });
+  logLimitSel.addEventListener("change", () => { void loadAll(); });
+
+  // 5s auto-refresh, opt-in via checkbox.
+  let autoTimer: ReturnType<typeof setInterval> | null = null;
+  function syncAutoRefresh(): void {
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+    }
+    if (autorefreshChk.checked) {
+      autoTimer = setInterval(() => { void loadAll(); }, 5_000);
+    }
+  }
+  autorefreshChk.addEventListener("change", syncAutoRefresh);
+
+  // Initial load.
+  void loadAll();
+</script>

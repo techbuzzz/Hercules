@@ -44,7 +44,7 @@ public class MeshRouterTests : IDisposable
          "hercules-main",
          "Main",
          "Main agent",
-         "http://localhost:5000",
+         "http://localhost:8421",
          _tempDir,
          () => new List<ManifestCapability>());
 

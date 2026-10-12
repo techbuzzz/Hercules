@@ -241,6 +241,15 @@ public sealed class DelegationBoundaryService : IDelegationBoundaryService
         _logger.LogDebug(
             "[DelegationBoundary] Recorded hop completion: Agent={AgentId}, RootRequest={RootRequestId}, Hop={Hop}, ToolCalls={ToolCalls}, Cost={Cost}, WallClock={WallClock}ms",
             agentId, rootRequestId, ctx.HopCount, actualToolCalls, actualCostUsd, actualWallClockMs);
+
+        // [task_087] Opportunistic cleanup: keeps the dictionary bounded without
+        // a separate background timer. Cheap O(N) sweep, but only on a hop
+        // completion — not on every check. If chains become very chatty we can
+        // swap this for a hosted BackgroundService later.
+        if (_chainContexts.Count > 64)
+        {
+            CleanupExpiredChainContexts();
+        }
     }
 
     /// <inheritdoc />
@@ -301,6 +310,45 @@ public sealed class DelegationBoundaryService : IDelegationBoundaryService
             ChainStartUtc = DateTimeOffset.UtcNow,
             UpdatedUtc = DateTimeOffset.UtcNow
         });
+    }
+
+    /// <summary>
+    ///     [task_087] Evict chain contexts whose <c>UpdatedUtc</c> is older than
+    ///     <see cref="DelegationBoundaryConfig.ChainContextTtlSec"/>. Cheap O(N)
+    ///     sweep over the dictionary; intended to be called opportunistically
+    ///     (e.g. once per N accesses) or explicitly from a host shutdown hook.
+    ///     Returns the number of evicted entries.
+    /// </summary>
+    public int CleanupExpiredChainContexts()
+    {
+        if (_config.ChainContextTtlSec <= 0)
+        {
+            return 0; // TTL disabled — keep everything.
+        }
+
+        var cutoff = DateTimeOffset.UtcNow - TimeSpan.FromSeconds(_config.ChainContextTtlSec);
+        var stale = _chainContexts
+            .Where(kvp => kvp.Value.UpdatedUtc < cutoff)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        var evicted = 0;
+        foreach (var key in stale)
+        {
+            if (_chainContexts.TryRemove(key, out _))
+            {
+                evicted++;
+            }
+        }
+
+        if (evicted > 0)
+        {
+            _logger.LogDebug(
+                "[DelegationBoundary] Evicted {Count} expired chain context(s) older than {TtlSec}s",
+                evicted, _config.ChainContextTtlSec);
+        }
+
+        return evicted;
     }
 
     private static bool IsHardCap(string enforcementMode)

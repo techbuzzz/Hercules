@@ -1,5 +1,6 @@
 using Hercules.Agent;
 using Hercules.Skills;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Hercules.WebApi.Controllers;
 
@@ -21,11 +22,11 @@ public static class SkillManifestController
 
             var manifest = ToManifest(skill);
             return Results.Ok(manifest);
-        }).WithName("GetSkillManifest");
+        }).WithName("GetSkillManifest").WithTags("SkillManifest");
 
         // POST /api/skills/{id}/manifest/validate — валидировать совместимость манифеста
         app.MapPost("/api/skills/{id}/manifest/validate", (string id, SkillManager manager,
-            SkillManifestValidator validator, IReadOnlyList<string>? knownTools) =>
+            SkillManifestValidator validator, [FromBody] List<string>? knownTools) =>
         {
             var skill = manager.Get(id);
             if (skill is null)
@@ -55,7 +56,7 @@ public static class SkillManifestController
                 isCompatible = result.IsCompatible,
                 validatedAt = DateTime.UtcNow.ToString("o")
             });
-        }).WithName("ValidateSkillManifest");
+        }).WithName("ValidateSkillManifest").WithTags("SkillManifest");
 
         // POST /api/skills/manifest/validate-all — валидировать все навыки
         app.MapPost("/api/skills/manifest/validate-all", (SkillManager manager,
@@ -84,7 +85,7 @@ public static class SkillManifestController
                 validatedAt = DateTime.UtcNow.ToString("o"),
                 results
             });
-        }).WithName("ValidateAllSkillManifests");
+        }).WithName("ValidateAllSkillManifests").WithTags("SkillManifest");
     }
 
     private static SkillManifest ToManifest(Storage.Skill skill)

@@ -21,6 +21,12 @@ public sealed class ResilientLLMClient : ILLMClient
     private volatile LlmConfig _cfg;
     private volatile List<(string Name, Lazy<ILLMClient> Client)> _mainChain;
 
+    // [task_085] Sampled-warning counters. Logged 1-in-N (default 10).
+    // The corresponding OtelMetrics counter is incremented on every occurrence.
+    private long _retryLogCount;
+    private long _fallbackLogCount;
+    private int _logSampleRate = 10;
+
     public ResilientLLMClient(
         LlmConfig cfg,
         ILLMClientFactory factory,
@@ -39,7 +45,12 @@ public sealed class ResilientLLMClient : ILLMClient
         RebuildChain(cfg);
     }
 
-    /// <summary>Имя последнего успешно ответившего провайдера.</summary>
+    /// <summary>
+    ///     Имя **настроенного** primary-провайдера (set только в ctor / Reload).
+    ///     Не отражает фактически ответивший per-call провайдер — для этого используйте
+    ///     <see cref="LlmResponse.Provider"/>, который возвращается из <c>CompleteAsync</c>.
+    ///     Это устраняет race на shared instance state при concurrent запросах (task_076).
+    /// </summary>
     public string ProviderName { get; private set; }
 
     public string ModelName { get; private set; }
@@ -105,6 +116,15 @@ public sealed class ResilientLLMClient : ILLMClient
         RebuildChain(cfg);
     }
 
+    /// <summary>
+    ///     [task_085] Update sampled-log rate for retry/fallback warnings.
+    ///     Set to 1 to log every event, 10 for one-in-ten, 0 to disable.
+    /// </summary>
+    public void SetLogSampleRate(int sampleRate)
+    {
+        _logSampleRate = sampleRate;
+    }
+
     private void RebuildChain(LlmConfig cfg)
     {
         var order = new List<string> { cfg.Provider };
@@ -148,13 +168,16 @@ public sealed class ResilientLLMClient : ILLMClient
                     LlmResponse resp = await client.CompleteAsync(messages, ct);
                     llmSw.Stop();
 
-                    ProviderName = client.ProviderName;
-                    ModelName = client.ModelName;
+                    // [task_076] Per-call: update OTel tags with actual response provider/model.
+                    // Do NOT mutate this.ProviderName/ModelName — those represent the configured
+                    // primary and are shared across concurrent calls. Per-call info lives in LlmResponse.
+                    _otel?.SetTag(llmActivity, "llm.provider", resp.Provider);
+                    _otel?.SetTag(llmActivity, "llm.model", resp.Model);
 
-                    // [task_013] Record metrics
+                    // [task_013] Record metrics — keyed by actual response provider/model.
                     OtelMetrics.LlmCallCounter.Add(1,
-                        new KeyValuePair<string, object?>("provider", client.ProviderName),
-                        new KeyValuePair<string, object?>("model", client.ModelName));
+                        new KeyValuePair<string, object?>("provider", resp.Provider),
+                        new KeyValuePair<string, object?>("model", resp.Model));
                     OtelMetrics.LlmCallDurationHistogram.Record(llmSw.ElapsedMilliseconds);
                     OtelMetrics.LlmInputTokensHistogram.Record(resp.InputTokens);
                     OtelMetrics.LlmOutputTokensHistogram.Record(resp.OutputTokens);
@@ -169,13 +192,20 @@ public sealed class ResilientLLMClient : ILLMClient
                 catch (Exception ex)
                 {
                     last = ex;
+                    // [task_085] Always increment the metric, only sampled log.
+                    OtelMetrics.LlmRetryCounter.Add(1,
+                        new KeyValuePair<string, object?>("provider", name),
+                        new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
                     var canRetry = attempt < MaxRetryAttempts - 1 && IsRetryable(ex);
                     if (canRetry)
                     {
                         var delay = ComputeBackoff(attempt);
-                        _logger.LogWarning(
-                            "Provider '{Name}' attempt {Attempt}/{Max} failed ({Error}). Retrying in {Delay}ms...",
-                            name, attempt + 1, MaxRetryAttempts, ex.Message, delay);
+                        if (OtelMetrics.ShouldLogSampledWarning(ref _retryLogCount, _logSampleRate))
+                        {
+                            _logger.LogWarning(
+                                "Provider '{Name}' attempt {Attempt}/{Max} failed ({Error}). Retrying in {Delay}ms...",
+                                name, attempt + 1, MaxRetryAttempts, ex.Message, delay);
+                        }
                         try
                         {
                             await Task.Delay(delay, ct);
@@ -187,7 +217,10 @@ public sealed class ResilientLLMClient : ILLMClient
                     }
                     else
                     {
-                        _logger.LogWarning("Provider '{Name}' unavailable: {Message}. Trying next...", name, ex.Message);
+                        if (OtelMetrics.ShouldLogSampledWarning(ref _fallbackLogCount, _logSampleRate))
+                        {
+                            _logger.LogWarning("Provider '{Name}' unavailable: {Message}. Trying next...", name, ex.Message);
+                        }
                         break;
                     }
                 }
@@ -195,7 +228,10 @@ public sealed class ResilientLLMClient : ILLMClient
 
             if (last is not null)
             {
-                _logger.LogWarning("Provider '{Name}' exhausted retries. Trying next...", name);
+                if (OtelMetrics.ShouldLogSampledWarning(ref _fallbackLogCount, _logSampleRate))
+                {
+                    _logger.LogWarning("Provider '{Name}' exhausted retries. Trying next...", name);
+                }
             }
         }
 
@@ -207,9 +243,8 @@ public sealed class ResilientLLMClient : ILLMClient
     {
         try
         {
+            // [task_076] resp already contains the correct provider/model — return as-is.
             LlmResponse resp = await client.CompleteAsync(messages, ct);
-            ProviderName = client.ProviderName;
-            ModelName = client.ModelName;
             return resp;
         }
         catch (OperationCanceledException)
@@ -218,8 +253,14 @@ public sealed class ResilientLLMClient : ILLMClient
         }
         catch (Exception ex)
         {
-            // Fallback: если роль-клиент упал — пробуем main-цепочку
-            _logger.LogWarning("Role '{Role}' ({Provider}) unavailable: {Message}. Falling back to main.", role, client.ProviderName, ex.Message);
+            // [task_085] Sampled warning for role-fallback path.
+            OtelMetrics.LlmRetryCounter.Add(1,
+                new KeyValuePair<string, object?>("role", role),
+                new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
+            if (OtelMetrics.ShouldLogSampledWarning(ref _fallbackLogCount, _logSampleRate))
+            {
+                _logger.LogWarning("Role '{Role}' ({Provider}) unavailable: {Message}. Falling back to main.", role, client.ProviderName, ex.Message);
+            }
             return await CompleteMainAsync(messages, ct);
         }
     }
@@ -232,12 +273,14 @@ public sealed class ResilientLLMClient : ILLMClient
         {
             IAsyncEnumerator<string>? enumerator = null;
             var started = false;
+            ILLMClient? usedClient = null;
             try
             {
-                enumerator = lazy.Value.StreamAsync(messages, ct).GetAsyncEnumerator(ct);
+                usedClient = lazy.Value;
+                enumerator = usedClient.StreamAsync(messages, ct).GetAsyncEnumerator(ct);
                 started = await enumerator.MoveNextAsync();
-                ProviderName = lazy.Value.ProviderName;
-                ModelName = lazy.Value.ModelName;
+                // [task_076] No shared state mutation. Provider/model go to OTel/logger locally.
+                _logger.LogInformation("Stream started via provider '{Provider}' (model '{Model}')", usedClient.ProviderName, usedClient.ModelName);
             }
             catch (OperationCanceledException)
             {
@@ -245,13 +288,30 @@ public sealed class ResilientLLMClient : ILLMClient
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Provider '{Name}' unavailable (stream): {Message}. Trying next...", name, ex.Message);
+                // [task_085] Sampled warning for stream-start failures.
+                OtelMetrics.LlmRetryCounter.Add(1,
+                    new KeyValuePair<string, object?>("provider", name),
+                    new KeyValuePair<string, object?>("mode", "stream"),
+                    new KeyValuePair<string, object?>("error_type", ex.GetType().Name));
+                if (OtelMetrics.ShouldLogSampledWarning(ref _fallbackLogCount, _logSampleRate))
+                {
+                    _logger.LogWarning("Provider '{Name}' unavailable (stream): {Message}. Trying next...", name, ex.Message);
+                }
                 if (enumerator is not null)
                 {
                     await enumerator.DisposeAsync();
                 }
 
                 continue;
+            }
+
+            // [task_076] Emit per-stream OTel Activity with provider/model tags so observers
+            // (traces, audit) can attribute the stream to the actual client, not the wrapper.
+            using Activity? streamActivity = _otel?.StartActivity($"LLM.Stream.{name}", ActivityKind.Client);
+            if (usedClient is not null)
+            {
+                _otel?.SetTag(streamActivity, "llm.provider", usedClient.ProviderName);
+                _otel?.SetTag(streamActivity, "llm.model", usedClient.ModelName);
             }
 
             try
@@ -267,6 +327,11 @@ public sealed class ResilientLLMClient : ILLMClient
             }
             finally
             {
+                if (streamActivity is not null)
+                {
+                    _otel?.StopActivity(streamActivity);
+                }
+
                 if (enumerator is not null)
                 {
                     await enumerator.DisposeAsync();
@@ -285,16 +350,31 @@ public sealed class ResilientLLMClient : ILLMClient
         IReadOnlyList<ChatTurn> messages,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
+        // [task_076] No shared state mutation. Provider/model go to OTel/logger locally.
+        _logger.LogInformation("Stream started via role '{Role}' provider '{Provider}' (model '{Model}')", role, client.ProviderName, client.ModelName);
+        using Activity? streamActivity = _otel?.StartActivity($"LLM.Stream.{client.ProviderName}", ActivityKind.Client);
+        _otel?.SetTag(streamActivity, "llm.provider", client.ProviderName);
+        _otel?.SetTag(streamActivity, "llm.model", client.ModelName);
+        _otel?.SetTag(streamActivity, "llm.role", role);
+
         await using IAsyncEnumerator<string> enumerator = client.StreamAsync(messages, ct).GetAsyncEnumerator(ct);
-        var started = await enumerator.MoveNextAsync();
-        ProviderName = client.ProviderName;
-        ModelName = client.ModelName;
-        if (started)
+        try
         {
-            yield return enumerator.Current;
-            while (await enumerator.MoveNextAsync())
+            var started = await enumerator.MoveNextAsync();
+            if (started)
             {
                 yield return enumerator.Current;
+                while (await enumerator.MoveNextAsync())
+                {
+                    yield return enumerator.Current;
+                }
+            }
+        }
+        finally
+        {
+            if (streamActivity is not null)
+            {
+                _otel?.StopActivity(streamActivity);
             }
         }
     }

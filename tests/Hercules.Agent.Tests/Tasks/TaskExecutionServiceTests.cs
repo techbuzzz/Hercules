@@ -32,7 +32,7 @@ public class TaskExecutionServiceTests : IDisposable
             CheckpointRetentionDays = 7
         };
         _loggerMock = new Mock<ILogger<TaskExecutionService>>();
-        _svc = new TaskExecutionService(_repo, _config, _loggerMock.Object);
+        _svc = new TaskExecutionService(_repo, _store, _config, _loggerMock.Object);
     }
 
     public void Dispose()
@@ -156,23 +156,125 @@ public class TaskExecutionServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateCheckpointAsync_ReturnsCheckpointId()
+    public async Task CreateCheckpointAsync_PersistsCheckpoint()
     {
         var id = await _svc.StartAsync(new CreateTaskRequest { Name = "checkpointable" });
 
-        var checkpointId = await _svc.CreateCheckpointAsync(id, 1, "{}");
+        var checkpointId = await _svc.CreateCheckpointAsync(id, 1, "{\"step\":1}");
 
         Assert.NotEmpty(checkpointId);
+
+        // task_108: the checkpoint must be retrievable from the store.
+        var loaded = await _svc.LoadCheckpointAsync(checkpointId);
+        Assert.NotNull(loaded);
+        Assert.Equal(1, loaded!.StepNumber);
+        Assert.Equal("{\"step\":1}", loaded.StateSnapshot);
+        Assert.Equal(id.ToString(), loaded.TaskId.ToString());
     }
 
     [Fact]
-    public async Task ListCheckpointsAsync_ReturnsEmptyList_Stub()
+    public async Task ListCheckpointsAsync_ReturnsPersistedCheckpoints()
     {
         var id = await _svc.StartAsync(new CreateTaskRequest { Name = "no-checkpoints" });
 
+        var first = await _svc.CreateCheckpointAsync(id, 1, "{\"step\":1}");
+        var second = await _svc.CreateCheckpointAsync(id, 2, "{\"step\":2}");
+
         var checkpoints = await _svc.ListCheckpointsAsync(id);
 
-        Assert.Empty(checkpoints); // stub returns empty list
+        Assert.Equal(2, checkpoints.Count);
+        Assert.Equal(first, checkpoints[0].Id);
+        Assert.Equal(second, checkpoints[1].Id);
+        Assert.Equal(1, checkpoints[0].StepNumber);
+        Assert.Equal(2, checkpoints[1].StepNumber);
+    }
+
+    [Fact]
+    public async Task LoadCheckpointAsync_Nonexistent_ReturnsNull()
+    {
+        var result = await _svc.LoadCheckpointAsync("does-not-exist");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task IncrementStepAsync_Persists()
+    {
+        var id = await _svc.StartAsync(new CreateTaskRequest { Name = "stepper" });
+
+        await _svc.IncrementStepAsync(id);
+        await _svc.IncrementStepAsync(id);
+        await _svc.IncrementStepAsync(id);
+
+        var task = await _svc.GetStatusAsync(id);
+        Assert.Equal(3, task!.CurrentStep);
+        Assert.Equal(3, task.AttemptCount);
+    }
+
+    [Fact]
+    public async Task ResumeAsync_LoadsCheckpointSnapshot()
+    {
+        var id = await _svc.StartAsync(new CreateTaskRequest { Name = "snapshot-resume" });
+        var ckptId = await _svc.CreateCheckpointAsync(id, 7, "{\"phase\":\"midway\"}");
+        await _svc.PauseAsync(id);
+
+        await _svc.ResumeAsync(id, ckptId);
+
+        var task = await _svc.GetStatusAsync(id);
+        Assert.Equal(DurableTaskStatus.Running, task!.Status);
+    }
+
+    [Fact]
+    public async Task ResumeAsync_FallsBackToLatestCheckpoint_WhenIdMissing()
+    {
+        var id = await _svc.StartAsync(new CreateTaskRequest { Name = "fallback-resume" });
+        await _svc.CreateCheckpointAsync(id, 3, "{\"phase\":\"a\"}");
+        await _svc.CreateCheckpointAsync(id, 5, "{\"phase\":\"b\"}");
+        await _svc.PauseAsync(id);
+
+        await _svc.ResumeAsync(id, "ghost-checkpoint");
+
+        var task = await _svc.GetStatusAsync(id);
+        Assert.Equal(DurableTaskStatus.Running, task!.Status);
+    }
+
+    [Fact]
+    public async Task RecoverIncompleteTasksAsync_ResumesRunningAndPaused()
+    {
+        var runningId = await _svc.StartAsync(new CreateTaskRequest { Name = "running-recover" });
+        var pausedId = await _svc.StartAsync(new CreateTaskRequest { Name = "paused-recover" });
+        var completedId = await _svc.StartAsync(new CreateTaskRequest { Name = "completed-recover" });
+        await _svc.CreateCheckpointAsync(pausedId, 2, "{\"step\":2}");
+
+        // Mark the completed one via the internal helper.
+        var completeMethod = typeof(TaskExecutionService)
+            .GetMethod("CompleteTaskAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        await (Task)completeMethod!.Invoke(_svc, new object[] { completedId, "ok", CancellationToken.None })!;
+        await _svc.PauseAsync(pausedId);
+
+        var reactivated = await _svc.RecoverIncompleteTasksAsync();
+
+        Assert.Equal(2, reactivated);
+        var running = await _svc.GetStatusAsync(runningId);
+        var paused = await _svc.GetStatusAsync(pausedId);
+        var completed = await _svc.GetStatusAsync(completedId);
+        Assert.Equal(DurableTaskStatus.Running, running!.Status);
+        Assert.Equal(DurableTaskStatus.Running, paused!.Status);
+        Assert.Equal(DurableTaskStatus.Completed, completed!.Status);
+    }
+
+    [Fact]
+    public async Task RecoverIncompleteTasksAsync_SkipsFailedTasks()
+    {
+        var failedId = await _svc.StartAsync(new CreateTaskRequest { Name = "failed-recover" });
+        var task = await _svc.GetStatusAsync(failedId);
+        var failed = task! with { Status = DurableTaskStatus.Failed };
+        await _repo.UpdateAsync(failed);
+
+        var reactivated = await _svc.RecoverIncompleteTasksAsync();
+
+        Assert.Equal(0, reactivated);
+        var after = await _svc.GetStatusAsync(failedId);
+        Assert.Equal(DurableTaskStatus.Failed, after!.Status);
     }
 
     [Fact]

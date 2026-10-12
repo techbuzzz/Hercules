@@ -154,15 +154,17 @@ public sealed class EscalationService : IEscalationService
     }
 
     /// <inheritdoc />
-    public Task<int> BatchApproveAsync(IEnumerable<string> escalationIds, string? resolvedBy = null, CancellationToken ct = default)
+    public async Task<int> BatchApproveAsync(IEnumerable<string> escalationIds, string? resolvedBy = null, CancellationToken ct = default)
     {
+        // task_077: await instead of sync-over-async. The caller is now on a real
+        // async path so the thread-pool isn't pinned waiting on SQLite I/O.
         var count = 0;
         foreach (var id in escalationIds)
         {
-            if (ApproveAsync(id, resolvedBy ?? "operator", ct).GetAwaiter().GetResult())
+            if (await ApproveAsync(id, resolvedBy ?? "operator", ct).ConfigureAwait(false))
                 count++;
         }
-        return Task.FromResult(count);
+        return count;
     }
 
     /// <inheritdoc />

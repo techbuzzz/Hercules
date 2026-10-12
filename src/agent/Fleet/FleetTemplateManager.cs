@@ -37,7 +37,7 @@ public sealed class FleetTemplateManager : IFleetTemplateManager
         _storageConfig = storageConfig ?? throw new ArgumentNullException(nameof(storageConfig));
         _agentTemplateManager = agentTemplateManager ?? throw new ArgumentNullException(nameof(agentTemplateManager));
 
-        var fleetTemplatesSubdir = storageConfig.Phase2?.FleetTemplatesDir ?? "FleetTemplates";
+        var fleetTemplatesSubdir = storageConfig.Phase2?.FleetTemplatesDir ?? Hercules.BuiltIn.FleetTemplatesSubdir;
         DirectoryPath = Path.Combine(storageConfig.DataRoot, fleetTemplatesSubdir);
         Directory.CreateDirectory(DirectoryPath);
     }

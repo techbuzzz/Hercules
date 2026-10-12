@@ -6,8 +6,22 @@ using Xunit;
 
 namespace Hercules.Agent.Tests.Observability;
 
-public class OtelServiceTests
+/// <summary>
+///     R3b: each test runs under a scoped <see cref="OtelActivityListenerScope"/> so the
+///     enabled-path tests receive a non-null <see cref="Activity"/>. Without a registered
+///     <see cref="ActivityListener"/>, <c>ActivitySource.StartActivity</c> returns null and
+///     these five tests fail — they were asserting against a NoopActivity that does not
+///     exist in .NET (see the corrected note in OtelMetrics).
+/// </summary>
+[Collection(nameof(OpenTelemetryCollection))]
+public class OtelServiceTests : IDisposable
 {
+    private readonly OtelActivityListenerScope _listenerScope;
+
+    public OtelServiceTests() => _listenerScope = new OtelActivityListenerScope();
+
+    public void Dispose() => _listenerScope.Dispose();
+
     [Fact]
     public void IsEnabled_ReturnsTrue_WhenConfigEnabled()
     {
@@ -52,7 +66,13 @@ public class OtelServiceTests
         Assert.NotNull(parent);
         using var child = service.StartActivity("child.operation", parent!.Context);
         Assert.NotNull(child);
-        Assert.Equal(parent.Context.TraceId.ToString(), child!.ParentId ?? "");
+        // R3b: the child must inherit the trace and record the parent SPAN.
+        // ParentId is serialised in W3C hierarchical form ("00-{traceId}-{spanId}-{flags}"),
+        // so the previous assertion comparing it to parent.Context.TraceId could never match,
+        // and comparing it to the bare SpanId was format-dependent.
+        Assert.Equal(parent.TraceId, child!.TraceId);
+        Assert.Contains(parent.SpanId.ToString(), child.ParentId ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(parent.SpanId.ToString(), child.SpanId.ToString());
     }
 
     [Fact]

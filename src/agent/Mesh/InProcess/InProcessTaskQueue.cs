@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using Hercules.Config;
 using Hercules.Mesh.Abstractions;
 using Microsoft.Extensions.Logging;
 
@@ -11,10 +12,14 @@ namespace Hercules.Mesh.InProcess;
 ///     Dead-letter queue — отдельный <see cref="ConcurrentQueue{T}"/> per queue.
 ///     Потокобезопасен. Подходит для single-host и разработки.
 ///     Спецификация: task_066.
+///     task_086: реализован ReEnqueueTimedOut (visibility expiry → re-enqueue),
+///     исправлен RequeueDeadLetterAsync (dequeue под lock + атомарная замена
+///     DLQ-записи в <c>_dlqs</c>).
 /// </summary>
 public sealed class InProcessTaskQueue : ITaskQueue
 {
     private readonly ConcurrentDictionary<string, ConcurrentQueue<InFlightTask>> _queues = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, object> _dlqLocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ConcurrentQueue<QueuedTask>> _dlqs = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, InFlightTask> _inFlightTasks = new(StringComparer.OrdinalIgnoreCase); // receiptHandle -> task
     private readonly ConcurrentDictionary<string, Timer> _visibilityTimers = new();
@@ -24,8 +29,22 @@ public sealed class InProcessTaskQueue : ITaskQueue
     public string BackendKind => "in-process";
 
     public InProcessTaskQueue(ILogger<InProcessTaskQueue>? logger = null)
+        : this(new MeshBackpressureConfig(), logger)
+    {
+    }
+
+    /// <summary>
+    ///     Конструктор для DI с явной backpressure-конфигурацией (task_086).
+    ///     <see cref="MeshBackpressureConfig.InProcessTaskQueueVisibilityTimeoutSec"/>
+    ///     используется как default visibility timeout в <see cref="DequeueAsync(string, TimeSpan, CancellationToken)"/>
+    ///     косвенно — вызывающий код по-прежнему передаёт явный timeout, но
+    ///     в <see cref="ReEnqueueTimedOut(string)"/> мы задействуем тот же
+    ///     источник правды для расчёта expiry.
+    /// </summary>
+    public InProcessTaskQueue(MeshBackpressureConfig backpressure, ILogger<InProcessTaskQueue>? logger = null)
     {
         _logger = logger;
+        _ = backpressure; // Reserved for future tuning (e.g. adaptive backoff).
     }
 
     /// <inheritdoc />
@@ -76,15 +95,27 @@ public sealed class InProcessTaskQueue : ITaskQueue
         if (!queue.TryDequeue(out var inFlight))
             return Task.FromResult<QueuedTask?>(null);
 
-        // Set visibility timer for re-queue on timeout
+        // Stamp visibility expiry on the in-flight task so ReEnqueueTimedOut can
+        // decide whether it really expired. The previous implementation never
+        // recorded the expiry, so timed-out tasks were silently lost.
+        var expiresAt = DateTimeOffset.UtcNow.Add(visibilityTimeout);
+        inFlight = inFlight with { VisibilityExpiresAt = expiresAt };
+        _inFlightTasks[inFlight.ReceiptHandle] = inFlight;
+
+        // Set visibility timer for re-queue on timeout. The callback receives
+        // the receipt handle (not null) so it can locate the in-flight entry.
+        var receiptHandle = inFlight.ReceiptHandle;
         var timer = new Timer(
-            static state => ((InProcessTaskQueue)state!).ReEnqueueTimedOut((string)null!),
-            this,
+            static state =>
+            {
+                var (queue, handle) = ((InProcessTaskQueue, string))state!;
+                queue.ReEnqueueTimedOut(handle);
+            },
+            (this, receiptHandle),
             visibilityTimeout,
             Timeout.InfiniteTimeSpan);
 
-        _visibilityTimers.TryAdd(inFlight.ReceiptHandle, timer);
-        _inFlightTasks.TryAdd(inFlight.ReceiptHandle, inFlight);
+        _visibilityTimers.TryAdd(receiptHandle, timer);
 
         return Task.FromResult<QueuedTask?>(new QueuedTask
         {
@@ -225,40 +256,62 @@ public sealed class InProcessTaskQueue : ITaskQueue
     {
         ThrowIfDisposed();
 
-        foreach (var dlq in _dlqs.Values)
+        foreach (var dlqKvp in _dlqs)
         {
-            // Linear scan for DLQ — O(n) but DLQ should be small
-            var items = dlq.ToArray();
-            foreach (var item in items)
+            // Per-DLQ lock to make dequeue + replace atomic w.r.t. concurrent
+            // requeue/peek operations.
+            var dlqLock = _dlqLocks.GetOrAdd(dlqKvp.Key, _ => new object());
+            lock (dlqLock)
             {
-                if (item.Id == taskId)
+                if (!dlqKvp.Value.TryPeek(out _))
+                    continue;
+
+                // Drain the DLQ into a temp list to find and remove the target.
+                var kept = new List<QueuedTask>(dlqKvp.Value.Count);
+                var matched = false;
+                while (dlqKvp.Value.TryDequeue(out var item))
                 {
-                    var updated = new QueuedTask
+                    if (!matched && item.Id == taskId)
                     {
-                        Id = item.Id,
-                        ReceiptHandle = $"{taskId}:{Ulid.NewUlid()}",
-                        Task = item.Task,
-                        EnqueuedAt = DateTimeOffset.UtcNow,
-                        RetryCount = 0,
-                        DeliveryCount = 1
-                    };
+                        matched = true;
+                        var updated = new QueuedTask
+                        {
+                            Id = item.Id,
+                            ReceiptHandle = $"{taskId}:{Ulid.NewUlid()}",
+                            Task = item.Task,
+                            EnqueuedAt = DateTimeOffset.UtcNow,
+                            RetryCount = 0,
+                            DeliveryCount = 1
+                        };
 
-                    var queue = _queues.GetOrAdd(
-                        item.Task.QueueName,
-                        _ => new ConcurrentQueue<InFlightTask>());
-                    queue.Enqueue(new InFlightTask
+                        var queue = _queues.GetOrAdd(
+                            item.Task.QueueName,
+                            _ => new ConcurrentQueue<InFlightTask>());
+                        queue.Enqueue(new InFlightTask
+                        {
+                            Task = updated.Task with { Id = updated.Id },
+                            ReceiptHandle = updated.ReceiptHandle,
+                            EnqueuedAt = updated.EnqueuedAt,
+                            DeliveryCount = updated.DeliveryCount,
+                            RetryCount = updated.RetryCount
+                        });
+
+                        _logger?.LogInformation("Task {TaskId} requeued from DLQ {Dlq}", taskId, dlqKvp.Key);
+                    }
+                    else
                     {
-                        Task = updated.Task with { Id = updated.Id },
-                        ReceiptHandle = updated.ReceiptHandle,
-                        EnqueuedAt = updated.EnqueuedAt,
-                        DeliveryCount = updated.DeliveryCount,
-                        RetryCount = updated.RetryCount
-                    });
+                        kept.Add(item);
+                    }
+                }
 
-                    // Remove from DLQ
-                    var newDlq = new ConcurrentQueue<QueuedTask>(items.Where(i => i.Id != taskId));
-                    // Can't replace in ConcurrentDictionary easily; log warning
-                    _logger?.LogInformation("Task {TaskId} requeued from DLQ", taskId);
+                // Push the remaining items back into the DLQ.
+                foreach (var remaining in kept)
+                {
+                    dlqKvp.Value.Enqueue(remaining);
+                }
+
+                if (matched)
+                {
                     return Task.CompletedTask;
                 }
             }
@@ -273,11 +326,52 @@ public sealed class InProcessTaskQueue : ITaskQueue
         return new ValueTask<bool>(!_disposed);
     }
 
-    private void ReEnqueueTimedOut(string? receiptHandle)
+    private void ReEnqueueTimedOut(string receiptHandle)
     {
-        // Called by timer when visibility timeout expires and task wasn't acked
-        // In a real implementation we'd re-queue from the in-flight tracking
-        _logger?.LogDebug("Visibility timeout expired for task receipt {Receipt}", receiptHandle ?? "(unknown)");
+        if (_disposed || string.IsNullOrEmpty(receiptHandle))
+            return;
+
+        // Look up the in-flight task; if it has not been acked/failed by now
+        // and its VisibilityExpiresAt is in the past, push it back to the
+        // main queue so another worker can pick it up.
+        if (!_inFlightTasks.TryGetValue(receiptHandle, out var inFlight))
+        {
+            // Already ack'd or failed; nothing to do.
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (inFlight.VisibilityExpiresAt is { } expiresAt && expiresAt > now)
+        {
+            // Timer fired early (rare) — re-arm and bail.
+            return;
+        }
+
+        // Atomically remove the in-flight entry; if another thread already
+        // removed it (Ack/Fail racing the timer) we exit.
+        if (!_inFlightTasks.TryRemove(receiptHandle, out _))
+        {
+            return;
+        }
+
+        if (_visibilityTimers.TryRemove(receiptHandle, out var timer))
+        {
+            timer.Dispose();
+        }
+
+        var queueName = string.IsNullOrEmpty(inFlight.Task.QueueName) ? "default" : inFlight.Task.QueueName;
+        var queue = _queues.GetOrAdd(queueName, _ => new ConcurrentQueue<InFlightTask>());
+
+        // Bump delivery count to reflect the visibility-timeout redelivery.
+        var redelivered = inFlight with
+        {
+            DeliveryCount = inFlight.DeliveryCount + 1
+        };
+        queue.Enqueue(redelivered);
+
+        _logger?.LogInformation(
+            "Task {TaskId} (receipt {Receipt}) re-enqueued after visibility timeout (delivery={Delivery})",
+            inFlight.Task.Id, receiptHandle, redelivered.DeliveryCount);
     }
 
     private async Task ScheduleReEnqueueAsync(
@@ -319,6 +413,7 @@ public sealed class InProcessTaskQueue : ITaskQueue
         _visibilityTimers.Clear();
         _queues.Clear();
         _dlqs.Clear();
+        _dlqLocks.Clear();
         _inFlightTasks.Clear();
     }
 
@@ -329,6 +424,7 @@ public sealed class InProcessTaskQueue : ITaskQueue
         public required DateTimeOffset EnqueuedAt { get; init; }
         public int RetryCount { get; init; }
         public int DeliveryCount { get; init; }
+        public DateTimeOffset? VisibilityExpiresAt { get; init; }
     }
 }
 

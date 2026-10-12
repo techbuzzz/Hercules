@@ -226,73 +226,143 @@ public sealed class PostgresMeshBus : IMeshBus
             if (_listenConnections.ContainsKey(channelName)) return;
         }
 
-        try
+        // Kick off a self-healing background loop that owns the LISTEN
+        // connection for the lifetime of the channel: opens a connection,
+        // subscribes to the channel, waits for notifications, and on any
+        // failure (broken connection, transport-level error) reconnects
+        // with exponential backoff. The loop only exits on disposal.
+        _ = Task.Run(() => RunListenLoopAsync(channelName), CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     Reconnect-with-backoff loop for a single LISTEN connection.
+    ///     Runs until the bus is disposed. Each iteration opens a fresh
+    ///     <see cref="NpgsqlConnection"/>, binds the notification handler,
+    ///     issues the LISTEN command, and waits for the connection to break
+    ///     or the process to shut down. On any non-cancellation exception
+    ///     the loop logs, sleeps with exponential backoff (capped at
+    ///     <see cref="MaxListenBackoff"/>) and retries.
+    /// </summary>
+    private async Task RunListenLoopAsync(string channelName)
+    {
+        var backoff = TimeSpan.FromMilliseconds(500);
+        var attempt = 0;
+
+        while (!_disposed)
         {
-            var conn = await _dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
-            conn.Notification += async (_, e) =>
+            NpgsqlConnection? conn = null;
+            try
             {
-                if (!string.Equals(e.Channel, channelName, StringComparison.OrdinalIgnoreCase))
+                conn = await _dataSource.OpenConnectionAsync(CancellationToken.None).ConfigureAwait(false);
+
+                // Bind notification handler on the fresh connection.
+                conn.Notification += async (_, e) =>
+                {
+                    if (!string.Equals(e.Channel, channelName, StringComparison.OrdinalIgnoreCase))
+                        return;
+
+                    try
+                    {
+                        var payload = await ReadLatestPayloadAsync(channelName, CancellationToken.None).ConfigureAwait(false);
+                        if (string.IsNullOrEmpty(payload)) return;
+
+                        var envelope = JsonSerializer.Deserialize<IntentEnvelope>(payload, _json);
+                        if (envelope is null) return;
+
+                        // Reply path
+                        if (channelName.StartsWith("reply_", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var reply = JsonSerializer.Deserialize<IntentResponse>(payload, _json);
+                            if (reply is null) return;
+                            var corrId = channelName["reply_".Length..];
+                            if (_pendingReplies.TryGetValue(corrId, out var tcs))
+                                tcs.TrySetResult(reply);
+                        }
+                        else
+                        {
+                            // Strip prefix to recover the user-facing topic for handler dispatch
+                            var topic = channelName.StartsWith(_config.ChannelPrefix, StringComparison.OrdinalIgnoreCase)
+                                ? channelName[_config.ChannelPrefix.Length..]
+                                : channelName;
+                            await DeliverLocal(topic, envelope, CancellationToken.None).ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogDebug(ex, "[PostgresMeshBus] Notification handler error for {Channel}", channelName);
+                    }
+                };
+
+                await using (var cmd = new NpgsqlCommand($"LISTEN {QuoteIdent(channelName)}", conn))
+                {
+                    await cmd.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+
+                lock (_listenLock) { _listenConnections[channelName] = conn; }
+
+                // Successful connect: reset backoff before settling into Wait.
+                backoff = TimeSpan.FromMilliseconds(500);
+                attempt = 0;
+
+                // Wait until the connection breaks (WaitAsync throws) or the
+                // process is shutting down. Cancellation here is only driven
+                // by disposal, since we use CancellationToken.None.
+                while (!_disposed && conn.State == System.Data.ConnectionState.Open)
+                {
+                    await conn.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+
+                if (_disposed)
+                {
                     return;
-
-                // Read the latest payload for the channel
-                try
-                {
-                    var payload = await ReadLatestPayloadAsync(channelName, CancellationToken.None).ConfigureAwait(false);
-                    if (string.IsNullOrEmpty(payload)) return;
-
-                    var envelope = JsonSerializer.Deserialize<IntentEnvelope>(payload, _json);
-                    if (envelope is null) return;
-
-                    // Reply path
-                    if (channelName.StartsWith("reply_", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var reply = JsonSerializer.Deserialize<IntentResponse>(payload, _json);
-                        if (reply is null) return;
-                        var corrId = channelName["reply_".Length..];
-                        if (_pendingReplies.TryGetValue(corrId, out var tcs))
-                            tcs.TrySetResult(reply);
-                    }
-                    else
-                    {
-                        // Strip prefix to recover the user-facing topic for handler dispatch
-                        var topic = channelName.StartsWith(_config.ChannelPrefix, StringComparison.OrdinalIgnoreCase)
-                            ? channelName[_config.ChannelPrefix.Length..]
-                            : channelName;
-                        await DeliverLocal(topic, envelope, CancellationToken.None).ConfigureAwait(false);
-                    }
                 }
-                catch (Exception ex)
-                {
-                    _log.LogDebug(ex, "[PostgresMeshBus] Notification handler error for {Channel}", channelName);
-                }
-            };
 
-            await using (var cmd = new NpgsqlCommand($"LISTEN {QuoteIdent(channelName)}", conn))
+                // Wait returned without an exception but the connection is
+                // not open — treat as a transient failure and reconnect.
+                _log.LogWarning("[PostgresMeshBus] LISTEN connection for {Channel} exited cleanly without exception; reconnecting", channelName);
+            }
+            catch (OperationCanceledException) when (_disposed)
             {
-                await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex)
+            {
+                if (_disposed) return;
+                _log.LogWarning(ex, "[PostgresMeshBus] LISTEN loop error for {Channel} (attempt {Attempt}); reconnecting in {Backoff}",
+                    channelName, attempt + 1, backoff);
+            }
+            finally
+            {
+                if (conn != null)
+                {
+                    lock (_listenLock) { _listenConnections.TryRemove(channelName, out _); }
+                    try { await conn.DisposeAsync().ConfigureAwait(false); } catch { /* ignore */ }
+                }
             }
 
-            lock (_listenLock) { _listenConnections[channelName] = conn; }
+            if (_disposed) return;
 
-            // Background Wait loop
-            _ = Task.Run(async () =>
+            // Exponential backoff with cap. We don't honour a cancellation
+            // token here because the only thing that should stop the loop
+            // is disposal, which is checked after the delay.
+            try
             {
-                try
-                {
-                    while (!_disposed && conn.State == System.Data.ConnectionState.Open)
-                    {
-                        await conn.WaitAsync(ct).ConfigureAwait(false);
-                    }
-                }
-                catch (OperationCanceledException) { }
-                catch (Exception) { }
-            }, ct);
-        }
-        catch (Exception ex)
-        {
-            _log.LogWarning(ex, "[PostgresMeshBus] LISTEN failed for {Channel}", channelName);
+                await Task.Delay(backoff, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Defensive: Task.Delay without a token cannot be cancelled
+                // in practice, but if it ever throws (e.g. ThreadAbort) we
+                // still want the loop to terminate.
+                return;
+            }
+
+            attempt++;
+            backoff = TimeSpan.FromMilliseconds(Math.Min(MaxListenBackoff.TotalMilliseconds, backoff.TotalMilliseconds * 2));
         }
     }
+
+    private static readonly TimeSpan MaxListenBackoff = TimeSpan.FromSeconds(30);
 
     private void DecrementListenRef(string channelName)
     {

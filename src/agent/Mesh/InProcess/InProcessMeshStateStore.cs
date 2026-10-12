@@ -160,9 +160,12 @@ public sealed class InProcessMeshStateStore : IMeshStateStore
     }
 
     /// <inheritdoc />
-    public Task<long> IncrementAsync(string key, long delta = 1, CancellationToken ct = default)
+    public Task<long> IncrementAsync(string key, long delta = 1, TimeSpan? ttl = null, CancellationToken ct = default)
     {
         ThrowIfDisposed();
+
+        var now = DateTimeOffset.UtcNow;
+        var expiresAt = ttl.HasValue ? now.Add(ttl.Value) : (DateTimeOffset?)null;
 
         var newValue = _store.AddOrUpdate(
             key,
@@ -173,12 +176,13 @@ public sealed class InProcessMeshStateStore : IMeshStateStore
                 {
                     Data = delta.ToString(),
                     Version = Guid.NewGuid().ToString("N"),
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    UpdatedAt = DateTimeOffset.UtcNow
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    ExpiresAt = expiresAt
                 },
-                ExpiresAt = null
+                ExpiresAt = expiresAt
             },
-            // Found — increment
+            // Found — increment; refresh TTL on each call (sliding window semantics).
             (_, existing) =>
             {
                 if (!long.TryParse(existing.Value.Data, out var current))
@@ -189,9 +193,10 @@ public sealed class InProcessMeshStateStore : IMeshStateStore
                     {
                         Data = (current + delta).ToString(),
                         Version = Guid.NewGuid().ToString("N"),
-                        UpdatedAt = DateTimeOffset.UtcNow
+                        UpdatedAt = now,
+                        ExpiresAt = expiresAt ?? existing.Value.ExpiresAt
                     },
-                    ExpiresAt = existing.ExpiresAt
+                    ExpiresAt = expiresAt ?? existing.ExpiresAt
                 };
             });
 

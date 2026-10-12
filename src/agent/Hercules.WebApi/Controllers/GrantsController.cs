@@ -25,7 +25,7 @@ public static class GrantsController
                 ExpiresAt = g.ExpiresAt,
                 IsActive = g.IsActive
             }));
-        }).WithName("GetGrants");
+        }).WithName("GetGrants").WithTags("Grants");
 
         // POST /api/grants — выдать grant навыку.
         app.MapPost("/api/grants", async (GrantRequestDto dto, ISkillGrantService grants) =>
@@ -58,21 +58,21 @@ public static class GrantsController
                 ExpiresAt = grant.ExpiresAt,
                 IsActive = grant.IsActive
             });
-        }).WithName("GrantSkill");
+        }).WithName("GrantSkill").WithTags("Grants");
 
         // DELETE /api/grants/{skillId}?permission=xxx — удалить все grants навыка (или конкретный permission).
         app.MapDelete("/api/grants/{skillId}", async (string skillId, string? permission, ISkillGrantService grants) =>
         {
             await grants.RevokeAsync(skillId, permission);
             return Results.NoContent();
-        }).WithName("RevokeGrants");
+        }).WithName("RevokeGrants").WithTags("Grants");
 
         // DELETE /api/grants/by-id/{grantId} — удалить конкретный grant по ID.
         app.MapDelete("/api/grants/by-id/{grantId}", async (string grantId, ISkillGrantService grants) =>
         {
             await grants.RevokeByIdAsync(grantId);
             return Results.NoContent();
-        }).WithName("RevokeGrantById");
+        }).WithName("RevokeGrantById").WithTags("Grants");
 
         // GET /api/grants/{skillId}/check?permission=xxx&sessionId=xxx — проверить наличие permission.
         app.MapGet("/api/grants/{skillId}/check", async (string skillId, string permission, string? sessionId, ISkillGrantService grants) =>
@@ -96,7 +96,7 @@ public static class GrantsController
                 Scope = result.Scope.ToString(),
                 Message = result.Message
             });
-        }).WithName("CheckGrant");
+        }).WithName("CheckGrant").WithTags("Grants");
     }
 }
 

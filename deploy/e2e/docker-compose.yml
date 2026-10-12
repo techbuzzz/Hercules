@@ -1,0 +1,139 @@
+# =============================================================================
+# Hercules — isolated E2E / UI-test stack.
+#
+# NOT a deployment. This exists so a browser test drives a real agent on a real
+# port with a real data directory, without touching a developer's local instance
+# (which would run on 8421 and share ~/.hercules data).
+#
+#   docker compose -f deploy/e2e/docker-compose.yml up -d --build
+#   docker compose -f deploy/e2e/docker-compose.yml down -v
+#
+# IMPORTANT (this machine): the host sets HTTP_PROXY/HTTPS_PROXY, and buildkit
+# fails its auth.docker.io token fetch through that proxy. Clear the proxy vars
+# before `build`; `run` does not need them.
+# =============================================================================
+
+name: hercules-e2e
+
+services:
+  agent:
+    build:
+      # Repo root, so the image can build both the SPA and the .NET project.
+      context: ../..
+      dockerfile: deploy/e2e/Dockerfile
+    image: hercules-e2e:local
+    container_name: hercules-e2e-agent
+
+    # 18421 on the host: 8421 inside the container, remapped so a developer's
+    # local agent (also 8421) can keep running beside it.
+    ports:
+      - "127.0.0.1:18421:8421"
+
+    environment:
+      ASPNETCORE_URLS: "http://+:8421"
+      ASPNETCORE_ENVIRONMENT: "Development"
+
+      # Isolated data root inside the named volume — never the host's data dir.
+      HERCULES_DATA_ROOT: "/data"
+
+      # Absolute path to the SPA bundle; ResolveStudioUiProvider accepts this.
+      HERCULES_WebApi__StudioUiPath: "/app/ui"
+
+      # Deterministic keys so a browser test can authenticate reproducibly.
+      # These are throwaway test credentials for a loopback-only port and must
+      # never be reused anywhere real.
+      HERCULES_WebApi__ApiKey: "e2e-contribute-key"
+      HERCULES_WebApi__ApiKeys__0__Key: "e2e-contribute-key"
+      HERCULES_WebApi__ApiKeys__0__Role: "Contribute"
+      HERCULES_WebApi__ApiKeys__0__Description: "e2e browser test"
+      HERCULES_WebApi__ApiKeys__1__Key: "e2e-system-key"
+      HERCULES_WebApi__ApiKeys__1__Role: "System"
+      HERCULES_WebApi__ApiKeys__1__Description: "e2e supervisor"
+
+      # The browser drives the SPA same-origin from :18421, so the dev CORS
+      # allowlist does not apply. Kept for parity with a proxied test runner.
+      HERCULES_WebApi__AllowedCorsOrigins__0: "http://localhost:18421"
+      HERCULES_WebApi__AllowedCorsOrigins__1: "http://127.0.0.1:18421"
+
+      # ── LLM: Ollama Cloud ────────────────────────────────────────────────
+      # The API KEY is deliberately NOT here. It comes from a Docker secret and
+      # is exported by deploy/e2e/entrypoint.sh, so it never appears in this
+      # file, in an image layer, or in `docker inspect`.
+      #
+      # To enable a real LLM, create the secret file first:
+      #   New-Item deploy\e2e\secrets\ollama_cloud.key -Value "your-key"
+      HERCULES_Llm__Provider: "ollama-cloud"
+      HERCULES_Llm__Fallback__0: "ollama-cloud"
+      HERCULES_Llm__OllamaCloud__Endpoint: "https://ollama.com/v1"
+      # Model overridable without editing this file:
+      #   $env:HERCULES_LLM__OLLAMACLOUD__MODEL = "qwen3-coder:480b"
+      HERCULES_Llm__OllamaCloud__Model: "${HERCULES_LLM__OLLAMACLOUD__MODEL:-gpt-oss:120b}"
+      HERCULES_Llm__OllamaCloud__MaxTokens: "2000"
+
+    # Key material, mounted read-only at /run/secrets/ollama_cloud_key. Gitignored.
+    secrets:
+      - ollama_cloud_key
+
+    volumes:
+      - hercules-e2e-data:/data
+
+    # Test isolation: a fresh, bounded instance, not a long-running service.
+    restart: "no"
+    networks:
+      - hercules-e2e
+
+  # Workflow server — a genuinely separate service (ADR-0008, port 8430). Studio's
+  # Workflow view talks to it directly from the browser, so it needs its own
+  # host-mapped port; 18430 keeps it clear of a local dev instance on 8430.
+  workflow-server:
+    image: hercules-e2e:local
+    container_name: hercules-e2e-workflow
+    depends_on:
+      - agent
+
+    entrypoint: ["dotnet", "/app-wf/Hercules.WorkflowServer.dll"]
+
+    ports:
+      - "127.0.0.1:18430:8430"
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: "Development"
+
+      HERCULES_WORKFLOWSERVER__PORT: "8430"
+      HERCULES_WORKFLOWSERVER__DATAROOT: "/data-wf"
+
+      # Normally auto-generated on first boot into
+      # DataRoot/security/workflow-credentials.json. Pinned here so a browser test
+      # can authenticate reproducibly. Throwaway values, loopback port only.
+      HERCULES_WORKFLOWSERVER__AUTH__CLIENTID: "e2e-workflow-client"
+      HERCULES_WORKFLOWSERVER__AUTH__CLIENTSECRET: "e2e-workflow-secret"
+
+      # Studio runs on a different origin (:18421) than the workflow server (:18430),
+      # so the browser sends a preflight. Empty AllowedOrigins is fail-closed and the
+      # request is refused, so these must be present for the Workflow view to work.
+      HERCULES_WORKFLOWSERVER__CORS__ALLOWEDORIGINS__0: "http://localhost:18421"
+      HERCULES_WORKFLOWSERVER__CORS__ALLOWEDORIGINS__1: "http://127.0.0.1:18421"
+      HERCULES_WORKFLOWSERVER__CORS__ALLOWEDORIGINS__2: "http://localhost:18430"
+      HERCULES_WORKFLOWSERVER__CORS__ALLOWEDORIGINS__3: "http://127.0.0.1:18430"
+
+    volumes:
+      - hercules-e2e-wf-data:/data-wf
+
+    restart: "no"
+    networks:
+      - hercules-e2e
+
+volumes:
+  hercules-e2e-data:
+  hercules-e2e-wf-data:
+
+# File-backed secret (compose, not swarm). The key is read-only inside the
+# container and never enters the environment that `docker inspect` prints.
+secrets:
+  ollama_cloud_key:
+    file: ./secrets/ollama_cloud.key
+
+networks:
+  hercules-e2e:
+    name: hercules-e2e-net
+    driver: bridge

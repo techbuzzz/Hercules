@@ -115,7 +115,50 @@ public sealed class AgentCardService : IAgentCardService
         }
 
         AgentCard card = await GetAgentCardAsync(ct);
-        string endpoint = _a2aCfg.AgentCard.Endpoint.TrimStart('/');
+
+        // The configured Endpoint is URL-shaped ("/agent-card.json") by default, and
+        // it must not be used as a filesystem path verbatim: TrimStart('/') alone yields
+        // a RELATIVE path and the card lands in the process working directory. That both
+        // littered the repo and desynchronised us from the reader (GET /agent-card.json
+        // reads from the data root).
+        //
+        // R18 (found 2026-10-07 on the Linux CI runner): unconditional TrimStart also
+        // destroyed genuine ABSOLUTE paths, because on Linux an absolute path starts with
+        // '/'. "/tmp/x/cards/agent-card.json" became "tmp/x/cards/agent-card.json" — no
+        // longer rooted — and was then rebased onto the manifest directory, writing the
+        // card to <manifestDir>/tmp/x/cards/agent-card.json. Windows never showed it,
+        // because "C:\..." does not begin with a separator and survives TrimStart intact.
+        // The same asymmetry silently misplaced the Agent Card on any Linux deployment.
+        //
+        // Disambiguation: a BARE "/<file>" is URL-shaped (the shipped default) and means
+        // "relative to dataRoot"; anything else that is rooted is a real filesystem path
+        // and is honoured verbatim. A single-segment "/card.json" is never a useful
+        // filesystem target anyway — writing to / requires root — so preferring the
+        // URL reading is the safe side of the ambiguity.
+        string raw = _a2aCfg.AgentCard.Endpoint;
+        bool isBareUrlRoot = raw.Length > 1
+                             && raw[0] == '/'
+                             && !raw.AsSpan(1).Contains('/');
+
+        string endpoint;
+        if (!isBareUrlRoot && Path.IsPathRooted(raw))
+        {
+            endpoint = raw;
+        }
+        else
+        {
+            // Relative: resolve against the manifest's directory, which is the
+            // already-resolved data root, matching the documented "relative to
+            // dataRoot" contract.
+            string relative = raw
+                .TrimStart('/', '\\')
+                .Replace('/', Path.DirectorySeparatorChar);
+
+            string baseDir = Path.GetDirectoryName(_manifestService.ManifestPath)
+                             ?? AppContext.BaseDirectory;
+            endpoint = Path.GetFullPath(Path.Combine(baseDir, relative));
+        }
+
         string? dir = Path.GetDirectoryName(endpoint);
         if (!string.IsNullOrEmpty(dir))
         {

@@ -12,6 +12,9 @@ namespace Hercules.Tools;
 /// </summary>
 public sealed class A2AClient : ITool
 {
+    /// <summary>Имя named HttpClient-клиента для inter-agent JSON-RPC вызовов (task_078).</summary>
+    public const string HttpClientName = "a2a-client";
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -19,15 +22,22 @@ public sealed class A2AClient : ITool
     };
 
     private readonly A2AConfig _cfg;
-    private readonly HttpClient _http;
+    private readonly IHttpClientFactory? _httpFactory;
 
     public A2AClient(A2AConfig cfg)
+        : this(cfg, httpFactory: null)
+    {
+    }
+
+    /// <summary>
+    ///     DI-friendly конструктор: <paramref name="httpFactory"/> создаёт
+    ///     short-lived <see cref="HttpClient"/> через пулинг (task_078). Если null —
+    ///     fallback на собственный экземпляр (CLI / unit-тесты без DI).
+    /// </summary>
+    public A2AClient(A2AConfig cfg, IHttpClientFactory? httpFactory)
     {
         _cfg = cfg;
-        _http = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(cfg.TimeoutSeconds)
-        };
+        _httpFactory = httpFactory;
     }
 
     public string Name => "a2a";
@@ -92,7 +102,8 @@ public sealed class A2AClient : ITool
                 Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
 
-            using HttpResponseMessage resp = await _http.SendAsync(httpReq, ct);
+            using var client = CreateClient();
+            using HttpResponseMessage resp = await client.SendAsync(httpReq, ct);
             var body = await resp.Content.ReadAsStringAsync(ct);
 
             if (!resp.IsSuccessStatusCode)
@@ -145,5 +156,17 @@ public sealed class A2AClient : ITool
         public string? Agent { get; set; }
         public string? Task { get; set; }
         public string? Context { get; set; }
+    }
+
+    private HttpClient CreateClient()
+    {
+        if (_httpFactory is not null)
+        {
+            return _httpFactory.CreateClient(HttpClientName);
+        }
+        return new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(_cfg.TimeoutSeconds)
+        };
     }
 }

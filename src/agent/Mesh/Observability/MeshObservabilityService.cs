@@ -23,6 +23,7 @@ public sealed class MeshObservabilityService : IMeshObservabilityService
     private readonly IOtelService _otel;
     private readonly ILogger<MeshObservabilityService> _logger;
     private readonly TraceContextPropagator _propagator;
+    private readonly MeshDiagnosticsService? _diagnostics;
 
     // Metrics instruments (registered with OtelSetup.Meter)
     private readonly Counter<long>? _meshDelegationCounter;
@@ -35,11 +36,13 @@ public sealed class MeshObservabilityService : IMeshObservabilityService
     public MeshObservabilityService(
         MeshCentralizedObservabilityConfig config,
         IOtelService otel,
-        ILogger<MeshObservabilityService> logger)
+        ILogger<MeshObservabilityService> logger,
+        MeshDiagnosticsService? diagnostics = null)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _otel = otel ?? throw new ArgumentNullException(nameof(otel));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _diagnostics = diagnostics;
 
         _propagator = new TraceContextPropagator(_config.PropagationFormat);
 
@@ -214,6 +217,11 @@ public sealed class MeshObservabilityService : IMeshObservabilityService
         if (!string.IsNullOrWhiteSpace(outcome)) tags.Add(new("outcome", outcome));
         var tagArray = tags.ToArray();
 
+        // task_093: forward counter events to the in-memory diagnostics sink so
+        // the web UI can display totals and per-capability / per-peer breakdowns.
+        // Histogram metrics (latency, hop_count) are not counted.
+        _diagnostics?.RecordMetric(metricName, value, intent: intent, peerAgentId: peerAgentId);
+
         switch (metricName)
         {
             case "delegation_latency_ms":
@@ -231,6 +239,11 @@ public sealed class MeshObservabilityService : IMeshObservabilityService
             case "retry_attempt":
                 // retry_attempt counter — uses delegation counter with retry tag
                 _meshDelegationCounter?.Add((long)value, tagArray);
+                break;
+            case "circuit_breaker_state_change":
+                // task_093: not wired to a dedicated OTel counter (we have no
+                // circuit_breaker_state_change counter on the meter), but the
+                // diagnostics sink above already incremented the in-memory total.
                 break;
             default:
                 _logger.LogDebug("[MeshObs] Unknown metric {MetricName}={Value}", metricName, value);

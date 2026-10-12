@@ -19,8 +19,8 @@ public sealed class SecurityOpsConfig
     public bool Enabled { get; set; } = true;
 
     // Identity rotation
-    /// <summary>Директория для хранения fleet identity. Default: "data/security/identity".</summary>
-    public string IdentityStoragePath { get; set; } = "data/security/identity";
+    /// <summary>Директория для хранения fleet identity. Default: "security/identity".</summary>
+    public string IdentityStoragePath { get; set; } = Path.Combine(BuiltIn.SecuritySubdir, BuiltIn.IdentitySubdir);
 
     /// <summary>Default agent ID для fleet identity. Default: "hercules".</summary>
     public string DefaultAgentId { get; set; } = "hercules";
@@ -35,8 +35,8 @@ public sealed class SecurityOpsConfig
     public bool AutoRotateIdentity { get; set; } = true;
 
     // Certificate management
-    /// <summary>Директория для хранения сертификатов. Default: "data/security/certs".</summary>
-    public string CertificateStoragePath { get; set; } = "data/security/certs";
+    /// <summary>Директория для хранения сертификатов. Default: "security/certs".</summary>
+    public string CertificateStoragePath { get; set; } = Path.Combine(BuiltIn.SecuritySubdir, BuiltIn.CertsSubdir);
 
     /// <summary>Срок действия сертификата в днях. Default: 365.</summary>
     public int CertificateValidityDays { get; set; } = 365;
@@ -48,8 +48,8 @@ public sealed class SecurityOpsConfig
     public bool AutoRenewCertificates { get; set; } = true;
 
     // Package signing
-    /// <summary>Директория для хранения подписей пакетов. Default: "data/security/signing".</summary>
-    public string PackageSigningPath { get; set; } = "data/security/signing";
+    /// <summary>Директория для хранения подписей пакетов. Default: "security/signing".</summary>
+    public string PackageSigningPath { get; set; } = Path.Combine(BuiltIn.SecuritySubdir, BuiltIn.SigningSubdir);
 
     /// <summary>Требовать подпись пакетов. Default: false.</summary>
     public bool RequirePackageSignature { get; set; } = false;
@@ -58,8 +58,8 @@ public sealed class SecurityOpsConfig
     public bool RequireTrustedSigner { get; set; } = false;
 
     // Vulnerability reporting
-    /// <summary>Директория для хранения vulnerability reports. Default: "data/security/vulns".</summary>
-    public string VulnerabilityReportPath { get; set; } = "data/security/vulns";
+    /// <summary>Директория для хранения vulnerability reports. Default: "security/vulns".</summary>
+    public string VulnerabilityReportPath { get; set; } = Path.Combine(BuiltIn.SecuritySubdir, BuiltIn.VulnsSubdir);
 
     /// <summary>Включить автоматическое сканирование уязвимостей. Default: false.</summary>
     public bool AutoScanVulnerabilities { get; set; } = false;
@@ -92,6 +92,14 @@ public sealed class AppConfig
     public Phase2Config Phase2 { get; set; } = new();
     public MarketplaceConfig Marketplace { get; set; } = new();
     public MeshConfig Mesh { get; set; } = new();
+
+    // task_086: bounded in-memory event bus + backpressure tuning
+    /// <summary>
+    ///     Настройки backpressure для in-memory event bus (task_086):
+    ///     емкость bounded-каналов, timeout ожидания освобождения и политика
+    ///     переполнения (drop vs backpressure).
+    /// </summary>
+    public BusConfig Bus { get; set; } = new();
     public ToolPolicyConfig ToolPolicy { get; set; } = new();
     public ToolRegistryConfig ToolRegistry { get; set; } = new();
     public ApprovalConfig Approval { get; set; } = new();
@@ -107,6 +115,10 @@ public sealed class AppConfig
     public ContextConfig Context { get; set; } = new();
     public CacheConfig Cache { get; set; } = new();
     public SkillQualityConfig SkillQuality { get; set; } = new();
+
+    // task_080: Graceful shutdown & drain
+    /// <summary>Shutdown config (task_080): drain timeout, in-flight cancellation, hard-stop after drain.</summary>
+    public ShutdownConfig Shutdown { get; set; } = new();
 
     // Extended config properties (task_044-055)
     /// <summary>Fan-out / fan-in orchestrator config (task_045): concurrency, budget, schema validation, selection strategy.</summary>
@@ -182,6 +194,30 @@ public sealed class AppConfig
 }
 
 /// <summary>
+///     Конфигурация graceful shutdown &amp; drain (task_080). Управляет временем ожидания
+///     in-flight запросов при остановке агента и тем, нужно ли принудительно прерывать
+///     «зависшие» запросы после истечения таймаута.
+/// </summary>
+public sealed class ShutdownConfig
+{
+    /// <summary>Включить graceful shutdown &amp; drain. Default: true.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Максимальное время ожидания завершения in-flight запросов при drain. Default: 30s.</summary>
+    public int DrainTimeoutSec { get; set; } = 30;
+
+    /// <summary>Принудительно отменить оставшиеся in-flight запросы по истечении DrainTimeoutSec. Default: true.</summary>
+    public bool CancelInFlightAfterDrain { get; set; } = true;
+
+    /// <summary>
+    ///     Дополнительное время (в секундах) после Stopped, которое middleware всё ещё отвечает
+    ///     503 с Retry-After. Защищает от race между финальным HTTP-ответом и реальной остановкой.
+    ///     Default: 0 (нет буфера).
+    /// </summary>
+    public int PostStopRetryAfterSec { get; set; } = 0;
+}
+
+/// <summary>
 ///     Конфигурация staged rollout конфигурационных и policy бандлов (task_058).
 /// </summary>
 public sealed class ConfigRolloutConfig
@@ -189,8 +225,8 @@ public sealed class ConfigRolloutConfig
     /// <summary>Включить staged rollout. Default: true.</summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Директория для хранения бандлов и state. Default: "data/rollout".</summary>
-    public string BundlesPath { get; set; } = "data/rollout";
+    /// <summary>Директория для хранения бандлов и state. Default: "rollout".</summary>
+    public string BundlesPath { get; set; } = BuiltIn.RolloutSubdir;
 
     /// <summary>Требовать подпись бандлов. Default: false.</summary>
     public bool RequireBundleSignature { get; set; } = false;
@@ -275,6 +311,83 @@ public sealed class QuotasConfig
     // Sliding window for rate limiting (in seconds)
     /// <summary>Размер sliding window для rate limiting в секундах. Default: 60.</summary>
     public int RateLimitWindowSeconds { get; set; } = 60;
+
+    // task_072: distributed quotas
+    /// <summary>
+    ///     Включить распределённый учёт квот через <c>IMeshStateStore</c> (Redis/Valkey,
+    ///     PostgreSQL, NATS JetStream). При включении <see cref="DistributedQuotaService"/>
+    ///     оборачивает in-memory <see cref="QuotaService"/> и хранит rate-limit counters
+    ///     в mesh store с TTL = <see cref="RateLimitWindowSeconds"/>. Daily counters
+    ///     остаются локальными. Default: false (чисто in-memory).
+    /// </summary>
+    public bool DistributedEnabled { get; set; } = false;
+
+    /// <summary>Префикс ключей для distributed counters. Default: "quota:".</summary>
+    public string DistributedKeyPrefix { get; set; } = "quota:";
+
+    /// <summary>
+    ///     Интервал периодической очистки локальных rate-limit buckets в секундах.
+    ///     Используется <see cref="Hercules.Quotas.QuotaCleanupBackgroundService"/>.
+    ///     Default: 60s.
+    /// </summary>
+    public int CleanupIntervalSeconds { get; set; } = 60;
+}
+
+/// <summary>
+///     Настройки backpressure для in-memory event bus (task_086).
+///     Включают ограничение ёмкости bounded-каналов и политику переполнения
+///     (drop vs ожидание). Полная замена unbounded-каналов устраняет риск OOM
+///     под нагрузкой, но требует явного решения о поведении publisher'а при full.
+/// </summary>
+public sealed class BusConfig
+{
+    /// <summary>
+    ///     Ёмкость bounded-каналов в <c>InMemoryEventBus</c> на одну подписку.
+    ///     Должна быть &gt;= 1. Default: 1024.
+    /// </summary>
+    public int MaxChannelCapacity { get; set; } = 1024;
+
+    /// <summary>
+    ///     Сколько миллисекунд publisher ждёт освобождения места в full-канале
+    ///     перед тем, как применить <see cref="DropOnBackpressure"/>.
+    ///     Default: 100 ms.
+    /// </summary>
+    public int BackpressureTimeoutMs { get; set; } = 100;
+
+    /// <summary>
+    ///     Если true — сообщения сбрасываются (с инкрементом
+    ///     <c>BusChannelDropCounter</c>) сразу при переполнении.
+    ///     Если false — publisher блокируется до <see cref="BackpressureTimeoutMs"/>,
+    ///     затем также сбрасывает. Default: false (backpressure-first).
+    /// </summary>
+    public bool DropOnBackpressure { get; set; } = false;
+}
+
+/// <summary>
+///     Настройки backpressure для in-process mesh-бэкендов (task_086).
+///     Контролирует максимум concurrent handler'ов и default visibility timeout
+///     для <c>InProcessTaskQueue</c>.
+/// </summary>
+public sealed class MeshBackpressureConfig
+{
+    /// <summary>
+    ///     Максимум одновременно исполняемых handler'ов на топик в
+    ///     <c>InProcessMeshBus</c>. Default: 16.
+    /// </summary>
+    public int MaxConcurrentHandlers { get; set; } = 16;
+
+    /// <summary>
+    ///     Default visibility timeout для <c>InProcessTaskQueue</c> в секундах.
+    ///     Используется, когда вызывающий не передал явный timeout.
+    ///     Default: 30 s.
+    /// </summary>
+    public int InProcessTaskQueueVisibilityTimeoutSec { get; set; } = 30;
+
+    /// <summary>
+    ///     Сколько миллисекунд publisher ждёт слот семафора перед drop'ом.
+    ///     Default: 100 ms.
+    /// </summary>
+    public int HandlerAcquireTimeoutMs { get; set; } = 100;
 }
 
 /// <summary>
@@ -334,8 +447,8 @@ public sealed class ToolRegistryConfig
 {
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Директория с tool declarations (data/Tools/*.tool.json).</summary>
-    public string ToolsDir { get; set; } = "data/Tools";
+    /// <summary>Директория с tool declarations ({DataRoot}/Tools/*.tool.json).</summary>
+    public string ToolsDir { get; set; } = BuiltIn.ToolsSubdir;
 
     /// <summary>Allow patterns (glob). Пусто = все разрешены.</summary>
     public List<string> AllowedPatterns { get; set; } = new() { "*" };
@@ -362,12 +475,12 @@ public sealed class Phase2Config
     public string EmbeddingProvider { get; set; } = "stub-hash";
     public double SimilarityThreshold { get; set; } = 0.35;
     public bool KeywordFallback { get; set; } = true;
-    public string MarketplaceDir { get; set; } = "marketplace";
-    public string ToolsDir { get; set; } = "Tools";
-    public string TemplatesDir { get; set; } = "Templates";
+    public string MarketplaceDir { get; set; } = BuiltIn.MarketplaceSubdir;
+    public string ToolsDir { get; set; } = BuiltIn.ToolsSubdir;
+    public string TemplatesDir { get; set; } = BuiltIn.TemplatesSubdir;
 
-    /// <summary>Fleet templates directory (data/FleetTemplates/). Default: "FleetTemplates".</summary>
-    public string FleetTemplatesDir { get; set; } = "FleetTemplates";
+    /// <summary>Fleet templates directory (DataRoot/FleetTemplates/). Default: "FleetTemplates".</summary>
+    public string FleetTemplatesDir { get; set; } = BuiltIn.FleetTemplatesSubdir;
 
     /// <summary>
     ///     Веса scoring-компонентов для семантической маршрутизации (task_022).
@@ -485,6 +598,41 @@ public sealed class HttpConfig
     public int RateLimitPerMinute { get; set; } = 60;
     public int TimeoutSeconds { get; set; } = 10;
     public int MaxResponseSizeKb { get; set; } = 256;
+
+    /// <summary>
+    ///     task_078: Polly-style resilience defaults for named HttpClient clients
+    ///     (http-tool, a2a-client, operator-notify, llm-health, network-monitor,
+    ///     skill-marketplace). Bound at registration time in Program.cs.
+    /// </summary>
+    public HttpResilienceConfig Resilience { get; set; } = new();
+}
+
+/// <summary>
+///     Resilience settings used by Microsoft.Extensions.Http.Resilience
+///     (AddStandardResilienceHandler) on named HttpClient clients.
+/// </summary>
+public sealed class HttpResilienceConfig
+{
+    /// <summary>Total request timeout (per attempt + retries).</summary>
+    public int TimeoutSeconds { get; set; } = 30;
+
+    /// <summary>Number of retry attempts on transient failures.</summary>
+    public int RetryCount { get; set; } = 3;
+
+    /// <summary>Base delay between retries (ms); the standard handler applies exponential backoff + jitter.</summary>
+    public int RetryBaseDelayMs { get; set; } = 200;
+
+    /// <summary>Circuit breaker failure ratio (0.0–1.0) over the sampling window.</summary>
+    public double CircuitBreakerFailureRatio { get; set; } = 0.5;
+
+    /// <summary>Sampling window duration (seconds) for circuit breaker.</summary>
+    public int CircuitBreakerSamplingDurationSeconds { get; set; } = 30;
+
+    /// <summary>Minimum throughput in the sampling window before the breaker can trip.</summary>
+    public int CircuitBreakerMinimumThroughput { get; set; } = 10;
+
+    /// <summary>How long the breaker stays open before allowing probes (seconds).</summary>
+    public int CircuitBreakerBreakDurationSeconds { get; set; } = 15;
 }
 
 /// <summary>
@@ -543,10 +691,10 @@ public sealed class A2AAgentCardConfig
     public bool Publish { get; set; } = true;
 
     /// <summary>
-    ///     Путь/endpoint для публикации Agent Card (по умолчанию "/agent-card.json").
+    ///     Путь/endpoint для публикации Agent Card (по умолчанию "/{BuiltIn.AgentCardFileName}").
     ///     Может быть абсолютным путём или относительным (от dataRoot).
     /// </summary>
-    public string Endpoint { get; set; } = "agent-card.json";
+    public string Endpoint { get; set; } = $"/{BuiltIn.AgentCardFileName}";
 
     /// <summary>TTL кэша Agent Card в минутах. Default: 60.</summary>
     public int CacheTtlMinutes { get; set; } = 60;
@@ -624,11 +772,70 @@ public sealed class OllamaConfig
 /// </summary>
 public sealed class StorageConfig
 {
-    public string DataRoot { get; set; } = "data";
-    public string SkillsDir { get; set; } = "Skills";
-    public string MemoryDir { get; set; } = "Memory";
-    public string SqliteFile { get; set; } = "sessions.db";
+    /// <summary>
+    ///     Absolute or relative root for all agent-generated runtime data.
+    ///     When relative, it is resolved against <see cref="BuiltIn.ResolveDataRoot"/>.
+    ///     Default: resolved at startup via <see cref="BuiltIn.ResolveDataRoot"/>.
+    /// </summary>
+    public string DataRoot { get; set; } = BuiltIn.ResolveDataRoot();
+    public string SkillsDir { get; set; } = BuiltIn.SkillsSubdir;
+    public string MemoryDir { get; set; } = BuiltIn.MemorySubdir;
+    public string SqliteFile { get; set; } = BuiltIn.SqliteDatabaseFileName;
     public Phase2Config? Phase2 { get; set; }
+
+    /// <summary>
+    ///     task_103: backend selection for the session store. Defaults to the
+    ///     legacy local SQLite file (<c>"sqlite"</c>); set
+    ///     <c>Provider = "postgres"</c> and a connection string to switch to a
+    ///     shared Npgsql-backed store (e.g. for "collective mind" deployments).
+    /// </summary>
+    public SessionStoreBackendConfig SessionStore { get; set; } = new();
+
+    /// <summary>
+    ///     task_103: collective-mind mode knobs — when enabled, multiple agents
+    ///     can read/write the same session-store namespace. <c>SessionIsolation</c>
+    ///     controls per-agent vs shared session visibility; <c>SharedMemory</c>
+    ///     toggles a common memory namespace.
+    /// </summary>
+    public CollectiveMindConfig CollectiveMind { get; set; } = new();
+}
+
+/// <summary>
+///     task_103: selects the concrete <see cref="Hercules.Storage.ISessionStore"/>
+///     implementation at startup. Defaults preserve the previous SQLite-on-disk
+///     behaviour (the SQLite file path lives in
+///     <see cref="StorageConfig.SqliteFile"/> + <see cref="StorageConfig.DataRoot"/>).
+/// </summary>
+public sealed class SessionStoreBackendConfig
+{
+    /// <summary>Backend provider: <c>sqlite</c> (default) or <c>postgres</c>.</summary>
+    public string Provider { get; set; } = "sqlite";
+
+    /// <summary>
+    ///     Npgsql connection string. Required when <see cref="Provider"/> is
+    ///     <c>postgres</c>; ignored for <c>sqlite</c>. Reuses the same
+    ///     connection pool as <c>PostgresMeshConfig</c> when present.
+    /// </summary>
+    public string? ConnectionString { get; set; }
+
+    /// <summary>Optional schema name (default <c>public</c>). Only used by <c>postgres</c>.</summary>
+    public string Schema { get; set; } = "public";
+}
+
+/// <summary>
+///     task_103: collective-mind mode for multi-agent deployments. Disabled by
+///     default; each agent runs against its own isolated session store as before.
+/// </summary>
+public sealed class CollectiveMindConfig
+{
+    /// <summary>Master switch. When false, <see cref="SharedMemory"/> and <see cref="SessionIsolation"/> are ignored.</summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>When true, agents share a common memory namespace via the session store.</summary>
+    public bool SharedMemory { get; set; } = false;
+
+    /// <summary>Session visibility: <c>per-agent</c> (default) or <c>shared</c>.</summary>
+    public string SessionIsolation { get; set; } = "per-agent";
 }
 
 /// <summary>
@@ -665,12 +872,20 @@ public sealed class MeshConfig
     public string AgentId { get; set; } = "hercules-main";
     public string DisplayName { get; set; } = "Hercules";
     public string Description { get; set; } = "Self-improving micro-agent";
-    public string Endpoint { get; set; } = "http://localhost:5000";
+    public string Endpoint { get; set; } = "http://localhost:8421";
     public string RegistryDb { get; set; } = "mesh_registry.db";
     public int IntentTimeoutMs { get; set; } = 30_000;
     public double LocalConfidenceThreshold { get; set; } = 0.5;
     public List<MeshPeerConfig> Peers { get; set; } = new();
     public List<ManifestCapabilityConfig>? Capabilities { get; set; }
+
+    // task_086: backpressure for in-process mesh bus & task queue
+    /// <summary>
+    ///     Настройки backpressure для in-process mesh-бэкендов (task_086):
+    ///     максимум concurrent handler'ов в <c>InProcessMeshBus</c> и
+    ///     visibility timeout по умолчанию для <c>InProcessTaskQueue</c>.
+    /// </summary>
+    public MeshBackpressureConfig Backpressure { get; set; } = new();
 
     /// <summary>Версии протокола, поддерживаемые агентом (для публикации в манифесте).</summary>
     public List<string> SupportedProtocolVersions { get; set; } = new() { "1.0" };
@@ -763,6 +978,15 @@ public sealed class DelegationBoundaryConfig
     ///     Максимум cumulative wall-clock milliseconds за весь delegation chain. 0 = без ограничений. Default: 300000 (5 min).
     /// </summary>
     public long MaxCumulativeWallClockMs { get; set; } = 300_000;
+
+    /// <summary>
+    ///     [task_087] TTL in seconds for a chain context entry. Entries with
+    ///     <c>UpdatedUtc</c> older than this are evicted from the in-memory
+    ///     dictionary on the next access (or by an explicit cleanup call).
+    ///     Prevents unbounded growth from chains that never reach a terminal
+    ///     state (e.g. lost ack). Default: 300s (5 min). 0 = disable eviction.
+    /// </summary>
+    public int ChainContextTtlSec { get; set; } = 300;
 }
 
 /// <summary>
@@ -993,6 +1217,32 @@ public sealed class OtelConfig
     public string ServiceName { get; set; } = "hercules";
     public string? OtlpEndpoint { get; set; }
     public double SamplingRatio { get; set; } = 1.0;
+
+    /// <summary>
+    ///     Включить Console exporter для tracing/metrics.
+    ///     По умолчанию true, если OtlpEndpoint пустой (dev-режим).
+    ///     В production (OTLP настроен) рекомендуется отключить чтобы избежать двойного export.
+    ///     См. task_085.
+    /// </summary>
+    public bool? ConsoleExporterEnabled { get; set; }
+
+    /// <summary>
+    ///     Sample rate для repetitive warning logs (retry/quota/timeout).
+    ///     Логируется только каждый N-й event; метрики инкрементируются всегда.
+    ///     Значение 1 = логировать всё; 10 = каждый 10-й; 0 = полностью отключить warn-логи.
+    ///     См. task_085.
+    /// </summary>
+    public int LoggingSampleRate { get; set; } = 10;
+
+    /// <summary>
+    ///     Если true и OtlpEndpoint задан — также включить OTLP log exporter.
+    ///     См. task_085.
+    /// </summary>
+    public bool OtlpLogExporterEnabled { get; set; } = true;
+
+    /// <summary>Returns effective console exporter flag (auto if not explicitly set).</summary>
+    public bool GetEffectiveConsoleExporterEnabled() =>
+        ConsoleExporterEnabled ?? string.IsNullOrWhiteSpace(OtlpEndpoint);
 }
 
 /// <summary>
@@ -1165,8 +1415,23 @@ public sealed class MarketplaceConfig
 
     /// <summary>
     ///     Разрешить импорт пакетов по HTTP URL.
+    ///     R1: этот флаг РАНЬШЕ НИГДЕ НЕ ЧИТАЛСЯ — guard не существовал, и
+    ///     POST /api/marketplace/import-url позволял SSRF во внутреннюю сеть.
+    ///     Теперь enforced в SkillImportUrlGuard.EnsureAllowedAsync.
     /// </summary>
     public bool AllowHttpImport { get; set; } = false;
+
+    /// <summary>
+    ///     R1: разрешить импорт по незащищённому http:// (по умолчанию только https).
+    ///     Включайте только для локального реестра во внутренней сети.
+    /// </summary>
+    public bool AllowInsecureHttpImport { get; set; } = false;
+
+    /// <summary>
+    ///     Разрешённые хосты для импорта по URL. Если список непустой, импорт
+    ///     разрешён ТОЛЬКО с этих хостов (exact host match).
+    /// </summary>
+    public List<string> AllowedImportHosts { get; set; } = new();
 
     /// <summary>
     ///     Максимальный размер пакета в мегабайтах.
@@ -1308,11 +1573,11 @@ public sealed class MeshEvalConfig
     /// <summary>Включить evaluation suite. Default: false.</summary>
     public bool Enabled { get; set; } = false;
 
-    /// <summary>Директория с файлами сценариев (.json). Default: "data/mesh-eval/scenarios".</summary>
-    public string ScenariosDir { get; set; } = "data/mesh-eval/scenarios";
+    /// <summary>Директория с файлами сценариев (.json). Default: "mesh-eval/scenarios".</summary>
+    public string ScenariosDir { get; set; } = Path.Combine(BuiltIn.MeshEvalSubdir, BuiltIn.ScenariosSubdir);
 
-    /// <summary>Директория для сохранения результатов. Default: "data/mesh-eval/results".</summary>
-    public string ResultsDir { get; set; } = "data/mesh-eval/results";
+    /// <summary>Директория для сохранения результатов. Default: "mesh-eval/results".</summary>
+    public string ResultsDir { get; set; } = Path.Combine(BuiltIn.MeshEvalSubdir, BuiltIn.ResultsSubdir);
 
     /// <summary>Максимальное время выполнения одного сценария в секундах. Default: 120.</summary>
     public int MaxScenarioDurationSeconds { get; set; } = 120;
@@ -1458,8 +1723,8 @@ public sealed class MeshProfilesConfig
     /// <summary>Имя активного профиля (например "local", "redis-ha", "nats-cluster"). Default: "local".</summary>
     public string? ActiveProfile { get; set; } = "local";
 
-    /// <summary>Директория с .meshprofile.json файлами профилей. Default: "data/mesh-profiles".</summary>
-    public string ProfilesDir { get; set; } = "data/mesh-profiles";
+    /// <summary>Директория с .meshprofile.json файлами профилей. Default: "mesh-profiles".</summary>
+    public string ProfilesDir { get; set; } = BuiltIn.MeshProfilesSubdir;
 
     /// <summary>Интервал health check всех backends в секундах. Default: 30.</summary>
     public int HealthCheckIntervalSec { get; set; } = 30;

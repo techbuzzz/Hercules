@@ -265,7 +265,7 @@ public sealed class NatsMeshStateStore : IMeshStateStore
     }
 
     /// <inheritdoc />
-    public async Task<long> IncrementAsync(string key, long delta = 1, CancellationToken ct = default)
+    public async Task<long> IncrementAsync(string key, long delta = 1, TimeSpan? ttl = null, CancellationToken ct = default)
     {
         ThrowIfDisposed();
 
@@ -281,10 +281,11 @@ public sealed class NatsMeshStateStore : IMeshStateStore
                 Data = newVal.ToString(),
                 Version = Guid.NewGuid().ToString("N"),
                 CreatedAt = current?.CreatedAt ?? DateTimeOffset.UtcNow,
-                UpdatedAt = DateTimeOffset.UtcNow
+                UpdatedAt = DateTimeOffset.UtcNow,
+                ExpiresAt = ttl.HasValue ? DateTimeOffset.UtcNow.Add(ttl.Value) : current?.ExpiresAt
             };
 
-            if (await CompareAndSetAsync(key, updated, current?.Version, null, ct).ConfigureAwait(false))
+            if (await CompareAndSetAsync(key, updated, current?.Version, ttl, ct).ConfigureAwait(false))
             {
                 var stored = await GetAsync(key, ct).ConfigureAwait(false);
                 if (stored is not null)

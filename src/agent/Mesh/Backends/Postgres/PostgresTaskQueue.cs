@@ -39,7 +39,7 @@ public sealed class PostgresTaskQueue : ITaskQueue
             WriteIndented = false
         };
         _requeueTimer = new Timer(
-            static state => ((PostgresTaskQueue)state!).RequeueTimedOutTasks(),
+            static state => ((PostgresTaskQueue)state!).RequeueTimedOutTasksTimer(),
             this,
             TimeSpan.FromMilliseconds(_config.RequeueTimerIntervalMs),
             TimeSpan.FromMilliseconds(_config.RequeueTimerIntervalMs));
@@ -524,13 +524,21 @@ public sealed class PostgresTaskQueue : ITaskQueue
         return "\"" + ident.Replace("\"", "\"\"") + "\"";
     }
 
-    private void RequeueTimedOutTasks()
+    // task_077: Timer callbacks must be void. Re-enter the loop via a fire-and-forget
+    // async helper which catches all exceptions internally.
+    private void RequeueTimedOutTasksTimer()
+    {
+        if (_disposed) return;
+        _ = RequeueTimedOutTasksAsync();
+    }
+
+    private async Task RequeueTimedOutTasksAsync()
     {
         if (_disposed) return;
         try
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            RequeueTimedOutCoreAsync(cts.Token).GetAwaiter().GetResult();
+            await RequeueTimedOutCoreAsync(cts.Token).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

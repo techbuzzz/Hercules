@@ -21,6 +21,6 @@ public static class ObservabilityController
                 activitySourceName = OtelSetup.ServiceName,
                 meterName = OtelSetup.ServiceName
             }))
-            .WithName("ObservabilityTelemetry");
+            .WithName("ObservabilityTelemetry").WithTags("Observability");
     }
 }

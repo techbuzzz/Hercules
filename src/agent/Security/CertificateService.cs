@@ -29,9 +29,11 @@ public sealed class CertificateService : ICertificateService
         _audit = audit ?? throw new ArgumentNullException(nameof(audit));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        var dataRoot = Path.Combine(AppContext.BaseDirectory, _config.CertificateStoragePath);
+        var dataRoot = Hercules.BuiltIn.ResolvePathUnderDataRoot(
+            Hercules.BuiltIn.ResolveDataRoot(),
+            _config.CertificateStoragePath);
         Directory.CreateDirectory(dataRoot);
-        _certStorePath = Path.Combine(dataRoot, "certificates.json");
+        _certStorePath = Path.Combine(dataRoot, Hercules.BuiltIn.CertificatesFileName);
     }
 
     public Task<CertificateInfo?> GetCurrentCertificateAsync(CancellationToken ct = default)
@@ -131,7 +133,11 @@ public sealed class CertificateService : ICertificateService
 
         try
         {
-            using var cert = new X509Certificate2(certificateData);
+            // R36 (SYSLIB0057): the X509Certificate2(byte[]) constructor is obsolete in .NET 10.
+            // X509CertificateLoader loads the same DER bytes without the obsolete API and
+            // lets us state the key-storage intent explicitly. Ephemeral is correct here:
+            // the certificate is only inspected and then disposed.
+            using var cert = X509CertificateLoader.LoadCertificate(certificateData);
 
             // Check expiration
             if (cert.NotAfter < DateTime.UtcNow)

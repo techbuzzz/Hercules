@@ -288,6 +288,54 @@ public class ToolRegistryServiceTests
         Assert.Null(svc.GetEntry("any_tool"));
     }
 
+    // --- UnregisterEntry (task_100: MCP hot-reload) ---
+
+    [Fact]
+    public void UnregisterEntry_ExistingTool_RemovesAndReturnsTrue()
+    {
+        var tools = new ITool[] { new DummyTool("http"), new DummyTool("fs") };
+        var svc = CreateService(tools);
+
+        var removed = svc.UnregisterEntry("http");
+
+        Assert.True(removed);
+        Assert.Null(svc.GetEntry("http"));
+        Assert.NotNull(svc.GetEntry("fs"));
+    }
+
+    [Fact]
+    public void UnregisterEntry_NonExistent_ReturnsFalse()
+    {
+        var svc = CreateService();
+
+        var removed = svc.UnregisterEntry("nonexistent");
+
+        Assert.False(removed);
+    }
+
+    [Fact]
+    public void UnregisterEntry_EmptyOrNullName_ReturnsFalse()
+    {
+        var tools = new ITool[] { new DummyTool("http") };
+        var svc = CreateService(tools);
+
+        Assert.False(svc.UnregisterEntry(""));
+        Assert.False(svc.UnregisterEntry("   "));
+        Assert.False(svc.UnregisterEntry(null!));
+    }
+
+    [Fact]
+    public void UnregisterEntry_CaseInsensitive()
+    {
+        var tools = new ITool[] { new DummyTool("http") };
+        var svc = CreateService(tools);
+
+        var removed = svc.UnregisterEntry("HTTP");
+
+        Assert.True(removed);
+        Assert.Null(svc.GetEntry("http"));
+    }
+
     // --- Helpers ---
 
     private sealed class DummyTool : ITool

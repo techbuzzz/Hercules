@@ -240,4 +240,113 @@ public class SqliteSessionStoreDirectTests : IDisposable
     }
 
     #endregion
+
+    #region Concurrency (task_071)
+
+    /// <summary>
+    ///     task_071: 10 параллельных LogInteractionAsync должны корректно
+    ///     сериализоваться через SemaphoreSlim и сохранить все 10 записей
+    ///     без SQLiteException.
+    /// </summary>
+    [Fact]
+    public async Task Concurrent_LogInteractionAsync_AllPersist()
+    {
+        await _store.StartSessionAsync("sess-concurrent");
+
+        var tasks = Enumerable.Range(0, 10)
+            .Select(i => _store.LogInteractionAsync(new InteractionLog(
+                "sess-concurrent",
+                $"input-{i}",
+                $"output-{i}",
+                "high",
+                "direct",
+                null,
+                "test-provider",
+                DateTime.UtcNow)))
+            .ToArray();
+
+        // Should not throw SQLiteException or any other race-related error
+        await Task.WhenAll(tasks);
+
+        var total = await _store.GetTotalInteractionsAsync();
+        Assert.Equal(10, total);
+    }
+
+    /// <summary>
+    ///     task_071: смешанный concurrent workload — параллельные записи в
+    ///     разные таблицы (interactions, audit, budget) не должны вызывать
+    ///     SQLiteException и не должны терять записи.
+    /// </summary>
+    [Fact]
+    public async Task Concurrent_MixedWrites_AllPersistAcrossTables()
+    {
+        await _store.StartSessionAsync("sess-mixed");
+
+        var tasks = new List<Task>();
+
+        for (int i = 0; i < 8; i++)
+        {
+            int idx = i;
+            tasks.Add(_store.LogInteractionAsync(new InteractionLog(
+                "sess-mixed", $"in-{idx}", $"out-{idx}", "high", "direct", null, "p", DateTime.UtcNow)));
+            tasks.Add(_store.LogAuditAsync("test", $"act-{idx}", $"tgt-{idx}", null, "sess-mixed"));
+            tasks.Add(_store.LogBudgetEntryAsync("sess-mixed", "p", "m", 10, 5, 0.001m));
+        }
+
+        await Task.WhenAll(tasks);
+
+        Assert.Equal(8, await _store.GetTotalInteractionsAsync());
+        var audit = await _store.GetAuditLogAsync(100);
+        Assert.Equal(8, audit.Count);
+        var summary = await _store.GetBudgetSummaryAsync();
+        Assert.Equal(8, summary.TotalCalls);
+    }
+
+    /// <summary>
+    ///     task_071: IsHealthy() остаётся отзывчивым (и не выбрасывает) пока
+    ///     идут параллельные записи.
+    /// </summary>
+    [Fact]
+    public async Task IsHealthy_UnderConcurrentLoad_ReturnsTrue()
+    {
+        await _store.StartSessionAsync("sess-healthy");
+
+        var writer = Task.Run(async () =>
+        {
+            for (int i = 0; i < 50; i++)
+            {
+                await _store.LogInteractionAsync(new InteractionLog(
+                    "sess-healthy", $"in-{i}", $"out-{i}", "high", "direct", null, "p", DateTime.UtcNow));
+            }
+        });
+
+        for (int i = 0; i < 20; i++)
+        {
+            Assert.True(_store.IsHealthy());
+        }
+
+        await writer;
+    }
+
+    /// <summary>
+    ///     task_071: sync-обёртки, вызываемые параллельно, должны сериализоваться
+    ///     через тот же SemaphoreSlim и не бросать SQLiteException.
+    /// </summary>
+    [Fact]
+    public async Task Concurrent_SyncWrappers_AllPersist()
+    {
+        await _store.StartSessionAsync("sess-sync");
+
+        var tasks = Enumerable.Range(0, 10)
+            .Select(i => Task.Run(() => _store.LogInteraction(new InteractionLog(
+                "sess-sync", $"sync-in-{i}", $"sync-out-{i}", "high", "direct", null, "p", DateTime.UtcNow))))
+            .ToArray();
+
+        await Task.WhenAll(tasks);
+
+        var total = await _store.GetTotalInteractionsAsync();
+        Assert.Equal(10, total);
+    }
+
+    #endregion
 }

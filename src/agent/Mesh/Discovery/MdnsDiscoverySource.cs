@@ -58,7 +58,7 @@ public sealed class MdnsDiscoverySource : IDiscoverySource
                 {
                     var resolved = await _mdns.ResolveAsync(instance, ct);
                     var endpoint = resolved?.Endpoint ?? $"http://{instance.HostName}:{instance.Port}";
-                    var manifestUrl = $"{endpoint.TrimEnd('/')}/agent.manifest.json";
+                    var manifestUrl = $"{endpoint.TrimEnd('/')}/{Hercules.BuiltIn.AgentManifestFileName}";
 
                     // Extract agentId from TXT record if available
                     var agentId = instance.TxtRecords.TryGetValue("agentId", out var txtAgentId)

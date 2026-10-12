@@ -30,7 +30,7 @@ public class AgentManifestTests : IDisposable
          "hercules-test",
          "Test Agent",
          "Test agent for unit tests",
-         "http://localhost:5000",
+         "http://localhost:8421",
          _tempDir,
          capsProvider ??
          (() => new List<ManifestCapability>
@@ -50,7 +50,7 @@ public class AgentManifestTests : IDisposable
 
       Assert.Equal("hercules-test", manifest.AgentId);
       Assert.Equal("Test Agent", manifest.DisplayName);
-      Assert.Equal("http://localhost:5000", manifest.Endpoint);
+      Assert.Equal("http://localhost:8421", manifest.Endpoint);
       Assert.Equal(2, manifest.Capabilities.Count);
       Assert.Equal("code-review", manifest.Capabilities[0].Name);
    }
@@ -88,11 +88,11 @@ public class AgentManifestTests : IDisposable
    public void UpdateEndpoint_Changes_Endpoint_And_Health()
    {
       var svc = CreateService();
-      svc.UpdateEndpoint("http://192.168.1.100:5000");
+      svc.UpdateEndpoint("http://192.168.1.100:8421");
 
       var manifest = svc.Current;
-      Assert.Equal("http://192.168.1.100:5000", manifest.Endpoint);
-      Assert.Equal("http://192.168.1.100:5000/api/health", manifest.Health);
+      Assert.Equal("http://192.168.1.100:8421", manifest.Endpoint);
+      Assert.Equal("http://192.168.1.100:8421/api/health", manifest.Health);
    }
 
    [Fact]
@@ -115,7 +115,7 @@ public class AgentManifestTests : IDisposable
          "hercules-test",
          "Test Agent",
          "Test description",
-         "http://localhost:5000",
+         "http://localhost:8421",
          _tempDir,
          () => new List<ManifestCapability>
          {
@@ -124,7 +124,7 @@ public class AgentManifestTests : IDisposable
          null,
          "yandexgpt",
          null,
-         "http://localhost:5000/api/health",
+         "http://localhost:8421/api/health",
          new List<string> { "1.0", "2.0" },
          new ManifestResourceLimits
          {
@@ -152,7 +152,7 @@ public class AgentManifestTests : IDisposable
          "hercules-test",
          "Test Agent",
          "Test description",
-         "http://localhost:5000",
+         "http://localhost:8421",
          _tempDir,
          () => new List<ManifestCapability>
          {
@@ -188,7 +188,7 @@ public class AgentManifestTests : IDisposable
          "hercules-test",
          "Test Agent",
          "Test description",
-         "http://localhost:5000",
+         "http://localhost:8421",
          _tempDir,
          () => new List<ManifestCapability>
          {
@@ -219,7 +219,7 @@ public class AgentManifestTests : IDisposable
          "hercules-test",
          "Test Agent",
          "Test description",
-         "http://localhost:5000",
+         "http://localhost:8421",
          _tempDir,
          () => new List<ManifestCapability>
          {
@@ -261,7 +261,7 @@ public class AgentManifestTests : IDisposable
          "hercules-test",
          "Test Agent",
          "Test description",
-         "http://localhost:5000",
+         "http://localhost:8421",
          _tempDir,
          () => new List<ManifestCapability>
          {
@@ -283,7 +283,7 @@ public class AgentManifestTests : IDisposable
          "hercules-test",
          "Test Agent",
          "Test description",
-         "http://localhost:5000",
+         "http://localhost:8421",
          _tempDir,
          () => new List<ManifestCapability>
          {

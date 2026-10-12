@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Hercules.SkillSdk</RootNamespace>
+    <AssemblyName>Hercules.SkillSdk</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- NuGet packaging metadata -->
+    <IsPackable>true</IsPackable>
+    <PackageId>Hercules.SkillSdk</PackageId>
+    <Version>0.4.0-preview</Version>
+    <Authors>Hercules Project</Authors>
+    <Description>Whitelist SDK for Hercules file-based C# skills. Provides safe access to HTTP, MCP, LLM, memory, logging and session APIs.</Description>
+    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageTags>hercules;agent;skill;sdk;mcp;llm;memory</PackageTags>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

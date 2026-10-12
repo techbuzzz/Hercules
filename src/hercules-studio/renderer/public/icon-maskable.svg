@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Maskable: artwork kept inside the 40% safe zone (circle of 80% diameter). -->
+  <rect width="64" height="64" fill="#0a0a0b"/>
+  <path d="M23 42V22h5v8h8v-8h5v20h-5v-8h-8v8z" fill="#10b981"/>
+</svg>

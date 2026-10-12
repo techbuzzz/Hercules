@@ -17,23 +17,27 @@ public interface ISloService
     /// <summary>
     ///     Evaluate current metric values against a vertical's SLO targets.
     ///     Returns a status snapshot with objective-level severity.
+    ///     task_077: async — performs SQL aggregate, outbox/budget I/O without blocking the thread-pool.
     /// </summary>
-    SloStatus Evaluate(string vertical);
+    Task<SloStatus> EvaluateAsync(string vertical, CancellationToken ct = default);
 
     /// <summary>
     ///     Get the current SLO status for a vertical (cached between evaluations).
+    ///     task_077: async.
     /// </summary>
-    SloStatus GetStatus(string vertical);
+    Task<SloStatus> GetStatusAsync(string vertical, CancellationToken ct = default);
 
     /// <summary>
     ///     Get a full SLO report for a vertical (status + definition + compliance summary).
+    ///     task_077: async.
     /// </summary>
-    SloReport GetReport(string vertical);
+    Task<SloReport> GetReportAsync(string vertical, CancellationToken ct = default);
 
     /// <summary>
     ///     Get a summary of all verticals' current SLO status.
+    ///     task_077: async.
     /// </summary>
-    SloSummary GetSummary();
+    Task<SloSummary> GetSummaryAsync(CancellationToken ct = default);
 
     /// <summary>
     ///     Acknowledge an active violation, suppressing repeat alerts.

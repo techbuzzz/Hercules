@@ -38,15 +38,37 @@ public sealed class SqliteOutboxStore : IOutboxStore
                 retry_count     INTEGER NOT NULL DEFAULT 0,
                 last_error      TEXT,
                 session_id      TEXT,
-                correlation_id  TEXT
+                correlation_id  TEXT,
+                synced_at       TEXT
             );
             CREATE INDEX IF NOT EXISTS ix_outbox_status ON outbox_items(status, created_at);
             CREATE INDEX IF NOT EXISTS ix_outbox_type   ON outbox_items(type, status, created_at);
             CREATE INDEX IF NOT EXISTS ix_outbox_itemid ON outbox_items(item_id);
+            CREATE INDEX IF NOT EXISTS idx_outbox_status_synced ON outbox_items(status, synced_at);
             """;
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = ddl;
         cmd.ExecuteNonQuery();
+
+        // Add synced_at column on existing DBs (no-op if already present).
+        EnsureColumn("synced_at", "TEXT");
+    }
+
+    private void EnsureColumn(string columnName, string columnType)
+    {
+        using var pragma = _conn.CreateCommand();
+        pragma.CommandText = "PRAGMA table_info(outbox_items)";
+        using var reader = pragma.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        reader.Close();
+
+        using var alter = _conn.CreateCommand();
+        alter.CommandText = $"ALTER TABLE outbox_items ADD COLUMN {columnName} {columnType}";
+        alter.ExecuteNonQuery();
     }
 
     public async Task EnqueueAsync(OutboxItem item, CancellationToken ct = default)
@@ -58,25 +80,38 @@ public sealed class SqliteOutboxStore : IOutboxStore
             return;
         }
 
-        // Bounded queue: prune oldest synced items if at cap
+        // Bounded queue: when synced-count grows above the configured threshold,
+        // prune oldest Synced rows so the cap remains bounded. Without an UPDATE
+        // in MarkSyncedAsync this prune is a no-op because no row is ever 'Synced'.
         var totalPending = await GetPendingCountAsync(ct);
         var totalSynced = await GetSyncedCountAsync(ct);
+
         if (totalPending + totalSynced >= _config.MaxQueueSize)
         {
-            if (_config.DropOldestSyncedOnCap)
-            {
-                var pruned = await PruneSyncedToCapAsync(
-                    _config.MaxQueueSize - totalPending - 1, ct);
-                _log.LogInformation(
-                    "Outbox cap reached ({MaxSize}), pruned {PrunedCount} oldest synced items",
-                    _config.MaxQueueSize, pruned);
-            }
-            else
+            if (!_config.DropOldestSyncedOnCap)
             {
                 _log.LogWarning(
                     "Outbox at cap ({MaxSize}), rejecting new item {ItemId}",
                     _config.MaxQueueSize, item.ItemId);
                 return;
+            }
+            var pruned = await PruneSyncedToCapAsync(
+                _config.PruneSyncedKeep, ct);
+            _log.LogInformation(
+                "Outbox cap reached ({MaxSize}), pruned {PrunedCount} oldest synced items",
+                _config.MaxQueueSize, pruned);
+        }
+        else if (totalSynced > _config.PruneSyncedThreshold)
+        {
+            // Even below MaxQueueSize, keep the Synced tail bounded so that
+            // audit/history tables do not grow without limit.
+            var pruned = await PruneSyncedToCapAsync(
+                _config.PruneSyncedKeep, ct);
+            if (pruned > 0)
+            {
+                _log.LogDebug(
+                    "Outbox Synced tail above threshold ({Threshold}), pruned {PrunedCount} items",
+                    _config.PruneSyncedThreshold, pruned);
             }
         }
 
@@ -136,9 +171,18 @@ public sealed class SqliteOutboxStore : IOutboxStore
 
     public async Task MarkSyncedAsync(string itemId, CancellationToken ct = default)
     {
+        // NOTE: status='Synced' (not DELETE) so that PruneSyncedToCapAsync and
+        // GetSyncedCountAsync can see the row and apply the bounded-queue policy.
+        // The row is later pruned by PruneSyncedToCapAsync once the synced tail
+        // exceeds PruneSyncedKeep, or by DeleteOlderThanAsync after TTL.
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM outbox_items WHERE item_id = $iid";
+        cmd.CommandText = """
+            UPDATE outbox_items
+            SET status = 'Synced', synced_at = $now
+            WHERE item_id = $iid
+            """;
         cmd.Parameters.AddWithValue("$iid", itemId);
+        cmd.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("o"));
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -193,8 +237,15 @@ public sealed class SqliteOutboxStore : IOutboxStore
 
     public async Task<int> DeleteOlderThanAsync(DateTime cutoff, CancellationToken ct = default)
     {
+        // TTL-based retention: only drop rows that are no longer in-flight.
+        // Pending items must NOT be deleted by TTL — that would silently drop
+        // data the user/agent is still trying to sync.
         using var cmd = _conn.CreateCommand();
-        cmd.CommandText = "DELETE FROM outbox_items WHERE created_at < $cutoff";
+        cmd.CommandText = """
+            DELETE FROM outbox_items
+            WHERE created_at < $cutoff
+              AND status IN ('Synced', 'Failed')
+            """;
         cmd.Parameters.AddWithValue("$cutoff", cutoff.ToString("o"));
         return await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -202,13 +253,16 @@ public sealed class SqliteOutboxStore : IOutboxStore
     public async Task<int> PruneSyncedToCapAsync(int maxSynced, CancellationToken ct = default)
     {
         if (maxSynced < 0) maxSynced = 0;
+        // Order by synced_at ASC (NULL first) so we evict the oldest Synced
+        // rows first. Falls back to id ASC for rows where synced_at is NULL
+        // (e.g. manually-inserted Synced rows in tests).
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = """
             DELETE FROM outbox_items
             WHERE id IN (
                 SELECT id FROM outbox_items
                 WHERE status = 'Synced'
-                ORDER BY id ASC
+                ORDER BY synced_at ASC, id ASC
                 LIMIT (
                     SELECT MAX(0, COUNT(*) - $max) FROM outbox_items WHERE status = 'Synced'
                 )
@@ -218,7 +272,7 @@ public sealed class SqliteOutboxStore : IOutboxStore
         return await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private async Task<int> GetSyncedCountAsync(CancellationToken ct = default)
+    public async Task<int> GetSyncedCountAsync(CancellationToken ct = default)
     {
         using var cmd = _conn.CreateCommand();
         cmd.CommandText = "SELECT COUNT(*) FROM outbox_items WHERE status = 'Synced'";

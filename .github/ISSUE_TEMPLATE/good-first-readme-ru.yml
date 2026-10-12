@@ -1,0 +1,31 @@
+name: Translate README to Russian
+description: Bring README-RU.md up to parity with the new landing-style README.md.
+labels: ["good first issue", "docs", "i18n"]
+title: "[Good first issue] Translate new README landing page to Russian"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The English README was upgraded to a landing page with badges, architecture diagram,
+        comparison table, quick start, and CTA. The Russian version needs the same refresh.
+  - type: checkboxes
+    id: tasks
+    attributes:
+      label: Checklist
+      options:
+        - label: Read the new [README.md](../README.md) top section
+        - label: Update [README-RU.md](../README-RU.md) with the same landing structure
+        - label: Keep all existing Russian sections that are still accurate
+        - label: Translate the ASCII architecture diagram
+        - label: Translate the comparison table (Hercules vs Hermes vs AutoGen)
+        - label: Update links so they point to the Russian docs where available
+        - label: Open a PR with `docs:` prefix
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Style guide.
+      value: |
+        Keep technical terms consistent with existing Russian docs.
+        Do not translate code snippets or CLI commands.
+        Ask for review if unsure about terminology.

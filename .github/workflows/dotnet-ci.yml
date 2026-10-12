@@ -1,0 +1,90 @@
+name: Hercules .NET CI
+
+on:
+  push:
+    branches: [main, "feat/*", "perf*", "fix*"]
+    paths:
+      - "src/agent/**"
+      - "src/workflow-server/**"
+      - "tests/**"
+      - ".github/workflows/dotnet-ci.yml"
+      - "global.json"
+      - "Directory.Build.props"
+  pull_request:
+    paths:
+      - "src/agent/**"
+      - "src/workflow-server/**"
+      - "tests/**"
+      - ".github/workflows/dotnet-ci.yml"
+      - "global.json"
+      - "Directory.Build.props"
+
+# A failing main build must not be masked by a newer commit landing mid-run.
+concurrency:
+  group: dotnet-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # global.json pins 10.0.401 (R40); setup-dotnet honours it and fails loudly
+      # if the pinned SDK cannot be resolved, instead of silently drifting.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-
+
+      - name: Restore
+        run: dotnet restore src/agent/Hercules.slnx
+
+      # Build-time OpenAPI generation is opt-in (R11), so a plain build must not
+      # rewrite openapi.json or touch the SQLite data directory (R12).
+      - name: Build
+        run: dotnet build src/agent/Hercules.slnx -c Release --no-restore
+
+      # Acceptance gate 2: a build must leave the working tree untouched.
+      # This is the gate that would have caught the tracked openapi.json and
+      # sessions.db-shm/-wal churn that shipped undetected before.
+      - name: Verify build did not dirty the working tree
+        run: |
+          $dirty = git status --porcelain
+          if ($dirty) {
+            Write-Output "::error::dotnet build modified tracked files:"
+            Write-Output $dirty
+            git --no-pager diff
+            exit 1
+          }
+          Write-Output "Working tree clean after build."
+
+      # The data root resolves OUTSIDE the repo (BuiltIn.ResolveDataRoot, R18).
+      # Pin it to the runner temp so the suite never writes into the checkout and
+      # cannot leak state between runs.
+      - name: Test
+        env:
+          HERCULES_DATA_ROOT: ${{ runner.temp }}\hercules-ci-data
+        run: dotnet test src/agent/Hercules.slnx -c Release --no-build --logger "console;verbosity=normal"
+
+      # Packability gap R20: Hercules.SkillSdk is IsPackable=true but was absent
+      # from the solution, so `dotnet pack` never emitted it.
+      - name: Pack SkillSdk
+        run: dotnet pack src/agent/SkillSdk/Hercules.SkillSdk.csproj -c Release --no-build -o artifacts
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hercules-nuget-packages
+          path: artifacts/*.nupkg
+          retention-days: 7

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Hercules.WorkflowServer</RootNamespace>
+    <AssemblyName>Hercules.WorkflowServer</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UserSecretsId>5a01b5e7-1a90-4f6c-9c63-7a4a7f7c3b21</UserSecretsId>
+
+    <!-- [task_104] OpenAPI generation deferred to follow-up tick (task_113/115 target the agent's openapi.json first) -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

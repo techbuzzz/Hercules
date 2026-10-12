@@ -6,6 +6,8 @@ using Hercules.Mesh.Escalation;
 using Hercules.Mesh.Observability;
 using Hercules.Mesh.Policy;
 using Hercules.Mesh.Transport;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Hercules.Mesh;
 
@@ -29,6 +31,7 @@ public sealed class IntentRouter
     private readonly ITrustAdmissionPolicy? _trustPolicy;
     private readonly IEscalationService? _escalationService;
     private readonly IMeshObservabilityService? _observability;
+    private readonly ILogger<IntentRouter> _logger;
 
     public IntentRouter(
         AgentCore agent,
@@ -38,7 +41,8 @@ public sealed class IntentRouter
         MeshAuditService? auditService = null,
         ITrustAdmissionPolicy? trustPolicy = null,
         IEscalationService? escalationService = null,
-        IMeshObservabilityService? observability = null)
+        IMeshObservabilityService? observability = null,
+        ILogger<IntentRouter>? logger = null)
     {
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
@@ -48,6 +52,9 @@ public sealed class IntentRouter
         _trustPolicy = trustPolicy;
         _escalationService = escalationService;
         _observability = observability;
+        // [task_087] optional logger — defaults to a NullLogger so existing DI
+        // wiring (positional args in MeshServiceExtensions) keeps working.
+        _logger = logger ?? NullLogger<IntentRouter>.Instance;
     }
 
     /// <summary>
@@ -122,7 +129,13 @@ public sealed class IntentRouter
                     ToolOrIntentName = envelope.Intent,
                     RequestedBy = "mesh"
                 };
-                _ = _escalationService.EscalateAsync(escCtx, ct);
+                // [task_087] Was `_ = _escalationService.EscalateAsync(...)` —
+                // fire-and-forget that silently swallowed exceptions. Wrap the
+                // call so that any failure inside the escalation pipeline is
+                // surfaced through the logger instead of disappearing. The
+                // escalation is still non-blocking (background Task) so the
+                // routing hot path is not slowed down.
+                _ = EscalateSafelyAsync(escCtx, ct, envelope.RequestId);
             }
         }
 
@@ -255,6 +268,31 @@ public sealed class IntentRouter
         }
 
         return _manifestService.Current.Capabilities.FirstOrDefault(c => c.Name.Equals(intent, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    ///     [task_087] Fire-and-forget wrapper around <see cref="IEscalationService.EscalateAsync"/>
+    ///     that logs any exception. Replaces the previous
+    ///     <c>_ = _escalationService.EscalateAsync(escCtx, ct)</c> pattern that
+    ///     silently swallowed failures. The escalation itself remains non-blocking
+    ///     so the routing hot path is unaffected.
+    /// </summary>
+    private async Task EscalateSafelyAsync(EscalationContext escCtx, CancellationToken ct, string requestId)
+    {
+        try
+        {
+            await _escalationService!.EscalateAsync(escCtx, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Agent is shutting down — escalation cancelled, nothing to do.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "[IntentRouter] Escalation failed for request {RequestId} (type={Type}, severity={Severity})",
+                requestId, escCtx.Type, escCtx.Severity);
+        }
     }
 
     /// <summary>

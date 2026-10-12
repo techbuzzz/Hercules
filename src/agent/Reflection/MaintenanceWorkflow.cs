@@ -84,7 +84,7 @@ public sealed class MaintenanceWorkflow
         var context = await BuildAnalysisContextAsync(skill, ct);
         if (context is null)
         {
-            _logger.LogWarning("MaintenanceWorkflow: could not build context for skill '{SkillId'", skillId);
+            _logger.LogWarning("MaintenanceWorkflow: could not build context for skill {SkillId}", skillId);
             return null;
         }
 
@@ -92,7 +92,7 @@ public sealed class MaintenanceWorkflow
         var analysis = await AnalyzeAsync(context, ct);
         if (analysis is null)
         {
-            _logger.LogWarning("MaintenanceWorkflow: LLM analysis failed for skill '{SkillId'", skillId);
+            _logger.LogWarning("MaintenanceWorkflow: LLM analysis failed for skill {SkillId}", skillId);
             return null;
         }
 

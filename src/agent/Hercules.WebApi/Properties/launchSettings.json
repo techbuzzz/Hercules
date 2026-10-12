@@ -2,11 +2,11 @@
   "profiles": {
     "Hercules.WebApi": {
       "commandName": "Project",
-      "launchBrowser": true,
+      "launchBrowser": false,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "https://localhost:57286;http://localhost:57287"
+      "applicationUrl": "http://localhost:8421"
     }
   }
 }

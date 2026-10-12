@@ -118,7 +118,7 @@ public sealed class SkillPackager
             throw new InvalidOperationException($"Навык '{skillId}' не найден.");
         }
 
-        var outDir = outputDir ?? Path.Combine(_repo.SkillsDirectory, "exports");
+        var outDir = outputDir ?? Path.Combine(_repo.SkillsDirectory, Hercules.BuiltIn.ExportsSubdir);
         Directory.CreateDirectory(outDir);
 
         var skillDir = Path.Combine(outDir, $"skill.{skillId}");
@@ -192,7 +192,7 @@ public sealed class SkillPackager
             throw new InvalidOperationException($"Навык '{skillId}' не найден.");
         }
 
-        var outDir = outputDir ?? Path.Combine(_repo.SkillsDirectory, "exports");
+        var outDir = outputDir ?? Path.Combine(_repo.SkillsDirectory, Hercules.BuiltIn.ExportsSubdir);
         Directory.CreateDirectory(outDir);
 
         var fileName = PackageFileName(skill.Meta.Id, skill.Meta.Version);

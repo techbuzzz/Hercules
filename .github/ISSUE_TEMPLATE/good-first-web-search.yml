@@ -1,0 +1,29 @@
+name: Add web-search skill
+description: Add a reusable `web-search` skill that queries a search engine and summarizes results.
+labels: ["good first issue", "skill", "tools"]
+title: "[Good first issue] Implement web-search skill"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hercules has an `http` tool. This issue is about wrapping it into a first-class skill
+        that can answer "search the web for ..." and return a concise summary.
+  - type: checkboxes
+    id: tasks
+    attributes:
+      label: Checklist
+      options:
+        - label: Pick a search provider: DuckDuckGo HTML, Bing API, SerpApi, or SearXNG
+        - label: Create `data/Skills/skill.web-search.md` following the skill spec
+        - label: Add allow-list entries for the search endpoint in `appsettings.json`
+        - label: Test at least 3 queries in CLI REPL
+        - label: Document the skill in `examples/03-local-folder-rag` or a new `examples/06-web-search`
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Implementation hints.
+      value: |
+        DuckDuckGo HTML endpoint is a good free starting point.
+        Parse the HTML carefully or use a lightweight library.
+        Cite sources in the final summary.

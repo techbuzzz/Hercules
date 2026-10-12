@@ -1,0 +1,535 @@
+---
+// Capability Registry Panel (Phase 7 task_089).
+// UI для просмотра реестра peer-агентов: фильтры по trust/health/capability,
+// таблица со сводкой, детальная карточка по клику, кнопки Touch / Remove.
+// 30-секундный auto-refresh (opt-in).
+---
+
+<div class="flex flex-col gap-5" id="capability-registry-panel">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">Capability Registry</h2>
+      <p class="text-xs text-gray-500">
+        Известные peer-агенты: capabilities, health, trust, cost/latency hints.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="cap-registry-updated" class="text-xs text-gray-600"></span>
+      <label class="flex items-center gap-1 text-[11px] text-gray-400">
+        <input id="cap-registry-autorefresh" type="checkbox" class="rounded border-white/20 bg-[#0a0a0b]" />
+        авто (30s)
+      </label>
+      <button id="cap-registry-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- Error banner -->
+  <div id="cap-registry-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+  <div id="cap-registry-ok" class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"></div>
+
+  <!-- Filters -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div>
+        <label for="cap-registry-search" class="mb-1 block text-[11px] text-gray-500">Поиск (agent / display / description)</label>
+        <input id="cap-registry-search" type="text" placeholder="…"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+      </div>
+      <div>
+        <label for="cap-registry-capability" class="mb-1 block text-[11px] text-gray-500">Capability (server search)</label>
+        <input id="cap-registry-capability" type="text" placeholder="… phrase или capability"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+      </div>
+      <div>
+        <label for="cap-registry-trust" class="mb-1 block text-[11px] text-gray-500">Trust</label>
+        <select id="cap-registry-trust"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 focus:border-violet-500/50 focus:outline-none">
+          <option value="">все</option>
+          <option value="unverified">unverified</option>
+          <option value="sandbox">sandbox</option>
+          <option value="basic">basic</option>
+          <option value="trusted">trusted</option>
+          <option value="privileged">privileged</option>
+        </select>
+      </div>
+      <div>
+        <label for="cap-registry-health" class="mb-1 block text-[11px] text-gray-500">Health</label>
+        <select id="cap-registry-health"
+          class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 focus:border-violet-500/50 focus:outline-none">
+          <option value="">все</option>
+          <option value="healthy">healthy</option>
+          <option value="degraded">degraded</option>
+          <option value="unhealthy">unhealthy</option>
+          <option value="unreachable">unreachable</option>
+          <option value="unknown">unknown</option>
+        </select>
+      </div>
+    </div>
+    <div id="cap-registry-cap-mode" class="mt-2 hidden text-[11px] text-violet-300">
+      показан результат server-side поиска по capability — нажмите «Сбросить», чтобы вернуться к полному реестру
+      <button id="cap-registry-cap-clear" type="button"
+        class="ml-2 rounded border border-white/10 px-2 py-0.5 text-[10px] text-gray-300 hover:bg-white/5">Сбросить</button>
+    </div>
+  </section>
+
+  <!-- Table -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-2 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">
+        Агенты
+        <span id="cap-registry-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+      </h3>
+    </div>
+    <div id="cap-registry-empty" class="py-6 text-center text-xs text-gray-500">
+      No known agents yet. Trigger discovery on the Mesh page.
+    </div>
+    <div id="cap-registry-loading" class="hidden py-6 text-center text-xs text-gray-500">Загрузка…</div>
+    <div id="cap-registry-table-wrap" class="hidden overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-left text-[11px] uppercase tracking-wide text-gray-500">
+            <th class="py-2 pr-3 font-medium">Agent</th>
+            <th class="py-2 pr-3 font-medium">Trust</th>
+            <th class="py-2 pr-3 font-medium">Health</th>
+            <th class="py-2 pr-3 font-medium">Last seen</th>
+            <th class="py-2 pr-3 font-medium text-right">Cost</th>
+            <th class="py-2 pr-3 font-medium text-right">Latency</th>
+            <th class="py-2 pr-3 font-medium text-right">Failures</th>
+            <th class="py-2 pr-3 font-medium text-right">Действия</th>
+          </tr>
+        </thead>
+        <tbody id="cap-registry-tbody" class="divide-y divide-white/5"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Detail card -->
+  <section id="cap-registry-detail-section" class="hidden rounded-xl border border-white/10 bg-[#101012] p-4">
+    <div class="mb-3 flex items-center justify-between">
+      <h3 class="text-sm font-medium text-gray-300">Детали агента</h3>
+      <button id="cap-registry-detail-close" type="button"
+        class="rounded-md border border-white/10 px-2 py-0.5 text-xs text-gray-400 hover:bg-white/5">закрыть</button>
+    </div>
+    <div id="cap-registry-detail"></div>
+  </section>
+</div>
+
+<script>
+  import { api, type MeshAgentEntryDto, type MeshAgentHealthDto, type MeshCapabilityDto } from "../lib/api";
+
+  const errBanner = document.getElementById("cap-registry-error")!;
+  const okBanner = document.getElementById("cap-registry-ok")!;
+  const updatedEl = document.getElementById("cap-registry-updated")!;
+
+  const refreshBtn = document.getElementById("cap-registry-refresh")!;
+  const autorefreshChk = document.getElementById("cap-registry-autorefresh") as HTMLInputElement;
+
+  const searchInput = document.getElementById("cap-registry-search") as HTMLInputElement;
+  const capabilityInput = document.getElementById("cap-registry-capability") as HTMLInputElement;
+  const capMode = document.getElementById("cap-registry-cap-mode")!;
+  const capClear = document.getElementById("cap-registry-cap-clear")!;
+  const trustSelect = document.getElementById("cap-registry-trust") as HTMLSelectElement;
+  const healthSelect = document.getElementById("cap-registry-health") as HTMLSelectElement;
+
+  const emptyEl = document.getElementById("cap-registry-empty")!;
+  const loadingEl = document.getElementById("cap-registry-loading")!;
+  const tableWrap = document.getElementById("cap-registry-table-wrap")!;
+  const tbody = document.getElementById("cap-registry-tbody")!;
+  const countEl = document.getElementById("cap-registry-count")!;
+
+  const detailSection = document.getElementById("cap-registry-detail-section")!;
+  const detailEl = document.getElementById("cap-registry-detail")!;
+  const detailCloseBtn = document.getElementById("cap-registry-detail-close")!;
+
+  // State.
+  let allAgents: MeshAgentEntryDto[] = [];
+  let serverFilteredIds: Set<string> | null = null; // when capability-search is active
+  let activeDetailId: string | null = null;
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = message;
+    errBanner.classList.remove("hidden");
+    okBanner.classList.add("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+  function showOk(message: string): void {
+    okBanner.textContent = message;
+    okBanner.classList.remove("hidden");
+    errBanner.classList.add("hidden");
+    setTimeout(() => okBanner.classList.add("hidden"), 2500);
+  }
+
+  function trustBadge(level: string): string {
+    const l = (level || "unverified").toLowerCase();
+    const palette: Record<string, string> = {
+      privileged: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      trusted: "border-sky-500/30 bg-sky-500/10 text-sky-300",
+      basic: "border-violet-500/30 bg-violet-500/10 text-violet-300",
+      sandbox: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      unverified: "border-white/10 bg-white/5 text-gray-400",
+    };
+    const cls = palette[l] ?? palette.unverified;
+    return `<span class="rounded-full border px-2 py-0.5 text-[11px] ${cls}">${escapeHtml(l)}</span>`;
+  }
+
+  function healthBadge(status: string): string {
+    const s = (status || "unknown").toLowerCase();
+    const palette: Record<string, string> = {
+      healthy: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      degraded: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      unhealthy: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+      unreachable: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+      unknown: "border-white/10 bg-white/5 text-gray-500",
+    };
+    const cls = palette[s] ?? palette.unknown;
+    return `<span class="rounded-full border px-2 py-0.5 text-[11px] ${cls}">${escapeHtml(s)}</span>`;
+  }
+
+  function formatTimestamp(iso: string): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleString();
+  }
+
+  function formatRelative(iso: string): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    const diff = Date.now() - d.getTime();
+    if (diff < 0) return d.toLocaleString();
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return `${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const days = Math.floor(hr / 24);
+    return `${days}d ago`;
+  }
+
+  function passesFilters(a: MeshAgentEntryDto): boolean {
+    if (serverFilteredIds && !serverFilteredIds.has(a.agentId)) return false;
+    const trust = trustSelect.value;
+    if (trust && (a.trustLevel || "").toLowerCase() !== trust) return false;
+    const health = healthSelect.value;
+    if (health && (a.healthStatus || "").toLowerCase() !== health) return false;
+    const search = searchInput.value.trim().toLowerCase();
+    if (search) {
+      const hay = `${a.agentId} ${a.displayName} ${a.description}`.toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  }
+
+  function renderTable(): void {
+    const visible = allAgents.filter(passesFilters);
+    if (allAgents.length === 0) {
+      emptyEl.classList.remove("hidden");
+      emptyEl.textContent = "No known agents yet. Trigger discovery on the Mesh page.";
+      tableWrap.classList.add("hidden");
+      countEl.textContent = "";
+      return;
+    }
+    if (visible.length === 0) {
+      emptyEl.classList.remove("hidden");
+      emptyEl.textContent = "Нет агентов, удовлетворяющих фильтрам.";
+      tableWrap.classList.add("hidden");
+      countEl.textContent = `(0 из ${allAgents.length})`;
+      return;
+    }
+    emptyEl.classList.add("hidden");
+    tableWrap.classList.remove("hidden");
+    countEl.textContent = `(${visible.length} из ${allAgents.length})`;
+
+    tbody.innerHTML = visible
+      .map((a) => {
+        const row = activeDetailId === a.agentId ? "bg-white/5" : "hover:bg-white/5";
+        return `
+        <tr class="${row} cursor-pointer" data-agent-id="${escapeHtml(a.agentId)}">
+          <td class="py-2 pr-3 align-top">
+            <div class="font-medium text-white">${escapeHtml(a.displayName || a.agentId)}</div>
+            <div class="mono text-[10px] text-gray-500">${escapeHtml(a.agentId)}</div>
+            ${a.endpoint ? `<div class="mono mt-0.5 text-[10px] text-gray-600 truncate max-w-[18rem]">${escapeHtml(a.endpoint)}</div>` : ""}
+          </td>
+          <td class="py-2 pr-3 align-top">${trustBadge(a.trustLevel)}</td>
+          <td class="py-2 pr-3 align-top">${healthBadge(a.healthStatus)}</td>
+          <td class="py-2 pr-3 align-top text-gray-400" title="${escapeHtml(a.lastSeen)}">${formatRelative(a.lastSeen)}</td>
+          <td class="py-2 pr-3 text-right align-top text-gray-300">$${a.costHintUsd.toFixed(4)}</td>
+          <td class="py-2 pr-3 text-right align-top text-gray-300">${a.latencyHintMs}ms</td>
+          <td class="py-2 pr-3 text-right align-top">
+            ${a.consecutiveFailures > 0
+              ? `<span class="rounded bg-rose-500/15 px-1.5 py-0.5 text-[11px] text-rose-300">${a.consecutiveFailures}</span>`
+              : `<span class="text-gray-600">0</span>`}
+          </td>
+          <td class="py-2 pr-3 text-right align-top">
+            <button data-action="touch" data-agent-id="${escapeHtml(a.agentId)}" type="button"
+              class="mr-1 rounded border border-white/10 px-2 py-0.5 text-[11px] text-gray-300 transition-colors hover:bg-white/5">Touch</button>
+            <button data-action="remove" data-agent-id="${escapeHtml(a.agentId)}" data-display="${escapeHtml(a.displayName || a.agentId)}" type="button"
+              class="rounded border border-rose-500/30 px-2 py-0.5 text-[11px] text-rose-300 transition-colors hover:bg-rose-500/10">Remove</button>
+          </td>
+        </tr>`;
+      })
+      .join("");
+  }
+
+  async function loadAgents(): Promise<void> {
+    clearError();
+    loadingEl.classList.remove("hidden");
+    emptyEl.classList.add("hidden");
+    tableWrap.classList.add("hidden");
+    try {
+      const agents = await api.listMeshAgents();
+      allAgents = agents;
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+      // If detail open for an agent that no longer exists — close it.
+      if (activeDetailId && !allAgents.some((a) => a.agentId === activeDetailId)) {
+        closeDetail();
+      }
+      renderTable();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить реестр: ${msg}`);
+      allAgents = [];
+      renderTable();
+    } finally {
+      loadingEl.classList.add("hidden");
+    }
+  }
+
+  async function runCapabilitySearch(phrase: string): Promise<void> {
+    const trimmed = phrase.trim();
+    if (!trimmed) {
+      serverFilteredIds = null;
+      capMode.classList.add("hidden");
+      renderTable();
+      return;
+    }
+    clearError();
+    try {
+      const matches = await api.searchMeshByCapability(trimmed);
+      serverFilteredIds = new Set(matches.map((m) => m.agentId));
+      capMode.classList.remove("hidden");
+      renderTable();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Capability search failed: ${msg}`);
+      // Keep previous serverFilteredIds — do not blank on transient error.
+    }
+  }
+
+  function openDetail(agentId: string): void {
+    activeDetailId = agentId;
+    const a = allAgents.find((x) => x.agentId === agentId);
+    if (!a) return;
+    detailSection.classList.remove("hidden");
+    detailEl.innerHTML = `<div class="text-xs text-gray-500">Загрузка деталей…</div>`;
+    renderTable();
+
+    void (async () => {
+      let health: MeshAgentHealthDto | null = null;
+      let caps: MeshCapabilityDto[] = [];
+      try { health = await api.getMeshAgentHealth(agentId); } catch { /* swallow — show partial */ }
+      try { caps = await api.listMeshCapabilities(agentId); } catch { /* swallow — show partial */ }
+
+      const healthBlock = health
+        ? `<div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+              <div class="text-[10px] text-gray-500">consecutiveFailures</div>
+              <div class="text-sm text-white">${health.consecutiveFailures}</div>
+            </div>
+            <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+              <div class="text-[10px] text-gray-500">trustLevel</div>
+              <div class="text-sm text-white">${escapeHtml(health.trustLevel)}</div>
+            </div>
+            <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+              <div class="text-[10px] text-gray-500">costHintUsd</div>
+              <div class="text-sm text-white">$${health.costHintUsd.toFixed(4)}</div>
+            </div>
+            <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+              <div class="text-[10px] text-gray-500">latencyHintMs</div>
+              <div class="text-sm text-white">${health.latencyHintMs}ms</div>
+            </div>
+            <div class="col-span-2 rounded border border-white/5 bg-[#0a0a0b] p-2 sm:col-span-4">
+              <div class="text-[10px] text-gray-500">expirySeconds</div>
+              <div class="text-sm text-white">${health.expirySeconds}s (≈ ${Math.round(health.expirySeconds / 3600)}h)</div>
+            </div>
+          </div>`
+        : `<div class="text-[11px] text-rose-300">Не удалось получить health detail.</div>`;
+
+      const meta = `
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+            <div class="text-[10px] text-gray-500">agentId</div>
+            <div class="mono text-xs text-white">${escapeHtml(a.agentId)}</div>
+          </div>
+          <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+            <div class="text-[10px] text-gray-500">displayName</div>
+            <div class="text-xs text-white">${escapeHtml(a.displayName)}</div>
+          </div>
+          <div class="rounded border border-white/5 bg-[#0a0a0b] p-2 sm:col-span-2">
+            <div class="text-[10px] text-gray-500">description</div>
+            <div class="text-xs text-gray-300">${a.description ? escapeHtml(a.description) : "—"}</div>
+          </div>
+          <div class="rounded border border-white/5 bg-[#0a0a0b] p-2 sm:col-span-2">
+            <div class="text-[10px] text-gray-500">endpoint</div>
+            <div class="mono text-xs text-gray-300 break-all">${a.endpoint ? escapeHtml(a.endpoint) : "—"}</div>
+          </div>
+          <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+            <div class="text-[10px] text-gray-500">lastSeen</div>
+            <div class="text-xs text-white" title="${escapeHtml(a.lastSeen)}">${formatTimestamp(a.lastSeen)}</div>
+          </div>
+          <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+            <div class="text-[10px] text-gray-500">lastHealthCheck</div>
+            <div class="text-xs text-white" title="${escapeHtml(a.lastHealthCheck)}">${formatTimestamp(a.lastHealthCheck)}</div>
+          </div>
+          <div class="rounded border border-white/5 bg-[#0a0a0b] p-2 sm:col-span-2">
+            <div class="text-[10px] text-gray-500">supportedProtocolVersionsJson</div>
+            <div class="mono text-xs text-gray-300 break-all">${a.supportedProtocolVersionsJson ? escapeHtml(a.supportedProtocolVersionsJson) : "—"}</div>
+          </div>
+        </div>`;
+
+      const capsBlock = caps.length === 0
+        ? `<div class="text-[11px] text-gray-500">Capabilities отсутствуют или не загружены.</div>`
+        : `<div class="flex flex-col gap-2">${caps.map((c) => `
+            <div class="rounded border border-white/5 bg-[#0a0a0b] p-2">
+              <div class="flex items-baseline justify-between">
+                <span class="mono text-xs text-white">${escapeHtml(c.name)}</span>
+                <span class="text-[10px] text-gray-500">${c.phraseReceivers.length} receivers</span>
+              </div>
+              ${c.description ? `<div class="mt-1 text-[11px] text-gray-400">${escapeHtml(c.description)}</div>` : ""}
+              ${c.phraseReceivers.length > 0
+                ? `<div class="mt-1 flex flex-wrap gap-1">${c.phraseReceivers.map((p) => `<span class="mono rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-gray-300">${escapeHtml(p)}</span>`).join("")}</div>`
+                : ""}
+            </div>`).join("")}</div>`;
+
+      detailEl.innerHTML = `
+        <div class="flex flex-col gap-4">
+          <div>
+            <div class="mb-1 text-[11px] uppercase tracking-wide text-gray-500">Identity</div>
+            ${meta}
+          </div>
+          <div>
+            <div class="mb-1 text-[11px] uppercase tracking-wide text-gray-500">Health</div>
+            ${healthBlock}
+          </div>
+          <div>
+            <div class="mb-1 text-[11px] uppercase tracking-wide text-gray-500">Capabilities (${caps.length})</div>
+            ${capsBlock}
+          </div>
+        </div>`;
+    })();
+  }
+
+  function closeDetail(): void {
+    activeDetailId = null;
+    detailSection.classList.add("hidden");
+    detailEl.innerHTML = "";
+    renderTable();
+  }
+
+  async function doTouch(agentId: string): Promise<void> {
+    clearError();
+    try {
+      await api.touchMeshAgent(agentId);
+      showOk(`✓ Touch: ${agentId}`);
+      await loadAgents();
+    } catch (e) {
+      showError(`Touch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function doRemove(agentId: string, display: string): Promise<void> {
+    const ok = window.confirm(`Удалить агента «${display}» (${agentId}) из реестра?`);
+    if (!ok) return;
+    clearError();
+    try {
+      await api.removeMeshAgent(agentId);
+      showOk(`✓ Removed: ${agentId}`);
+      if (activeDetailId === agentId) closeDetail();
+      await loadAgents();
+    } catch (e) {
+      showError(`Remove failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // ---- Wiring ----
+  refreshBtn.addEventListener("click", () => { void loadAgents(); });
+  detailCloseBtn.addEventListener("click", () => { closeDetail(); });
+
+  let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+  searchInput.addEventListener("input", () => {
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => renderTable(), 120);
+  });
+
+  let capDebounce: ReturnType<typeof setTimeout> | null = null;
+  capabilityInput.addEventListener("input", () => {
+    if (capDebounce) clearTimeout(capDebounce);
+    capDebounce = setTimeout(() => { void runCapabilitySearch(capabilityInput.value); }, 350);
+  });
+  capClear.addEventListener("click", () => {
+    capabilityInput.value = "";
+    serverFilteredIds = null;
+    capMode.classList.add("hidden");
+    renderTable();
+  });
+
+  trustSelect.addEventListener("change", () => { renderTable(); });
+  healthSelect.addEventListener("change", () => { renderTable(); });
+
+  tbody.addEventListener("click", (ev) => {
+    const target = ev.target as HTMLElement;
+    const action = target.getAttribute("data-action");
+    const agentId = target.getAttribute("data-agent-id");
+    if (!agentId) {
+      // Walk up to the row.
+      const tr = target.closest("tr[data-agent-id]");
+      if (tr) openDetail(tr.getAttribute("data-agent-id")!);
+      return;
+    }
+    if (action === "touch") {
+      ev.stopPropagation();
+      void doTouch(agentId);
+    } else if (action === "remove") {
+      ev.stopPropagation();
+      const display = target.getAttribute("data-display") || agentId;
+      void doRemove(agentId, display);
+    } else {
+      openDetail(agentId);
+    }
+  });
+
+  // Auto-refresh: 30s, opt-in via checkbox.
+  let autoTimer: ReturnType<typeof setInterval> | null = null;
+  function syncAutoRefresh(): void {
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+    }
+    if (autorefreshChk.checked) {
+      autoTimer = setInterval(() => { void loadAgents(); }, 30_000);
+    }
+  }
+  autorefreshChk.addEventListener("change", syncAutoRefresh);
+
+  // Initial load.
+  void loadAgents();
+</script>

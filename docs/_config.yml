@@ -1,0 +1,20 @@
+remote_theme: pages-themes/cayman@v0.2.0
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+title: Hercules
+lang: en
+description: "Self-improving AI agent on C# / .NET 10. Creates skills from experience, runs sandboxed code, and connects agents into a mesh."
+url: "https://techbuzzz.github.io"
+baseurl: "/Hercules"
+author:
+  name: Victor Buzin
+  url: "https://github.com/techbuzzz"
+twitter:
+  username: techbuzzz
+github:
+  username: techbuzzz
+  repo: "https://github.com/techbuzzz/Hercules"
+
+# SEO keywords for the landing page
+keywords: "self-improving ai agent dotnet, hercules ai, hermes agent c#, yandexgpt agent, ollama agent c#, dotnet ai agent"

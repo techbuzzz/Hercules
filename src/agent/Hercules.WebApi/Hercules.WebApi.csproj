@@ -8,6 +8,24 @@
     <RootNamespace>Hercules.WebApi</RootNamespace>
     <AssemblyName>Hercules.WebApi</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- R23: CS0436 — both `Hercules` (the agent console, an Exe with top-level statements)
+         and this project emit a compiler-generated global-namespace `Program`. This project
+         references `Hercules`, so the type collides three times in this file. The resolution
+         is deterministic and correct — the local `Program` always wins — and it matters
+         because `public partial class Program;` here is the hook WebApplicationFactory<T>
+         uses for integration tests. Suppressing is preferred to restructuring an entry point,
+         which would risk changing startup behaviour for a purely cosmetic warning. -->
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
+
+    <!-- [task_109] OpenAPI build-time generation: emits openapi.json in project root on `dotnet build` -->
+    <OpenApiDocumentFile>$(MSBuildProjectDirectory)/openapi.json</OpenApiDocumentFile>
+
+    <!-- [task_109] XML doc comments → OpenAPI descriptions; suppress missing-doc warnings
+         (not every public member needs OpenAPI docs) -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591;1573</NoWarn>
+    <UserSecretsId>ce26d6d3-3657-4fc3-bc3a-9b72a43f3a7e</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,9 +34,104 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- [task_109] Scalar UI for /scalar endpoint -->
+    <PackageReference Include="Scalar.AspNetCore" Version="2.16.20" />
+    <!-- [task_109] Microsoft.AspNetCore.OpenApi (built-in .NET 10) for AddOpenApi/MapOpenApi -->
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+  </ItemGroup>
+
+  <!-- [task_109] Build-time OpenAPI document generation.
+
+       Replaces Microsoft.Extensions.ApiDescription.Server, whose `dotnet-getdocument`
+       tool resolves the document through MVC's action-descriptor provider. This API
+       surface is 100% minimal API, so the tool logged "No action descriptors found" and
+       wrote a document with `paths: {}` — 210 endpoints missing from the committed file.
+
+       Instead we launch the app itself with the `openapi-output` command-line flag
+       (see ReadOpenApiOutputPath in Program.cs). Program.cs then resolves
+       IOpenApiDocumentProvider — the same provider backing the runtime
+       /openapi/v1.json endpoint — so the committed document cannot drift from the
+       document the server actually serves.
+
+       OPT-IN (R11/R12): generation is deliberately NOT part of a normal build.
+       Running the app on every build bound a real Kestrel socket (parallel/CI
+       builds collided on the port) and rewrote the git-tracked openapi.json plus
+       the tracked SQLite WAL sidecars, leaving the working tree permanently dirty.
+
+       To refresh the committed document:
+           dotnet build Hercules.WebApi/Hercules.WebApi.csproj -p:OpenApiGenerateDocumentOnBuild=true
+       or run the app directly with the `openapi-output` flag:
+           dotnet run :project Hercules.WebApi : openapi-output Hercules.WebApi/openapi.json
+
+       Skipped for design-time builds regardless. -->
+  <Target Name="GenerateOpenApiDocument"
+          AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true' AND '$(TargetFramework)' != '' AND '$(OpenApiGenerateDocumentOnBuild)' == 'true'">
+    <Message Importance="high" Text="GenerateOpenApiDocument: writing $(OpenApiDocumentFile)" />
+    <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(TargetPath)&quot; --openapi-output &quot;$(OpenApiDocumentFile)&quot;"
+          WorkingDirectory="$(MSBuildProjectDirectory)"
+          StandardOutputImportance="low" />
+  </Target>
+
+  <ItemGroup>
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <!-- Publish-time collision, fixed at source (found 2026-10-07 while building the
+       E2E container image).
+
+       This project and the referenced `Hercules` console host each copy their own
+       appsettings.json to the OUTPUT ROOT. `dotnet build` tolerates that: both land
+       on the same path and this project's copy wins — verified in
+       bin/Release/net10.0/appsettings.json, which carries this project's key set
+       (WebApi, Llm, Storage, Agent, Telegram, Logging, AllowedHosts), not the host's.
+
+       `dotnet publish` does NOT tolerate it. It resolves both to the same relative
+       path and fails hard:
+
+           error NETSDK1152: Found multiple publish output files with the same
+           relative path: .../src/agent/appsettings.json,
+           .../src/agent/Hercules.WebApi/appsettings.json
+
+       Nothing caught this because no CI job publishes this project: ci.yml only
+       builds and tests, and dotnet-ci.yml packs Hercules.SkillSdk alone. The WebApi
+       had therefore never been publishable — i.e. never containerisable or
+       deployable — despite that being the web-first topology's whole premise.
+
+       Fix: drop the referenced host's appsettings.json from THIS project's publish
+       set. This project's own copy stays, so the published layout is identical to
+       the build layout CI already exercises. Publishing the console host on its own
+       is unaffected — its own copy is untouched.
+
+       Do not "fix" this by passing ErrorOnDuplicatePublishOutputFiles=false at the
+       command line: that silently discards one file, and which one wins is not
+       guaranteed. If the host's config were the survivor, this project would start
+       with no WebApi section — no Studio UI path, no API keys, no CORS allowlist.
+
+       Interception point: `GetCopyToPublishDirectoryItems` is where a referenced
+       project's content enters this project's publish set (it runs the same target
+       on children and folds their items into AllPublishItemsFullPathWithTargetPath).
+       Filtering there removes the collision before any file is chosen or copied. -->
+  <Target Name="DropReferencedHostAppsettingsFromPublish"
+          AfterTargets="GetCopyToPublishDirectoryItems"
+          BeforeTargets="_ComputeFilesToPublish;ComputeFilesToPublish">
+    <PropertyGroup>
+      <_HostAppsettingsFullPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../appsettings.json').Replace('\','/'))</_HostAppsettingsFullPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <_ReferencedHostAppsettings
+        Include="@(AllPublishItemsFullPathWithTargetPath)"
+        Condition="$([System.String]::Copy('%(FullPath)').Replace('\','/')) == '$(_HostAppsettingsFullPath)'" />
+    </ItemGroup>
+    <Message Condition="'@(_ReferencedHostAppsettings)' != ''"
+             Importance="normal"
+             Text="DropReferencedHostAppsettingsFromPublish: excluding @(_ReferencedHostAppsettings->'%(FullPath)') from the publish set" />
+    <ItemGroup>
+      <AllPublishItemsFullPathWithTargetPath Remove="@(_ReferencedHostAppsettings)" />
+      <ResolvedFileToPublish Remove="@(_ReferencedHostAppsettings)" />
+    </ItemGroup>
+  </Target>
 
 </Project>

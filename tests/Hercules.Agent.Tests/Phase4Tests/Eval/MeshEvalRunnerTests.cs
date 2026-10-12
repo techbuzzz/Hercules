@@ -54,8 +54,11 @@ public class MeshEvalRunnerTests : IDisposable
         var defaultConfig = new MeshEvalConfig();
 
         Assert.False(defaultConfig.Enabled);
-        Assert.Equal("data/mesh-eval/scenarios", defaultConfig.ScenariosDir);
-        Assert.Equal("data/mesh-eval/results", defaultConfig.ResultsDir);
+        // R3a: these defaults are built with Path.Combine from BuiltIn.MeshEvalSubdir, so
+        // the old literal "data/mesh-eval/scenarios" no longer applies and the separator is
+        // platform-dependent. Assert the real contract instead of a hardcoded string.
+        Assert.Equal(Path.Combine(BuiltIn.MeshEvalSubdir, BuiltIn.ScenariosSubdir), defaultConfig.ScenariosDir);
+        Assert.Equal(Path.Combine(BuiltIn.MeshEvalSubdir, BuiltIn.ResultsSubdir), defaultConfig.ResultsDir);
         Assert.Equal(120, defaultConfig.MaxScenarioDurationSeconds);
         Assert.True(defaultConfig.EnableTaskSuccessEval);
         Assert.True(defaultConfig.EnableSafetyDenialEval);

@@ -174,6 +174,22 @@ public sealed class ToolRegistryService : IToolRegistryService
             entry.Name, entry.Category);
     }
 
+    /// <inheritdoc />
+    public bool UnregisterEntry(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+
+        if (_entries.TryRemove(name, out var removed))
+        {
+            _logger.LogInformation("[ToolRegistry] Unregistered tool '{Name}' (source={Source})",
+                removed.Name, removed.Source);
+            return true;
+        }
+
+        return false;
+    }
+
     private bool IsNameAllowed(string name)
     {
         if (_config.AllowedPatterns.Count == 0 || _config.AllowedPatterns.Contains("*"))

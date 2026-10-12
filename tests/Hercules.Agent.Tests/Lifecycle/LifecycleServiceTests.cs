@@ -58,7 +58,9 @@ public class LifecycleServiceTests : IDisposable
             _skillManager,
             _registry,
             _transport,
-            NullLogger<LifecycleService>.Instance);
+            NullLogger<LifecycleService>.Instance,
+            new AgentLifecycleStateHolder(),
+            new InFlightTracker());
     }
 
     public void Dispose()
@@ -128,7 +130,10 @@ public class LifecycleServiceTests : IDisposable
     [Fact]
     public async Task StopAgentAsync_WhenDraining_CompletesStop()
     {
-        await _svc.DrainAgentAsync(_agentCore.SessionId);
+        // task_080: DrainAgentAsync now waits for in-flight and transitions to Stopped
+        // before returning. To exercise the "stop from Draining" path we set the state
+        // directly to Draining so the lifecycle service sees a still-draining agent.
+        _svc.State.SetState(AgentLifecycleState.Draining);
         var result = await _svc.StopAgentAsync(_agentCore.SessionId);
 
         Assert.True(result.Success);
@@ -153,12 +158,16 @@ public class LifecycleServiceTests : IDisposable
     [Fact]
     public async Task DrainAgentAsync_WhenRunning_Succeeds()
     {
+        // task_080: with no in-flight requests, DrainAgentAsync transitions all the way
+        // to Stopped (per spec step 5). With in-flight work, the intermediate Draining
+        // state is observable — covered in LifecycleDrainTests.
         var result = await _svc.DrainAgentAsync(_agentCore.SessionId);
 
         Assert.True(result.Success);
         Assert.Equal("Running", result.PreviousState);
-        Assert.Equal("Draining", result.NewState);
-        Assert.Contains("draining", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Stopped", result.NewState);
+        Assert.Contains("drained", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("true", result.Metadata["drainedCleanly"]);
     }
 
     [Fact]

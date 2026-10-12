@@ -2,6 +2,7 @@ using System.Text;
 using Hercules.LLM;
 using Hercules.Memory.Layers;
 using Hercules.Storage;
+using Microsoft.Extensions.ObjectPool;
 
 namespace Hercules.Agent;
 
@@ -15,6 +16,10 @@ public sealed class MemoryManager(
     ILLMClient llm,
     LayeredMemoryManager? layered = null)
 {
+    // task_084: pooled StringBuilder for context assembly and section parsing.
+    private static readonly ObjectPool<StringBuilder> SbPool =
+        new DefaultObjectPoolProvider().CreateStringBuilderPool();
+
     public string ProfileMarkdown => store.ReadProfile();
 
     public string PreferencesMarkdown => store.ReadPreferences();
@@ -22,37 +27,55 @@ public sealed class MemoryManager(
     public string EntitiesMarkdown => store.ReadEntities();
 
     /// <summary>Собрать контекст для системного промпта (профиль + предпочтения + последний контекст).</summary>
-    public string BuildContextBlock()
+    public string BuildContextBlock() => BuildContextBlock(sessionId: null);
+
+    /// <summary>
+    ///     Собрать контекст для конкретной сессии (task_075 — H6 fix).
+    ///     Когда <paramref name="sessionId" /> задан и <see cref="LayeredMemoryManager" />
+    ///     поддерживает per-session context, рабочая память берётся только для этой сессии —
+    ///     иначе параллельные HTTP-запросы делили бы один <c>IWorkingMemory</c>.
+    /// </summary>
+    public string BuildContextBlock(string? sessionId)
     {
-        // Use layered manager for new layered context (null-safe)
+        // Use layered manager for new layered context (null-safe, session-aware when available)
         string layeredBlock = layered is not null
-            ? layered.BuildContextBlockAsync().GetAwaiter().GetResult()
+            ? (sessionId is not null
+                ? layered.BuildContextBlockAsync(sessionId).GetAwaiter().GetResult()
+                : layered.BuildContextBlockAsync().GetAwaiter().GetResult())
             : "";
 
         // Fall back to legacy profile/prefs/entities for backward compatibility
-        var sb = new StringBuilder();
-        sb.AppendLine("=== ПАМЯТЬ О ПОЛЬЗОВАТЕЛЕ ===");
-        sb.AppendLine(store.ReadProfile().Trim());
-        sb.AppendLine();
-        sb.AppendLine(store.ReadPreferences().Trim());
-        sb.AppendLine();
-        sb.AppendLine(store.ReadEntities().Trim());
-        var lastCtx = store.ReadLastContext();
-        if (!string.IsNullOrWhiteSpace(lastCtx))
+        // task_084: pooled StringBuilder.
+        var sb = SbPool.Get();
+        try
         {
+            sb.AppendLine("=== ПАМЯТЬ О ПОЛЬЗОВАТЕЛЕ ===");
+            sb.AppendLine(store.ReadProfile().Trim());
             sb.AppendLine();
-            sb.AppendLine("=== КОНТЕКСТ ПРОШЛЫХ СЕССИЙ ===");
-            sb.AppendLine(lastCtx.Trim());
-        }
+            sb.AppendLine(store.ReadPreferences().Trim());
+            sb.AppendLine();
+            sb.AppendLine(store.ReadEntities().Trim());
+            var lastCtx = store.ReadLastContext();
+            if (!string.IsNullOrWhiteSpace(lastCtx))
+            {
+                sb.AppendLine();
+                sb.AppendLine("=== КОНТЕКСТ ПРОШЛЫХ СЕССИЙ ===");
+                sb.AppendLine(lastCtx.Trim());
+            }
 
-        // Append layered block if non-empty
-        if (!string.IsNullOrWhiteSpace(layeredBlock))
+            // Append layered block if non-empty
+            if (!string.IsNullOrWhiteSpace(layeredBlock))
+            {
+                sb.AppendLine();
+                sb.Append(layeredBlock);
+            }
+
+            return sb.ToString();
+        }
+        finally
         {
-            sb.AppendLine();
-            sb.Append(layeredBlock);
+            SbPool.Return(sb);
         }
-
-        return sb.ToString();
     }
 
     /// <summary>Перезаписать профиль пользователя (Web API: PUT /api/memory/profile).</summary>
@@ -161,33 +184,40 @@ public sealed class MemoryManager(
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         string? current = null;
-        var sb = new StringBuilder();
-
-        void Flush()
+        // task_084: pooled StringBuilder for section parsing.
+        var sb = SbPool.Get();
+        try
         {
-            if (current is not null)
+            void Flush()
             {
-                result[current] = sb.ToString().Trim();
+                if (current is not null)
+                {
+                    result[current] = sb.ToString().Trim();
+                }
+
+                sb.Clear();
             }
 
-            sb.Clear();
-        }
+            foreach (var line in text.Split('\n'))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("###"))
+                {
+                    Flush();
+                    current = trimmed.TrimStart('#', ' ').Trim();
+                }
+                else
+                {
+                    sb.AppendLine(line);
+                }
+            }
 
-        foreach (var line in text.Split('\n'))
+            Flush();
+            return result;
+        }
+        finally
         {
-            var trimmed = line.Trim();
-            if (trimmed.StartsWith("###"))
-            {
-                Flush();
-                current = trimmed.TrimStart('#', ' ').Trim();
-            }
-            else
-            {
-                sb.AppendLine(line);
-            }
+            SbPool.Return(sb);
         }
-
-        Flush();
-        return result;
     }
 }

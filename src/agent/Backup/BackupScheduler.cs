@@ -30,6 +30,26 @@ public sealed class BackupScheduler : BackgroundService
             return;
         }
 
+        // [task_087] Warn at startup if backups are unencrypted (Passphrase empty).
+        // The Passphrase is intentionally empty in dev to make onboarding easy, but
+        // production deployments must set HERCULES_BACKUP_PASSPHRASE or set
+        // Backup.RequirePassphrase=true to fail-fast.
+        if (string.IsNullOrEmpty(_config.Passphrase))
+        {
+            if (_config.RequirePassphrase)
+            {
+                _logger.LogError(
+                    "Backup.Passphrase is empty but Backup.RequirePassphrase=true — backups will be created unencrypted. " +
+                    "Set HERCULES_BACKUP_PASSPHRASE or Backup.Passphrase in configuration.");
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Backup.Passphrase is empty — backups will be created UNENCRYPTED. " +
+                    "Set HERCULES_BACKUP_PASSPHRASE env var or Backup.Passphrase to enable AES-256-GCM encryption.");
+            }
+        }
+
         _logger.LogInformation(
             "Backup scheduler started: interval={IntervalHours}h, retention={Retention}",
             _config.IntervalHours, _config.RetentionCount);

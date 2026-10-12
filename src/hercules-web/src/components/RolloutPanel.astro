@@ -1,0 +1,359 @@
+---
+// Rollout Panel (Phase 7 task_095).
+// Staged config/policy rollout state + history (Pending → Staging → Production
+// → Retired) с возможностью Promote / Rollback. RolloutController (task_058)
+// уже отдаёт state, history, apply/promote/rollback. 20s auto-refresh (opt-in).
+---
+
+<div class="flex flex-col gap-5" id="rollout-panel">
+
+  <!-- Header -->
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div>
+      <h2 class="text-base font-semibold text-white">Config &amp; Policy Rollout</h2>
+      <p class="text-xs text-gray-500">
+        Staged rollout: Pending → Staging → Production → Retired. LKG rollback.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="rp-updated" class="text-xs text-gray-600"></span>
+      <label class="flex items-center gap-1 text-[11px] text-gray-400">
+        <input id="rp-autorefresh" type="checkbox" class="rounded border-white/20 bg-[#0a0a0b]" />
+        авто (20s)
+      </label>
+      <button id="rp-refresh" type="button"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-gray-200 transition-colors hover:bg-white/5">
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <!-- Banners -->
+  <div id="rp-error" class="hidden rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200"></div>
+  <div id="rp-ok" class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200"></div>
+
+  <!-- Action bar: rollback + apply form -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">Действия</h3>
+    <div class="flex flex-wrap items-end gap-3">
+      <form id="rp-apply-form" class="flex flex-1 flex-wrap items-end gap-2">
+        <div class="flex-1 min-w-[10rem]">
+          <label for="rp-apply-name" class="mb-1 block text-[11px] text-gray-500">Bundle name</label>
+          <input id="rp-apply-name" type="text" required placeholder="my-config-bundle"
+            class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+        </div>
+        <div class="w-32">
+          <label for="rp-apply-version" class="mb-1 block text-[11px] text-gray-500">Version</label>
+          <input id="rp-apply-version" type="text" placeholder="1.0.0"
+            class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:border-violet-500/50 focus:outline-none" />
+        </div>
+        <div class="w-32">
+          <label for="rp-apply-type" class="mb-1 block text-[11px] text-gray-500">Type</label>
+          <select id="rp-apply-type"
+            class="w-full rounded-lg border border-white/10 bg-[#0a0a0b] px-3 py-2 text-xs text-gray-200 focus:border-violet-500/50 focus:outline-none">
+            <option value="config" selected>config</option>
+            <option value="policy">policy</option>
+          </select>
+        </div>
+        <button type="submit" id="rp-apply-submit"
+          class="rounded-lg border border-violet-500/40 bg-violet-500/15 px-4 py-2 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-50">
+          Apply bundle
+        </button>
+      </form>
+      <button id="rp-promote-btn" type="button"
+        class="rounded-lg border border-sky-500/40 bg-sky-500/15 px-4 py-2 text-xs font-medium text-sky-200 transition-colors hover:bg-sky-500/25 disabled:cursor-not-allowed disabled:opacity-50">
+        Promote pending →
+      </button>
+      <button id="rp-rollback-btn" type="button"
+        class="rounded-lg border border-rose-500/40 bg-rose-500/15 px-4 py-2 text-xs font-medium text-rose-200 transition-colors hover:bg-rose-500/25 disabled:cursor-not-allowed disabled:opacity-50">
+        Rollback to LKG
+      </button>
+    </div>
+  </section>
+
+  <!-- Current state -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">Текущее состояние</h3>
+    <div id="rp-state-loading" class="hidden py-6 text-center text-xs text-gray-500">Загрузка…</div>
+    <div id="rp-state-grid" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"></div>
+  </section>
+
+  <!-- History timeline -->
+  <section class="rounded-xl border border-white/10 bg-[#101012] p-4">
+    <h3 class="mb-3 text-sm font-medium text-gray-300">
+      История rollout
+      <span id="rp-history-count" class="ml-1 text-xs font-normal text-gray-500"></span>
+    </h3>
+    <div id="rp-history-empty" class="hidden py-6 text-center text-xs text-gray-500">
+      Rollout-история пуста.
+    </div>
+    <ol id="rp-history-list" class="flex flex-col gap-2"></ol>
+  </section>
+</div>
+
+<script>
+  import {
+    api,
+    type RolloutStateDto,
+    type RolloutHistoryEntryDto,
+  } from "../lib/api";
+
+  const errBanner = document.getElementById("rp-error")!;
+  const okBanner = document.getElementById("rp-ok")!;
+  const updatedEl = document.getElementById("rp-updated")!;
+  const refreshBtn = document.getElementById("rp-refresh") as HTMLButtonElement;
+  const autorefreshChk = document.getElementById("rp-autorefresh") as HTMLInputElement;
+
+  const applyForm = document.getElementById("rp-apply-form") as HTMLFormElement;
+  const applyNameInput = document.getElementById("rp-apply-name") as HTMLInputElement;
+  const applyVersionInput = document.getElementById("rp-apply-version") as HTMLInputElement;
+  const applyTypeInput = document.getElementById("rp-apply-type") as HTMLSelectElement;
+  const applySubmitBtn = document.getElementById("rp-apply-submit") as HTMLButtonElement;
+
+  const promoteBtn = document.getElementById("rp-promote-btn") as HTMLButtonElement;
+  const rollbackBtn = document.getElementById("rp-rollback-btn") as HTMLButtonElement;
+
+  const stateLoading = document.getElementById("rp-state-loading")!;
+  const stateGrid = document.getElementById("rp-state-grid")!;
+
+  const historyCount = document.getElementById("rp-history-count")!;
+  const historyEmpty = document.getElementById("rp-history-empty")!;
+  const historyList = document.getElementById("rp-history-list")!;
+
+  let autorefreshTimer: number | null = null;
+  let lastState: RolloutStateDto | null = null;
+
+  function escapeHtml(s: string | null | undefined): string {
+    if (s == null) return "";
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function showError(message: string): void {
+    errBanner.textContent = message;
+    errBanner.classList.remove("hidden");
+    okBanner.classList.add("hidden");
+  }
+  function clearError(): void {
+    errBanner.textContent = "";
+    errBanner.classList.add("hidden");
+  }
+  function showOk(message: string, durationMs = 3000): void {
+    okBanner.textContent = message;
+    okBanner.classList.remove("hidden");
+    errBanner.classList.add("hidden");
+    window.setTimeout(() => okBanner.classList.add("hidden"), durationMs);
+  }
+
+  function formatTimestamp(iso: string | null | undefined): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleString();
+  }
+
+  function stagePill(stage: string | null | undefined): string {
+    const s = (stage || "Pending").toLowerCase();
+    const palette: Record<string, string> = {
+      pending: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      staging: "border-sky-500/30 bg-sky-500/10 text-sky-300",
+      production: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      retired: "border-gray-500/30 bg-gray-500/10 text-gray-300",
+    };
+    const cls = palette[s] ?? palette.pending;
+    return `<span class="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${cls}">${escapeHtml(stage || "Pending")}</span>`;
+  }
+
+  function actionPill(action: string): string {
+    const a = (action || "").toLowerCase();
+    const palette: Record<string, string> = {
+      applied: "border-violet-500/30 bg-violet-500/10 text-violet-300",
+      promoted: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      rolled_back: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+      expired: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+    };
+    const cls = palette[a] ?? "border-white/10 bg-white/5 text-gray-300";
+    return `<span class="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${cls}">${escapeHtml(action || "—")}</span>`;
+  }
+
+  function renderStateCard(label: string, value: string | null, sub: string | null, pill: string | null): string {
+    return `
+      <div class="rounded border border-white/5 bg-[#0a0a0b] p-3">
+        <div class="text-[10px] uppercase tracking-wide text-gray-500">${escapeHtml(label)}</div>
+        <div class="mt-1 flex items-baseline gap-2">
+          <span class="mono text-sm text-white break-all">${escapeHtml(value || "—")}</span>
+          ${pill ? pill : ""}
+        </div>
+        ${sub ? `<div class="mt-1 text-[10px] text-gray-500">${escapeHtml(sub)}</div>` : ""}
+      </div>`;
+  }
+
+  function renderState(s: RolloutStateDto): void {
+    const cards: string[] = [
+      renderStateCard(
+        "Current",
+        s.currentBundleId,
+        s.currentVersion ? `version ${s.currentVersion}` : null,
+        stagePill(s.currentStage),
+      ),
+      renderStateCard(
+        "Pending",
+        s.pendingBundleId,
+        s.pendingVersion ? `version ${s.pendingVersion}` : null,
+        null,
+      ),
+      renderStateCard(
+        "Last-known-good",
+        s.lastKnownGoodBundleId,
+        s.lastKnownGoodVersion ? `version ${s.lastKnownGoodVersion}` : null,
+        null,
+      ),
+      renderStateCard(
+        "Last activity",
+        null,
+        [
+          s.lastPromotedAt ? `promoted ${formatTimestamp(s.lastPromotedAt)}` : null,
+          s.lastRollbackAt ? `rolled back ${formatTimestamp(s.lastRollbackAt)}` : null,
+        ].filter(Boolean).join(" · ") || "—",
+        null,
+      ),
+    ];
+    stateGrid.innerHTML = cards.join("");
+
+    // Action buttons: promote available when pendingBundleId set
+    promoteBtn.disabled = !s.pendingBundleId;
+    // Rollback available when LKG present and different from current
+    rollbackBtn.disabled = !s.lastKnownGoodBundleId || s.lastKnownGoodBundleId === s.currentBundleId;
+  }
+
+  function renderHistory(entries: RolloutHistoryEntryDto[]): void {
+    if (!entries || entries.length === 0) {
+      historyList.innerHTML = "";
+      historyEmpty.classList.remove("hidden");
+      historyCount.textContent = "";
+      return;
+    }
+    historyEmpty.classList.add("hidden");
+    historyCount.textContent = `(${entries.length})`;
+    historyList.innerHTML = entries
+      .slice()
+      .sort((a, b) => (new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()))
+      .map(
+        (e) => `
+        <li class="rounded border border-white/5 bg-[#0a0a0b] p-2.5 text-[11px]">
+          <div class="flex flex-wrap items-center gap-2">
+            ${actionPill(e.action)}
+            <span class="mono text-gray-300 break-all">${escapeHtml(e.bundleId)}</span>
+            ${e.version ? `<span class="rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-gray-400 mono">${escapeHtml(e.version)}</span>` : ""}
+            <span class="text-gray-500 ml-auto">${formatTimestamp(e.timestamp)}</span>
+          </div>
+          ${e.reason ? `<div class="mt-1 truncate text-gray-400" title="${escapeHtml(e.reason)}">${escapeHtml(e.reason)}</div>` : ""}
+        </li>`,
+      )
+      .join("");
+  }
+
+  async function loadState(silent = false): Promise<void> {
+    if (!silent) clearError();
+    if (!silent) stateLoading.classList.remove("hidden");
+    try {
+      const wrapper = await api.getRolloutState();
+      lastState = wrapper.state;
+      updatedEl.textContent = `обновлено: ${new Date().toLocaleTimeString()}`;
+      renderState(lastState);
+      renderHistory(lastState.rolloutHistory || []);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      showError(`Не удалось загрузить rollout state: ${msg}`);
+      stateGrid.innerHTML = "";
+      historyList.innerHTML = "";
+    } finally {
+      stateLoading.classList.add("hidden");
+    }
+  }
+
+  function setBusy(busy: boolean): void {
+    applySubmitBtn.disabled = busy;
+    promoteBtn.disabled = busy || !lastState?.pendingBundleId;
+    rollbackBtn.disabled = busy || !lastState?.lastKnownGoodBundleId
+      || lastState.lastKnownGoodBundleId === lastState.currentBundleId;
+    refreshBtn.disabled = busy;
+  }
+
+  applyForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearError();
+    const name = applyNameInput.value.trim();
+    if (!name) {
+      showError("Bundle name обязательно.");
+      return;
+    }
+    const version = applyVersionInput.value.trim() || "1.0.0";
+    const type = applyTypeInput.value;
+    setBusy(true);
+    try {
+      const result = await api.applyRollout({ name, version, type, payload: "{}" });
+      showOk(`Bundle ${result.bundleId.slice(0, 8)}… applied → ${result.stage}`, 3000);
+      applyNameInput.value = "";
+      await loadState(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showError(`Apply failed: ${msg}`);
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  promoteBtn.addEventListener("click", async () => {
+    if (!lastState?.pendingBundleId) return;
+    clearError();
+    setBusy(true);
+    try {
+      const result = await api.promoteRollout(lastState.pendingBundleId);
+      showOk(`Bundle ${result.bundleId.slice(0, 8)}… → ${result.stage}`, 3000);
+      await loadState(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showError(`Promote failed: ${msg}`);
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  rollbackBtn.addEventListener("click", async () => {
+    if (!lastState?.lastKnownGoodBundleId) return;
+    const reason = window.prompt("Reason for rollback (опц.):", "manual") || undefined;
+    clearError();
+    setBusy(true);
+    try {
+      const result = await api.rollbackRollout(reason);
+      showOk(`Rollback → ${result.bundleId.slice(0, 8)}… (${result.stage})`, 3000);
+      await loadState(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showError(`Rollback failed: ${msg}`);
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  refreshBtn.addEventListener("click", () => {
+    void loadState();
+  });
+  autorefreshChk.addEventListener("change", () => {
+    if (autorefreshChk.checked) {
+      autorefreshTimer = window.setInterval(() => {
+        void loadState(true);
+      }, 20000);
+    } else if (autorefreshTimer != null) {
+      window.clearInterval(autorefreshTimer);
+      autorefreshTimer = null;
+    }
+  });
+
+  void loadState();
+</script>

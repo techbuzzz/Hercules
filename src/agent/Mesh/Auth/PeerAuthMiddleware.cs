@@ -117,7 +117,7 @@ public sealed class PeerAuthMiddleware
         var path = context.Request.Path;
         // /api/mesh/* and /agent.manifest.json (well-known peer discovery)
         return path.StartsWithSegments("/api/mesh") ||
-               path.Equals("/agent.manifest.json");
+                path.Equals($"/{Hercules.BuiltIn.AgentManifestFileName}");
     }
 
     private static IReadOnlyDictionary<string, string> ExtractHeaders(IHeaderDictionary headers)
@@ -125,8 +125,9 @@ public sealed class PeerAuthMiddleware
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var kvp in headers)
         {
-            // Join multi-value headers with comma (per HTTP spec)
-            result[kvp.Key] = string.Join(",", kvp.Value);
+            // Join multi-value headers with comma (per HTTP spec). StringValues can carry
+            // null elements, which string.Join's params overload flags.
+            result[kvp.Key] = string.Join(",", kvp.Value.Where(static v => v is not null));
         }
 
         return result;
